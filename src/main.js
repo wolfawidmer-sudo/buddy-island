@@ -4,10 +4,13 @@ const {
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { createClient, FALLBACK_MODELS } = require('./claude');
 const { createTools, formatDuration } = require('./tools');
 const { createComputer, supportsCaptureExclusion } = require('./computer');
-const { createNotificationWatcher } = require('./notifications');
+const { createSystemWatcher } = require('./notifications');
+const { createCalendar } = require('./calendar');
+const { createVoice } = require('./voice');
 
 // ---------- Sparsam im Leerlauf ----------
 // Medientasten nicht abfangen (Buddy drückt sie selbst), keine
@@ -32,7 +35,7 @@ const DEFAULTS = {
   effort: 'low',
   maxTokens: 4096,
   hotkey: 'Control+Shift+Space',
-  shortcuts: { newChat: '', settings: '', stop: '' },
+  shortcuts: { newChat: '', settings: '', stop: '', voice: '' },
   customShortcuts: [], // [{ id, keys, prompt, open }]
   sound: true,
   autostart: false,
@@ -41,6 +44,14 @@ const DEFAULTS = {
   confirmControl: true,
   glow: true,
   notifications: true,
+  media: true,
+  gameMode: true,
+  calendarLead: 10,
+  calendarEncrypted: null,
+  calendarPlain: null,
+  voiceWake: false,
+  speak: true,
+  displayId: null,
   systemPrompt:
     'Du bist Buddy, ein kleiner, freundlicher Assistent, der in einem Island oben auf dem Windows-PC des Nutzers wohnt. ' +
     'Antworte kurz und direkt, auf Deutsch in Schweizer Schreibweise (ss statt ß), ausser der Nutzer schreibt in einer anderen Sprache. ' +
@@ -70,11 +81,19 @@ let tray = null;
 let tools = null;
 let computer = null;
 let watcher = null;
+let calendar = null;
+let voice = null;
+let updater = null;
+let updateState = { state: 'idle' };
+let nowPlaying = null;
+let game = { active: false, name: '' }; // Spielmodus
+let mediaOk = null;
 let notifyStatus = process.platform === 'win32' ? 'Starting' : 'Unsupported';
 let settings = { ...DEFAULTS };
 let layout = { open: false, width: 148, height: 40 };
 let mouseCaptured = false;
 let agentInput = false; // Buddy bewegt gerade Maus/Tastatur
+let capturing = false; // Island ist für ein Bildschirmfoto kurz versteckt
 let controlling = 0; // Anzahl laufender Steuerungs-Aufgaben
 const running = new Map(); // chatId -> AbortController
 const confirms = new Map(); // chatId -> resolve(bool)
@@ -98,9 +117,65 @@ function saveSettings() {
   fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2));
 }
 
+// Kleines Protokoll für die Fehlersuche (max. ~1 MB, keine Inhalte von Chats)
+function log(message) {
+  try {
+    const file = path.join(app.getPath('userData'), 'buddy.log');
+    try { if (fs.statSync(file).size > 1024 * 1024) fs.renameSync(file, file + '.1'); } catch { /* neu */ }
+    fs.appendFileSync(file, `${new Date().toISOString()} ${String(message).replace(/sk-ant-[\w-]+/g, 'sk-ant-…')}\n`);
+  } catch { /* egal */ }
+}
+
+// Geheimnisse (API-Key, Kalender-Link) verschlüsselt speichern
+function setSecret(name, value) {
+  const clean = (value || '').trim();
+  settings[name + 'Encrypted'] = null;
+  settings[name + 'Plain'] = null;
+  if (clean) {
+    if (safeStorage.isEncryptionAvailable()) settings[name + 'Encrypted'] = safeStorage.encryptString(clean).toString('base64');
+    else settings[name + 'Plain'] = clean;
+  }
+  saveSettings();
+}
+
+function getSecret(name) {
+  const enc = settings[name + 'Encrypted'];
+  if (enc && safeStorage.isEncryptionAvailable()) {
+    try { return safeStorage.decryptString(Buffer.from(enc, 'base64')); } catch { return null; }
+  }
+  return settings[name + 'Plain'] || null;
+}
+
+function targetDisplay() {
+  const all = screen.getAllDisplays();
+  return all.find((d) => String(d.id) === String(settings.displayId)) || screen.getPrimaryDisplay();
+}
+
+function displayList() {
+  const primary = screen.getPrimaryDisplay().id;
+  return screen.getAllDisplays().map((d, i) => ({
+    id: String(d.id),
+    label: `Bildschirm ${i + 1} · ${Math.round(d.size.width * d.scaleFactor)}×${Math.round(d.size.height * d.scaleFactor)}${d.id === primary ? ' (Haupt)' : ''}`,
+  }));
+}
+
 function publicSettings() {
-  const { keyEncrypted, keyPlain, ...rest } = settings;
-  return { ...rest, hasKey: Boolean(keyEncrypted || keyPlain), canControl: process.platform === 'win32', notifyStatus };
+  const { keyEncrypted, keyPlain, calendarEncrypted, calendarPlain, ...rest } = settings;
+  return {
+    ...rest,
+    hasKey: Boolean(keyEncrypted || keyPlain),
+    hasCalendar: Boolean(calendarEncrypted || calendarPlain),
+    calendarStatus: calendar?.status() || null,
+    canControl: process.platform === 'win32',
+    notifyStatus,
+    mediaOk,
+    game,
+    voiceInfo: voice?.info() || null,
+    displays: displayList(),
+    version: app.getVersion(),
+    updateState,
+    canUpdate: Boolean(updater),
+  };
 }
 
 function getApiKey() {
@@ -139,7 +214,7 @@ function systemPrompt(withComputer) {
   let text = `${settings.systemPrompt || ''}
 
 Jetzt ist ${now}.
-Mit deinen Werkzeugen kannst du Timer stellen, Apps und Websites öffnen, Musik/Lautstärke steuern und die letzten Windows-Mitteilungen lesen (nur wenn der Nutzer danach fragt). Nutze sie, wenn der Nutzer das will, und bestätige danach kurz in einem Satz, was du gemacht hast.`;
+Mit deinen Werkzeugen kannst du Timer stellen, Apps und Websites öffnen, Musik/Lautstärke steuern, sehen was gerade läuft, Termine im Kalender nachschauen und die letzten Windows-Mitteilungen lesen (nur wenn der Nutzer danach fragt). Nutze sie, wenn der Nutzer das will, und bestätige danach kurz in einem Satz, was du gemacht hast.`;
 
   if (withComputer) {
     const size = computer.screenSize();
@@ -164,7 +239,7 @@ Regeln für die PC-Steuerung:
 function placeWindow() {
   if (!win) return;
   // Genau in der Mitte des ganzen Bildschirms, oben (unter einer Taskleiste, falls die oben ist)
-  const { bounds, workArea } = screen.getPrimaryDisplay();
+  const { bounds, workArea } = targetDisplay();
   const w = layout.open ? OPEN_W : Math.max(100, Math.min(420, Math.round(layout.width)));
   const h = layout.open ? OPEN_H : Math.max(CLOSED_H, Math.min(72, Math.round(layout.height || CLOSED_H)));
   win.setBounds({
@@ -219,7 +294,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   win.once('ready-to-show', () => win.showInactive());
-  win.on('blur', () => win.webContents.send('island:blur'));
+  win.on('blur', () => { if (!capturing) win.webContents.send('island:blur'); });
 
   // Links aus Antworten im normalen Browser öffnen, nie im Island.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -233,7 +308,7 @@ function createWindow() {
 
   const onDisplayChange = () => {
     placeWindow();
-    if (glow && !glow.isDestroyed()) glow.setBounds(screen.getPrimaryDisplay().bounds);
+    if (glow && !glow.isDestroyed()) glow.setBounds(targetDisplay().bounds);
   };
   screen.on('display-metrics-changed', onDisplayChange);
   screen.on('display-added', onDisplayChange);
@@ -251,7 +326,7 @@ function openIsland(view) {
 
 function ensureGlow() {
   if (glow && !glow.isDestroyed()) return glowReady;
-  const { bounds } = screen.getPrimaryDisplay();
+  const { bounds } = targetDisplay();
   const w = new BrowserWindow({
     ...bounds,
     frame: false,
@@ -288,7 +363,7 @@ function glowCall(code) {
 }
 
 function setGlow(mode) {
-  if (!settings.glow) mode = 'off';
+  if (!settings.glow || game.active) mode = 'off';
   if (mode === glowMode) return;
   glowMode = mode;
   clearTimeout(glowTimer);
@@ -318,6 +393,7 @@ const SHORTCUT_NAMES = {
   newChat: 'Neuer Chat',
   settings: 'Einstellungen öffnen',
   stop: 'Aufgabe stoppen',
+  voice: 'Sprechen',
 };
 let shortcutsSuspended = false; // während in den Einstellungen ein Kürzel aufgenommen wird
 
@@ -355,6 +431,9 @@ function runShortcut(entry) {
       break;
     case 'settings':
       openIsland('settings');
+      break;
+    case 'voice':
+      startListening();
       break;
     default:
       if (entry.custom) win.webContents.send('shortcut:prompt', { prompt: entry.custom.prompt.trim(), open: Boolean(entry.custom.open) });
@@ -415,8 +494,11 @@ function applyAutostart() {
 }
 
 // Beim ersten Start: Verknüpfung im Startmenü und auf dem Desktop
+const installedWithSetup = () => app.isPackaged && fs.existsSync(path.join(process.resourcesPath, 'app-update.yml'));
+
 function createShortcuts() {
-  if (process.platform !== 'win32' || !app.isPackaged || settings.shortcutsCreated) return;
+  // Mit dem Installer legt Windows die Verknüpfungen selbst an.
+  if (process.platform !== 'win32' || !app.isPackaged || settings.shortcutsCreated || installedWithSetup()) return;
   const options = {
     target: process.execPath,
     cwd: path.dirname(process.execPath),
@@ -543,6 +625,11 @@ async function runChat(id, messages, send) {
             results.push({ ...base, is_error: true, content: 'Not executed: an earlier computer action in this turn failed.' });
             continue;
           }
+          if (game.active) {
+            computerFailed = true;
+            results.push({ ...base, is_error: true, content: `Gerade läuft ein Spiel (${game.name}). Im Spielmodus steuert Buddy den PC nicht. Sag dem Nutzer, dass du das nach dem Spiel machen kannst.` });
+            continue;
+          }
           if (allowed === null) {
             send('agent:action', { id, label: 'fragt um Erlaubnis' });
             allowed = await askToControl(id, send);
@@ -588,13 +675,156 @@ async function runChat(id, messages, send) {
   } catch (err) {
     endControl();
     if (err?.name === 'AbortError') send('chat:done', { id, stopReason: 'aborted' });
-    else send('chat:error', { id, message: err.message || String(err) });
+    else {
+      log(`Chat-Fehler: ${err.status || ''} ${err.raw || err.message || err}`);
+      send('chat:error', { id, message: err.message || String(err) });
+    }
   } finally {
     endControl();
     running.delete(id);
     confirms.delete(id);
     if (!running.size) setGlow('off');
   }
+}
+
+// ---------- Hintergrund-Dienste ----------
+
+function startWatcher() {
+  if (!settings.notifications) notifyStatus = 'Off';
+  else if (process.platform === 'win32') notifyStatus = 'Starting';
+  if (!settings.media) { mediaOk = null; nowPlaying = null; win?.webContents.send('media', null); }
+  watcher.start({ notify: Boolean(settings.notifications), media: Boolean(settings.media), game: Boolean(settings.gameMode) });
+  if (!settings.gameMode && game.active) setGame({ game: false, process: '' });
+}
+
+// Spielmodus: Buddy hält sich komplett raus
+function prettyGameName(name) {
+  const n = String(name || '').replace(/-win64-shipping$/i, '').replace(/[_-]/g, ' ');
+  const known = { valorant: 'Valorant', leagueoflegends: 'League of Legends', cs2: 'Counter-Strike 2', robloxplayerbeta: 'Roblox', r5apex: 'Apex Legends', fortniteclient: 'Fortnite', geometrydash: 'Geometry Dash', 'minecraft.windows': 'Minecraft', rocketleague: 'Rocket League' };
+  return known[n.toLowerCase().replace(/\s/g, '')] || known[String(name || '').toLowerCase()] || n || 'Vollbild';
+}
+
+function setGame(focus) {
+  const active = Boolean(settings.gameMode && focus.game);
+  const name = active ? prettyGameName(focus.process) : '';
+  if (active === game.active && name === game.name) return;
+  const wasActive = game.active;
+  game = { active, name };
+  log(`Spielmodus ${active ? `an (${focus.process}, Status ${focus.state})` : 'aus'}`);
+  win?.webContents.send('game', game);
+  if (active) {
+    if (!layout.open) win?.hide();
+    setGlow('off');
+    if (settings.voiceWake) voice?.setWake(false);
+  } else if (wasActive) {
+    win?.showInactive();
+    if (settings.voiceWake) voice?.setWake(true);
+  }
+}
+
+function startListening() {
+  if (!voice) return;
+  if (process.platform !== 'win32') {
+    win?.webContents.send('voice', { kind: 'unavailable' });
+    return;
+  }
+  win?.webContents.send('voice', { kind: 'starting' });
+  voice.listen();
+}
+
+function setupUpdater() {
+  if (!installedWithSetup()) return null;
+  let autoUpdater;
+  try {
+    ({ autoUpdater } = require('electron-updater'));
+  } catch (err) {
+    log(`Updater fehlt: ${err.message}`);
+    return null;
+  }
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.logger = { info() {}, debug() {}, warn: (m) => log(`Update: ${m}`), error: (m) => log(`Update-Fehler: ${m}`) };
+  const setState = (st) => {
+    updateState = st;
+    win?.webContents.send('update', st);
+  };
+  autoUpdater.on('checking-for-update', () => setState({ state: 'checking' }));
+  autoUpdater.on('update-available', (i) => setState({ state: 'downloading', version: i.version, percent: 0 }));
+  autoUpdater.on('update-not-available', () => setState({ state: 'latest', checkedAt: Date.now() }));
+  autoUpdater.on('download-progress', (p) => setState({ state: 'downloading', version: updateState.version, percent: Math.round(p.percent || 0) }));
+  autoUpdater.on('update-downloaded', (i) => setState({ state: 'ready', version: i.version }));
+  autoUpdater.on('error', (err) => {
+    const text = String(err?.message || err);
+    setState({
+      state: 'error',
+      error: /404|Unable to find latest version|private|authentication|HttpError: 40/i.test(text)
+        ? 'Noch keine öffentlichen Updates gefunden (das GitHub-Repo ist privat oder hat noch kein Release).'
+        : 'Update-Prüfung fehlgeschlagen. Bist du online?',
+    });
+  });
+  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  setTimeout(check, 30 * 1000);
+  setInterval(check, 6 * 3600 * 1000);
+  return { check, install: () => autoUpdater.quitAndInstall(true, true) };
+}
+
+// Selbsttest für die Einstellungen («Diagnose»)
+async function runDiagnostics() {
+  const results = [];
+  const add = (name, ok, detail) => results.push({ name, ok: ok === null ? null : Boolean(ok), detail: String(detail || '') });
+  add('Version', true, `${app.getVersion()} · Electron ${process.versions.electron} · ${os.type()} ${os.release()}${installedWithSetup() ? ' · mit Installer' : ''}`);
+  const d = targetDisplay();
+  add('Bildschirm', true, `${Math.round(d.size.width * d.scaleFactor)}×${Math.round(d.size.height * d.scaleFactor)}, Skalierung ${Math.round(d.scaleFactor * 100)} %, ${screen.getAllDisplays().length} Bildschirm(e)`);
+
+  const key = getApiKey();
+  if (!key) add('Claude-API', false, 'Kein API-Key verbunden');
+  else {
+    try {
+      const models = await claude.listModels(key, settings.workspaceId);
+      add('Claude-API', true, `Verbunden, ${models.length} Modelle verfügbar`);
+    } catch (err) {
+      add('Claude-API', false, err.message);
+    }
+  }
+
+  try {
+    await computer.run('screenshot', {});
+    const size = computer.screenSize();
+    add('Bildschirmfoto', true, `${size.w}×${size.h} Pixel`);
+  } catch (err) {
+    add('Bildschirmfoto', false, err.message);
+  }
+  if (process.platform === 'win32') {
+    try {
+      const pos = await computer.run('cursor_position', {});
+      add('Maus & Tastatur', true, `Steuerungs-Helfer läuft (${pos[0].text})`);
+    } catch (err) {
+      add('Maus & Tastatur', false, err.message);
+    }
+  } else {
+    add('Maus & Tastatur', null, 'Nur unter Windows');
+  }
+  add('Ausblenden in Fotos', process.platform === 'win32' ? captureExclusion : null, captureExclusion ? 'Island und Rand sind für Buddy unsichtbar' : 'Ältere Windows-Version: Island wird beim Foto kurz versteckt');
+
+  const notifyText = { Allowed: 'Aktiv', Denied: 'Zugriff in Windows verweigert', Off: 'Ausgeschaltet', Unsupported: 'Nur unter Windows', Error: 'Nicht verfügbar', Starting: 'Startet …' };
+  add('Mitteilungen', notifyStatus === 'Allowed' ? true : ['Off', 'Unsupported', 'Starting'].includes(notifyStatus) ? null : false, notifyText[notifyStatus] || notifyStatus);
+  add('Musik-Anzeige', !settings.media ? null : mediaOk, !settings.media ? 'Ausgeschaltet' : mediaOk ? (nowPlaying ? `Läuft: ${nowPlaying.title}` : 'Bereit') : 'Nicht verfügbar');
+
+  add('Spielmodus', settings.gameMode ? true : null, !settings.gameMode ? 'Ausgeschaltet' : game.active ? `Aktiv: ${game.name}` : 'Bereit, kein Spiel erkannt');
+
+  const cal = calendar.status();
+  add('Kalender', cal.configured ? !cal.error : null, cal.configured ? (cal.error || `${cal.events} Termine in den nächsten 31 Tagen`) : 'Nicht verbunden');
+
+  const v = voice.info();
+  if (process.platform !== 'win32') add('Sprache', null, 'Nur unter Windows');
+  else if (!v.ready) add('Sprache', null, 'Startet beim ersten Sprechen');
+  else add('Sprache', v.offline || v.online, [v.online ? 'Online-Diktat' : null, v.offline ? `Offline (${v.language})` : null, v.wake ? '«Hey Buddy» aktiv' : null].filter(Boolean).join(', ') || 'Keine Spracherkennung installiert');
+
+  add('Updates', updater ? updateState.state !== 'error' : null, updater
+    ? ({ idle: 'Noch nicht geprüft', checking: 'Prüfe …', latest: 'Aktuell', downloading: 'Lädt Update …', ready: `Version ${updateState.version} bereit`, error: updateState.error }[updateState.state] || '')
+    : 'Nur mit dem Installer');
+  log(`Diagnose: ${results.map((r) => `${r.name}=${r.ok}`).join(', ')}`);
+  return results;
 }
 
 // ---------- IPC ----------
@@ -605,6 +835,8 @@ function setupIpc() {
     if (!layout.open) mouseCaptured = false;
     placeWindow();
     applyMouseMode();
+    if (layout.open && game.active) win?.show();
+    if (!layout.open && game.active) win?.hide();
     if (layout.open && !controlling) win?.focus();
   });
 
@@ -629,7 +861,7 @@ function setupIpc() {
   ipcMain.handle('settings:get', () => publicSettings());
 
   ipcMain.handle('settings:set', (_e, patch = {}) => {
-    const allowedKeys = ['name', 'model', 'effort', 'maxTokens', 'sound', 'autostart', 'accent', 'systemPrompt', 'workspaceId', 'computerUse', 'confirmControl', 'glow', 'notifications'];
+    const allowedKeys = ['name', 'model', 'effort', 'maxTokens', 'sound', 'autostart', 'accent', 'systemPrompt', 'workspaceId', 'computerUse', 'confirmControl', 'glow', 'notifications', 'media', 'gameMode', 'calendarLead', 'voiceWake', 'speak', 'displayId'];
     for (const k of allowedKeys) if (k in patch) settings[k] = patch[k];
 
     // Tastenkürzel: erst prüfen, dann übernehmen, bei Problemen zurück auf den alten Stand
@@ -662,9 +894,12 @@ function setupIpc() {
     }
     if ('autostart' in patch) applyAutostart();
     if ('glow' in patch && !settings.glow) setGlow('off');
-    if ('notifications' in patch) {
-      if (settings.notifications) watcher?.start();
-      else { watcher?.stop(); notifyStatus = 'Off'; }
+    if ('notifications' in patch || 'media' in patch || 'gameMode' in patch) startWatcher();
+    if ('calendarLead' in patch) calendar?.setLead(settings.calendarLead);
+    if ('voiceWake' in patch) voice?.setWake(settings.voiceWake && !game.active);
+    if ('displayId' in patch) {
+      placeWindow();
+      if (glow && !glow.isDestroyed()) glow.setBounds(targetDisplay().bounds);
     }
     saveSettings();
     return { ok: !shortcutError, settings: publicSettings(), error: shortcutError };
@@ -727,6 +962,44 @@ function setupIpc() {
   ipcMain.on('notify:settings', () => shell.openExternal('ms-settings:notifications'));
   ipcMain.on('notify:privacy', () => shell.openExternal('ms-settings:privacy-notifications'));
 
+  ipcMain.on('media:command', (_e, cmd) => {
+    if (!watcher?.media(cmd)) tools?.run('media_control', { action: { playpause: 'play_pause', next: 'next', previous: 'previous' }[cmd] });
+  });
+  ipcMain.handle('media:get', () => nowPlaying);
+
+  ipcMain.handle('calendar:set', async (_e, url) => {
+    let clean = String(url || '').trim().replace(/^webcal:\/\//i, 'https://');
+    const devLocal = !app.isPackaged && /^http:\/\/(127\.0\.0\.1|localhost)[:/]/i.test(clean); // nur für Tests
+    if (!devLocal && !/^https:\/\/\S+$/i.test(clean)) return { ok: false, error: 'Bitte den privaten iCal-Link einfügen (beginnt mit https:// oder webcal://).' };
+    const old = getSecret('calendar');
+    setSecret('calendar', clean);
+    const status = await calendar.refresh();
+    if (status.error) {
+      setSecret('calendar', old || '');
+      await calendar.refresh();
+      return { ok: false, error: status.error };
+    }
+    clean = '';
+    return { ok: true, settings: publicSettings() };
+  });
+  ipcMain.handle('calendar:clear', async () => {
+    setSecret('calendar', '');
+    await calendar.refresh();
+    return publicSettings();
+  });
+  ipcMain.handle('calendar:upcoming', () => {
+    const now = Date.now();
+    return getSecret('calendar') ? calendar.list(now, now + 24 * 3600e3).slice(0, 5) : [];
+  });
+
+  ipcMain.on('voice:listen', () => startListening());
+
+  ipcMain.on('update:check', () => updater?.check());
+  ipcMain.on('update:install', () => updater?.install());
+
+  ipcMain.handle('diag:run', () => runDiagnostics());
+  ipcMain.on('logs:open', () => shell.openPath(app.getPath('userData')));
+
   ipcMain.on('link:open', (_e, url) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
   });
@@ -769,12 +1042,14 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
 
     computer = createComputer({
       scriptDir: app.getPath('userData'),
+      getDisplay: targetDisplay,
       onPointer: (x, y, kind) => glowCall(`ripple(${Math.round(x)}, ${Math.round(y)}, ${JSON.stringify(kind)})`),
       beforeInput: () => { agentInput = true; applyMouseMode(); },
       afterInput: () => { agentInput = false; applyMouseMode(); },
       // Ältere Windows-Versionen können Fenster nicht aus Fotos ausblenden: dann kurz verstecken.
       beforeCapture: async () => {
         if (captureExclusion) return;
+        capturing = true;
         glow?.hide();
         win?.hide();
         await new Promise((r) => setTimeout(r, 120));
@@ -782,7 +1057,8 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       afterCapture: async () => {
         if (captureExclusion) return;
         if (glow && !glow.isDestroyed()) glow.showInactive();
-        win?.showInactive();
+        if (!game.active || layout.open) win?.showInactive();
+        setTimeout(() => { capturing = false; }, 300);
       },
     });
 
@@ -796,18 +1072,66 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       onTimersChanged: (list) => win?.webContents.send('timers:update', list),
       onTimerDone: (timer) => win?.webContents.send('timer:done', { ...timer, text: `${formatDuration(timer.durationMs)} sind um` }),
       getNotifications: () => watcher?.recent() || [],
+      getNowPlaying: () => nowPlaying,
+      mediaCommand: (cmd) => watcher?.media(cmd) || false,
+      getCalendar: (from, to) => (getSecret('calendar') ? calendar.list(from, to) : []),
     });
 
-    watcher = createNotificationWatcher({
+    watcher = createSystemWatcher({
       scriptDir: app.getPath('userData'),
+      log,
       onNotification: (item) => win?.webContents.send('notify', item),
-      onStatus: (status) => {
+      onStatus: (status, error) => {
         notifyStatus = status;
+        if (error) log(`Mitteilungen: ${error}`);
         win?.webContents.send('notify:status', status);
       },
+      onMedia: (np) => {
+        nowPlaying = np;
+        win?.webContents.send('media', np);
+      },
+      onMediaStatus: (ok, error) => {
+        mediaOk = ok;
+        if (error) log(`Medien: ${error}`);
+      },
+      onFocus: (focus) => setGame(focus),
     });
-    if (settings.notifications) watcher.start();
-    else notifyStatus = 'Off';
+    startWatcher();
+
+    calendar = createCalendar({
+      fetchText: async (url) => {
+        const res = await net.fetch(url, { headers: { accept: 'text/calendar, text/plain, */*' } });
+        if (!res.ok) throw new Error(`Kalender-Link antwortet mit Fehler ${res.status}.`);
+        return res.text();
+      },
+      getUrl: () => getSecret('calendar'),
+      log,
+      onReminder: (ev, minutes) => {
+        win?.webContents.send('notify', {
+          id: `cal-${ev.start}`,
+          app: 'Kalender',
+          title: ev.title,
+          body: `${minutes <= 0 ? 'jetzt' : `in ${minutes} Min.`}${ev.location ? ` · ${ev.location}` : ''}`,
+          time: Date.now(),
+        });
+      },
+      onUpdate: (status) => win?.webContents.send('calendar:status', status),
+    });
+    calendar.setLead(settings.calendarLead);
+    calendar.refresh();
+
+    voice = createVoice({
+      scriptDir: app.getPath('userData'),
+      log,
+      onEvent: (msg) => {
+        if (msg.kind === 'listening' && !running.size) setGlow('think');
+        if (['text', 'nothing', 'unavailable'].includes(msg.kind) && !running.size) setGlow('off');
+        win?.webContents.send('voice', msg);
+      },
+    });
+    if (settings.voiceWake) voice.setWake(true);
+
+    updater = setupUpdater();
     setupIpc();
     createWindow();
     createTray();
@@ -825,6 +1149,8 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     globalShortcut.unregisterAll();
     computer?.stop();
     watcher?.stop();
+    voice?.stop();
+    calendar?.stop();
   });
   app.on('window-all-closed', (e) => e.preventDefault());
 }

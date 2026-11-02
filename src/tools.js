@@ -82,6 +82,24 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'now_playing',
+    description: 'Zeigt, welcher Song oder welches Video gerade auf dem PC läuft (Spotify, YouTube im Browser usw.).',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'calendar_events',
+    description:
+      'Liest Termine aus dem Kalender des Nutzers (falls in Buddy verbunden). ' +
+      'Nutze das bei Fragen wie «Was steht heute an?» oder «Wann ist mein nächster Termin?».',
+    input_schema: {
+      type: 'object',
+      properties: {
+        days: { type: 'integer', description: 'Wie viele Tage ab heute (1 bis 31, Standard 1 = heute).' },
+        query: { type: 'string', description: 'Optional nur Termine, deren Titel diesen Text enthält.' },
+      },
+    },
+  },
+  {
     name: 'recent_notifications',
     description:
       'Liest die letzten Windows-Mitteilungen (z. B. WhatsApp, Mail, Discord), die Buddy seit dem Start gesehen hat. ' +
@@ -116,6 +134,8 @@ function describe(name, input = {}) {
     case 'set_timer': return `Timer ${formatDuration(durationMs(input))}${input.label ? ` · ${input.label}` : ''}`;
     case 'list_timers': return 'Timer angeschaut';
     case 'recent_notifications': return 'Mitteilungen gelesen';
+    case 'now_playing': return 'Musik angeschaut';
+    case 'calendar_events': return 'Kalender angeschaut';
     case 'cancel_timer': return 'Timer gestoppt';
     case 'open_website': return `Website geöffnet`;
     case 'open_app': return `${capitalize(input.app || 'App')} geöffnet`;
@@ -178,7 +198,10 @@ function openApp(name) {
   });
 }
 
-function createTools({ onTimersChanged, onTimerDone, getNotifications = () => [] }) {
+function createTools({
+  onTimersChanged, onTimerDone, getNotifications = () => [], getNowPlaying = () => null,
+  mediaCommand = () => false, getCalendar = null,
+}) {
   const timers = new Map(); // id -> { id, label, endsAt, durationMs, handle }
   let counter = 0;
 
@@ -242,6 +265,25 @@ function createTools({ onTimersChanged, onTimerDone, getNotifications = () => []
         if (!removed.length) return { error: true, text: 'Kein passender Timer gefunden.' };
         return { text: `Gestoppt: ${removed.map((t) => `«${t.label}»`).join(', ')}` };
       }
+      case 'now_playing': {
+        const np = getNowPlaying();
+        if (!np) return { text: 'Gerade läuft nichts (oder Windows meldet keine Wiedergabe).' };
+        return { text: `${np.playing ? 'Läuft' : 'Pausiert'} in ${np.app}: «${np.title}»${np.artist ? ` von ${np.artist}` : ''}${np.album ? ` (Album: ${np.album})` : ''}` };
+      }
+      case 'calendar_events': {
+        if (!getCalendar) return { error: true, text: 'Es ist kein Kalender verbunden. Der Nutzer kann in Buddys Einstellungen unter «Kalender» einen iCal-Link einfügen.' };
+        const days = Math.min(31, Math.max(1, Math.round(Number(input.days) || 1)));
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const end = start.getTime() + days * 864e5 - 1;
+        const q = String(input.query || '').toLowerCase();
+        const list = getCalendar(Math.max(Date.now() - 3600e3, start.getTime()), end).filter((e) => !q || e.title.toLowerCase().includes(q));
+        if (!list.length) return { text: `Keine Termine in den nächsten ${days === 1 ? 'Stunden (heute)' : `${days} Tagen`}.` };
+        const day = (ts) => new Date(ts).toLocaleDateString('de-CH', { weekday: 'short', day: 'numeric', month: 'numeric' });
+        return {
+          text: list.slice(0, 40).map((e) => `${day(e.start)} ${e.allDay ? 'ganztägig' : `${clock(e.start)}–${clock(e.end)}`} · ${e.title}${e.location ? ` (${e.location})` : ''}`).join('\n'),
+        };
+      }
       case 'recent_notifications': {
         const limit = Math.min(30, Math.max(1, Math.round(Number(input.limit) || 10)));
         const app = String(input.app || '').toLowerCase();
@@ -264,6 +306,9 @@ function createTools({ onTimersChanged, onTimerDone, getNotifications = () => []
       case 'media_control': {
         const code = MEDIA_KEYS[input.action];
         if (!code) return { error: true, text: 'Unbekannte Aktion.' };
+        // Wiedergabe lieber direkt über die Windows-Mediensitzung steuern
+        const session = { play_pause: 'playpause', next: 'next', previous: 'previous' }[input.action];
+        if (session && mediaCommand(session)) return { text: `Erledigt (${input.action}).` };
         const isVolume = input.action === 'volume_up' || input.action === 'volume_down';
         const steps = isVolume ? Math.min(50, Math.max(1, Math.round(Number(input.steps) || 5))) : 1;
         await pressMediaKey(code, steps);

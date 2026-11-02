@@ -54,6 +54,33 @@
     soundToggle: $('soundToggle'),
     autostartToggle: $('autostartToggle'),
     quitBtn: $('quitBtn'),
+    pillCover: $('pillCover'),
+    nowPlaying: $('nowPlaying'),
+    nowCover: $('nowCover'),
+    nowCoverEmpty: $('nowCoverEmpty'),
+    nowTitle: $('nowTitle'),
+    nowSub: $('nowSub'),
+    agenda: $('agenda'),
+    agendaList: $('agendaList'),
+    micBtn: $('micBtn'),
+    wakeToggle: $('wakeToggle'),
+    speakToggle: $('speakToggle'),
+    voiceStatus: $('voiceStatus'),
+    mediaToggle: $('mediaToggle'),
+    calStatus: $('calStatus'),
+    calRemove: $('calRemove'),
+    calInput: $('calInput'),
+    calSave: $('calSave'),
+    calLead: $('calLead'),
+    calMsg: $('calMsg'),
+    gameToggle: $('gameToggle'),
+    displaySelect: $('displaySelect'),
+    versionValue: $('versionValue'),
+    updateStatus: $('updateStatus'),
+    updateBtn: $('updateBtn'),
+    diagBtn: $('diagBtn'),
+    diagList: $('diagList'),
+    logsBtn: $('logsBtn'),
   };
 
   const STORE_KEY = 'buddy.chat.v1';
@@ -77,6 +104,12 @@
     alarm: null,
     peek: null, // { app, title, body }
     inbox: [],
+    media: null, // { title, artist, app, playing, cover }
+    listening: '', // '' | 'starting' | 'listening'
+    voiceNote: '', // kurze Meldung im Island, z. B. «Nichts gehört»
+    game: { active: false, name: '' },
+    missed: 0,
+    update: { state: 'idle' },
   };
 
   // ---------- Hilfsfunktionen ----------
@@ -144,9 +177,11 @@
   function visibleState() {
     if (state.alarm) return 'alarm';
     if (state.control) return 'control';
+    if (state.listening || state.voiceNote) return 'listen';
     if (state.peek && !state.open) return 'peek';
     if (state.status !== 'idle') return state.status;
     if (state.timers.length && !state.open) return 'timer';
+    if (state.media && !state.open && state.settings?.media !== false) return 'music';
     return 'idle';
   }
 
@@ -163,6 +198,8 @@
       case 'timer': return next ? `${next.label}  ${countdown(next.endsAt - Date.now())}` : name;
       case 'alarm': return state.alarm ? `${state.alarm.label} ist um` : name;
       case 'control': return `${capitalize(state.actionLabel || 'steuert')} …`;
+      case 'listen': return state.voiceNote || (state.listening === 'listening' ? 'Hört zu …' : 'Mikrofon startet …');
+      case 'music': return [state.media?.title, state.media?.artist].filter(Boolean).join(' · ');
       default: return name;
     }
   }
@@ -170,6 +207,8 @@
   function render() {
     const shown = visibleState();
     el.island.dataset.state = shown;
+    el.island.classList.toggle('paused', Boolean(state.media && !state.media.playing));
+    el.island.classList.toggle('listening', Boolean(state.listening));
     if (state.open && shown !== 'alarm' && shown !== 'control') {
       el.label.textContent = state.view === 'settings' ? 'Einstellungen' : state.settings?.name || 'Buddy';
     } else {
@@ -196,10 +235,10 @@
       const w = Math.max(textWidth(el.peekText.textContent), textWidth(el.peekApp.textContent) * 0.9);
       return { width: Math.ceil(Math.min(360, Math.max(240, 12 + 24 + 10 + w + 18)) / 8) * 8, height: PEEK_H };
     }
-    const extra = { busy: 30, done: 18, control: 34, alarm: 18 }[shown] || 0;
+    const extra = { busy: 30, done: 18, control: 34, alarm: 18, music: 22, listen: 16 }[shown] || 0;
     const w = 8 + 24 + 8 + textWidth(el.label.textContent) + extra + 16;
     // auf 8 px runden, damit sich das Fenster nicht bei jeder Ziffer ändert
-    return { width: Math.min(340, Math.max(148, Math.ceil(w / 8) * 8)), height: CLOSED_H };
+    return { width: Math.min(shown === 'music' ? 300 : 340, Math.max(148, Math.ceil(w / 8) * 8)), height: CLOSED_H };
   }
 
   let windowSize = { open: false, width: 148, height: CLOSED_H };
@@ -254,6 +293,8 @@
       }, 16);
     }
     renderInbox();
+    renderNowPlaying();
+    renderAgenda();
     renderEmpty();
     render();
   }
@@ -280,6 +321,7 @@
     el.settingsView.hidden = view !== 'settings';
     el.settingsBtn.classList.toggle('active', view === 'settings');
     if (view === 'settings') fillSettings();
+    if (view === 'chat' && state.open) renderAgenda();
     render();
   }
 
@@ -460,7 +502,7 @@
     return merged;
   }
 
-  function send(text) {
+  function send(text, viaVoice = false) {
     const clean = text.trim();
     if (!clean || state.stream) return;
     if (!state.settings?.hasKey) { open('settings'); return; }
@@ -476,7 +518,8 @@
     const node = typingBubble();
     el.messages.appendChild(node);
     scrollToBottom(true);
-    state.stream = { id, text: '', node, raf: 0, tools: [] };
+    state.stream = { id, text: '', node, raf: 0, tools: [], voice: viaVoice };
+    stopSpeaking();
     el.island.classList.add('streaming');
     setStatus('busy');
     updateSendButton();
@@ -530,7 +573,8 @@
     } else {
       state.status = state.open ? 'idle' : 'done';
       if (!state.open) pop();
-      if (state.settings?.sound && (!state.open || !document.hasFocus())) chime();
+      if (s.voice && state.settings?.speak && text) speak(text);
+      else if (state.settings?.sound && !state.game.active && (!state.open || !document.hasFocus())) chime();
     }
     render();
     scrollToBottom(true);
@@ -589,6 +633,7 @@
     card.addEventListener('click', (event) => {
       const btn = event.target.closest('button[data-allow]');
       if (!btn) return;
+      event.stopPropagation();
       const allow = btn.dataset.allow === '1';
       card.remove();
       api.confirmControl(id, allow);
@@ -716,6 +761,13 @@
 
   let alarmLoop = 0;
   api.onTimerDone((timer) => {
+    if (state.game.active && !state.open) {
+      // Im Spiel nur ein kurzer Ton, nichts Sichtbares
+      if (state.settings?.sound !== false) chime();
+      state.missed += 1;
+      state.inbox.unshift({ id: `timer-${Date.now()}`, app: 'Timer', title: timer.label, body: 'ist abgelaufen', time: Date.now() });
+      return;
+    }
     state.alarm = timer;
     state.peek = null;
     render();
@@ -752,6 +804,11 @@
   api.onNotify((item) => {
     state.inbox.unshift(item);
     state.inbox.splice(30);
+    if (state.game.active && !state.open) {
+      // Spielmodus: still sammeln, nach dem Spiel zeigen
+      state.missed += 1;
+      return;
+    }
     if (state.open) {
       renderInbox();
       return;
@@ -803,14 +860,242 @@
     if (state.view === 'settings') fillSettings();
   });
 
+  // ---------- Musik ----------
+
+  function renderNowPlaying() {
+    const m = state.settings?.media === false ? null : state.media;
+    el.nowPlaying.hidden = !m;
+    const coverOk = Boolean(m?.cover && /^data:image\//.test(m.cover));
+    el.pillCover.classList.toggle('has', coverOk);
+    el.pillCover.hidden = !coverOk;
+    if (!m) return;
+    el.nowTitle.textContent = m.title;
+    el.nowSub.textContent = [m.artist, m.app].filter(Boolean).join(' · ');
+    el.nowPlaying.classList.toggle('playing', Boolean(m.playing));
+    el.nowCover.hidden = !coverOk;
+    el.nowCoverEmpty.hidden = coverOk;
+    if (coverOk && el.nowCover.src !== m.cover) {
+      el.nowCover.src = m.cover;
+      el.pillCover.src = m.cover;
+    }
+  }
+
+  api.onMedia((np) => {
+    state.media = np;
+    renderNowPlaying();
+    render();
+  });
+
+  el.nowPlaying.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-media]');
+    if (btn) api.mediaCommand(btn.dataset.media);
+  });
+
+  // ---------- Kalender ----------
+
+  async function renderAgenda() {
+    if (!state.settings?.hasCalendar) { el.agenda.hidden = true; return; }
+    const list = await api.upcomingEvents();
+    el.agendaList.textContent = '';
+    el.agenda.hidden = !list.length;
+    for (const e of list.slice(0, 3)) {
+      const row = document.createElement('div');
+      row.className = 'note';
+      const meta = document.createElement('div');
+      meta.className = 'note-meta';
+      const when = document.createElement('span');
+      when.className = 'note-app';
+      const sameDay = new Date(e.start).toDateString() === new Date().toDateString();
+      when.textContent = e.allDay ? 'Ganztägig' : `${sameDay ? 'Heute' : 'Morgen'} ${clock(e.start)}`;
+      const where = document.createElement('span');
+      where.textContent = e.location || '';
+      meta.append(when, where);
+      const text = document.createElement('div');
+      text.className = 'note-text';
+      text.textContent = e.title;
+      row.append(meta, text);
+      el.agendaList.appendChild(row);
+    }
+  }
+
+  // ---------- Sprache ----------
+
+  let voiceNoteTimer = 0;
+  function voiceNote(text) {
+    state.voiceNote = text;
+    render();
+    clearTimeout(voiceNoteTimer);
+    voiceNoteTimer = setTimeout(() => { state.voiceNote = ''; render(); }, 2200);
+  }
+
+  function startVoice() {
+    if (state.listening) return;
+    if (!state.settings?.hasKey) { open('settings'); return; }
+    stopSpeaking();
+    state.listening = 'starting';
+    render();
+    api.voiceListen();
+  }
+
+  el.micBtn.addEventListener('click', startVoice);
+
+  api.onVoice((msg) => {
+    switch (msg.kind) {
+      case 'starting':
+        state.listening = state.listening || 'starting';
+        break;
+      case 'wake':
+        if (state.game.active) return;
+        pop();
+        state.listening = 'listening';
+        break;
+      case 'listening':
+        state.listening = 'listening';
+        if (state.settings?.sound) chime(true);
+        break;
+      case 'text':
+        state.listening = '';
+        if (msg.text && msg.text.trim()) {
+          if (state.stream) { voiceNote('Buddy arbeitet noch …'); break; }
+          send(msg.text, true);
+        }
+        break;
+      case 'nothing':
+        state.listening = '';
+        voiceNote('Nichts gehört');
+        return;
+      case 'unavailable':
+        state.listening = '';
+        voiceNote('Sprache geht nur unter Windows');
+        return;
+      case 'ready':
+        if (state.settings) state.settings.voiceInfo = { ...msg, ready: true };
+        if (!msg.offline && !msg.online) { state.listening = ''; voiceNote('Keine Spracherkennung gefunden'); }
+        if (state.view === 'settings') fillSettings();
+        return;
+      default:
+        return;
+    }
+    render();
+  });
+
+  // Antworten vorlesen (Windows-Stimmen, offline)
+  function plainText(md) {
+    return md
+      .replace(/```[\s\S]*?```/g, ' Code-Block. ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/https?:\/\/\S+/g, 'Link')
+      .replace(/[*_#>~|]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function speak(text) {
+    try {
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(plainText(text).slice(0, 1200));
+      const voices = synth.getVoices();
+      const voiceFor = voices.find((v) => /de-CH/i.test(v.lang)) || voices.find((v) => /^de/i.test(v.lang));
+      if (voiceFor) { u.voice = voiceFor; u.lang = voiceFor.lang; } else { u.lang = 'de-DE'; }
+      u.rate = 1.05;
+      synth.speak(u);
+    } catch {
+      /* keine Stimme */
+    }
+  }
+
+  function stopSpeaking() {
+    try { window.speechSynthesis.cancel(); } catch { /* egal */ }
+  }
+
+  // ---------- Spielmodus ----------
+
+  api.onGame((g) => {
+    const wasActive = state.game.active;
+    state.game = g || { active: false, name: '' };
+    if (state.game.active) {
+      stopSpeaking();
+      state.peek = null;
+    } else if (wasActive && state.missed > 0) {
+      const count = state.missed;
+      state.missed = 0;
+      setTimeout(() => {
+        state.peek = { app: 'Während du gespielt hast', title: `${count} ${count === 1 ? 'Mitteilung' : 'Mitteilungen'}`, body: 'Klick zum Anschauen' };
+        el.peekApp.textContent = state.peek.app;
+        el.peekText.textContent = `${state.peek.title} · ${state.peek.body}`;
+        render();
+        pop();
+        clearTimeout(peekTimer);
+        peekTimer = setTimeout(() => { state.peek = null; render(); }, PEEK_MS);
+      }, 800);
+    }
+    render();
+  });
+
+  // ---------- Updates & Diagnose ----------
+
+  function updateText(u) {
+    switch (u?.state) {
+      case 'checking': return 'Prüfe …';
+      case 'latest': return 'Aktuell';
+      case 'downloading': return u.percent ? `Lädt Version ${u.version} (${u.percent} %)` : `Lädt Version ${u.version} …`;
+      case 'ready': return `Version ${u.version} bereit`;
+      case 'error': return u.error || 'Fehler';
+      default: return state.settings?.canUpdate ? 'Noch nicht geprüft' : 'Nur mit dem Installer';
+    }
+  }
+
+  api.onUpdate((u) => {
+    const becameReady = u?.state === 'ready' && state.update.state !== 'ready';
+    state.update = u || { state: 'idle' };
+    if (state.view === 'settings') fillSettings();
+    if (becameReady && !state.game.active) {
+      state.peek = { app: 'Buddy Island', title: `Update ${u.version} ist bereit`, body: 'Neustart in den Einstellungen' };
+      el.peekApp.textContent = 'Buddy Island';
+      el.peekText.textContent = `Update ${u.version} ist bereit`;
+      render();
+      clearTimeout(peekTimer);
+      peekTimer = setTimeout(() => { state.peek = null; render(); }, PEEK_MS);
+    }
+  });
+
+  el.updateBtn.addEventListener('click', () => {
+    if (state.update.state === 'ready') api.installUpdate();
+    else api.checkUpdates();
+  });
+
+  el.diagBtn.addEventListener('click', async () => {
+    el.diagBtn.disabled = true;
+    el.diagBtn.textContent = 'Test läuft …';
+    el.diagList.hidden = false;
+    el.diagList.textContent = '';
+    const results = await api.runDiagnostics();
+    el.diagBtn.disabled = false;
+    el.diagBtn.textContent = 'Selbsttest erneut starten';
+    for (const r of results) {
+      const row = document.createElement('div');
+      row.className = 'diag-row' + (r.ok === true ? ' ok' : r.ok === false ? ' bad' : '');
+      const name = document.createElement('b');
+      name.textContent = r.name;
+      const detail = document.createElement('span');
+      detail.textContent = r.detail;
+      row.append(name, detail);
+      el.diagList.appendChild(row);
+    }
+  });
+
+  el.logsBtn.addEventListener('click', () => api.openLogs());
+
   // ---------- Ton ----------
 
   // Wird nach jedem Ton wieder geschlossen, damit kein Audio-Thread im Leerlauf läuft.
-  function chime() {
+  function chime(soft) {
     try {
       const ctx = new AudioContext();
       const now = ctx.currentTime;
-      [[880, 0], [1318.5, 0.11]].forEach(([freq, delay]) => {
+      (soft ? [[660, 0]] : [[880, 0], [1318.5, 0.11]]).forEach(([freq, delay]) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
@@ -871,6 +1156,37 @@
     el.notifyStatus.textContent = NOTIFY_STATUS[status] || status || '–';
     el.dndBtn.textContent = status === 'Denied' ? 'Zugriff in Windows erlauben' : '«Nicht stören» in Windows öffnen';
     fillShortcuts();
+    el.wakeToggle.checked = Boolean(s.voiceWake);
+    el.wakeToggle.disabled = !s.canControl;
+    el.speakToggle.checked = s.speak !== false;
+    const v = s.voiceInfo;
+    el.voiceStatus.textContent = !s.canControl ? 'Nur unter Windows'
+      : !v || !v.ready ? 'Startet beim ersten Sprechen'
+        : [v.online ? 'Online-Diktat' : null, v.offline ? `Offline · ${v.language}` : null].filter(Boolean).join(' + ') || 'Nicht installiert';
+    el.mediaToggle.checked = s.media !== false;
+    el.gameToggle.checked = s.gameMode !== false;
+    const cal = s.calendarStatus;
+    el.calStatus.textContent = !s.hasCalendar ? 'Nicht verbunden'
+      : cal?.error ? 'Fehler beim Laden'
+        : `Verbunden · ${cal?.events ?? 0} Termine`;
+    el.calStatus.classList.toggle('ok', Boolean(s.hasCalendar && !cal?.error));
+    el.calRemove.hidden = !s.hasCalendar;
+    el.calSave.textContent = s.hasCalendar ? 'Ersetzen' : 'Verbinden';
+    el.calLead.value = String(s.calendarLead ?? 10);
+    el.displaySelect.textContent = '';
+    for (const d of s.displays || []) {
+      const opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = d.label;
+      el.displaySelect.appendChild(opt);
+    }
+    el.displaySelect.value = (s.displays || []).some((d) => d.id === String(s.displayId)) ? String(s.displayId) : (s.displays || [])[0]?.id || '';
+    el.displaySelect.disabled = (s.displays || []).length < 2;
+    el.versionValue.textContent = s.version || '–';
+    const u = state.update.state !== 'idle' ? state.update : s.updateState || state.update;
+    el.updateStatus.textContent = updateText(u);
+    el.updateBtn.textContent = u.state === 'ready' ? 'Neu starten' : 'Prüfen';
+    el.updateBtn.hidden = !s.canUpdate;
     for (const b of el.effortSeg.querySelectorAll('button')) {
       b.classList.toggle('on', b.dataset.value === s.effort);
       b.setAttribute('aria-checked', String(b.dataset.value === s.effort));
@@ -983,6 +1299,35 @@
   el.dndBtn.addEventListener('click', () => {
     if (state.settings?.notifyStatus === 'Denied') api.openNotificationPrivacy();
     else api.openNotificationSettings();
+  });
+  el.wakeToggle.addEventListener('change', () => save({ voiceWake: el.wakeToggle.checked }));
+  el.speakToggle.addEventListener('change', () => save({ speak: el.speakToggle.checked }));
+  el.mediaToggle.addEventListener('change', async () => { await save({ media: el.mediaToggle.checked }); renderNowPlaying(); });
+  el.gameToggle.addEventListener('change', () => save({ gameMode: el.gameToggle.checked }));
+  el.displaySelect.addEventListener('change', () => save({ displayId: el.displaySelect.value }));
+  el.calLead.addEventListener('change', () => save({ calendarLead: Number(el.calLead.value) }));
+  el.calSave.addEventListener('click', async () => {
+    footer(el.calMsg, 'Lade Kalender …');
+    el.calSave.disabled = true;
+    const result = await api.setCalendar(el.calInput.value);
+    el.calSave.disabled = false;
+    if (!result.ok) { footer(el.calMsg, result.error, 'err'); return; }
+    el.calInput.value = '';
+    state.settings = result.settings;
+    footer(el.calMsg, 'Kalender verbunden.', 'ok');
+    fillSettings();
+  });
+  el.calInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') el.calSave.click(); });
+  el.calRemove.addEventListener('click', async () => {
+    state.settings = await api.clearCalendar();
+    footer(el.calMsg, '');
+    fillSettings();
+  });
+  api.onCalendarStatus((status) => {
+    if (!state.settings) return;
+    state.settings.calendarStatus = status;
+    if (state.view === 'settings') fillSettings();
+    if (state.open) renderAgenda();
   });
   el.quitBtn.addEventListener('click', () => api.quit());
   el.connectBtn.addEventListener('click', () => open('settings'));
@@ -1187,7 +1532,8 @@
   // ---------- Kopfzeile & Tastatur ----------
 
   el.island.addEventListener('click', (event) => {
-    if (!state.open && !event.target.closest('.stop')) open();
+    // Nur ein Klick aufs geschlossene Island öffnet es (nicht Klicks im Inhalt)
+    if (!state.open && !event.target.closest('.stop') && !event.target.closest('.body')) open();
   });
   el.newBtn.addEventListener('click', newChat);
   el.settingsBtn.addEventListener('click', () => showView(state.view === 'settings' ? 'chat' : 'settings'));
@@ -1226,6 +1572,10 @@
     renderTimers();
     state.inbox = await api.listNotifications();
     renderInbox();
+    state.media = await api.getMedia();
+    state.game = state.settings.game || state.game;
+    state.update = state.settings.updateState || state.update;
+    renderNowPlaying();
     render();
     if (state.settings.hasKey) loadModels();
   })();

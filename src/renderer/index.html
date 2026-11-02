@@ -12,11 +12,14 @@
     <div class="top" id="top">
       <button class="face-btn" id="faceBtn" type="button" aria-label="Island öffnen">
         <span class="face" aria-hidden="true"><i class="eye"></i><i class="eye"></i></span>
+        <img class="pill-cover" id="pillCover" alt="" hidden>
       </button>
       <span class="label" id="label">Buddy</span>
       <span class="peek" id="peek" hidden><span class="peek-app" id="peekApp"></span><span class="peek-text" id="peekText"></span></span>
       <span class="meter" aria-hidden="true"><i></i><i></i><i></i></span>
       <span class="badge" aria-hidden="true"></span>
+      <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span class="mic-dot" aria-hidden="true"></span>
       <button class="stop" id="stopBtn" type="button" title="Stoppen" aria-label="Stoppen"><i></i></button>
 
       <div class="actions">
@@ -37,6 +40,23 @@
 
         <!-- Chat -->
         <section class="view" id="chatView">
+          <div class="now" id="nowPlaying" hidden>
+            <img class="now-cover" id="nowCover" alt="">
+            <span class="now-cover now-cover-empty" id="nowCoverEmpty"><svg viewBox="0 0 20 20"><path d="M8 14.5V5l7-1.5v9.5"/><circle cx="6" cy="14.5" r="2"/><circle cx="13" cy="13" r="2"/></svg></span>
+            <div class="now-text"><span class="now-title" id="nowTitle"></span><span class="now-sub" id="nowSub"></span></div>
+            <div class="now-controls">
+              <button type="button" class="icon-btn" data-media="previous" aria-label="Zurück"><svg viewBox="0 0 20 20"><path d="M6 5v10M15 5l-6.5 5 6.5 5z"/></svg></button>
+              <button type="button" class="icon-btn play" data-media="playpause" aria-label="Wiedergabe oder Pause">
+                <svg class="i-play" viewBox="0 0 20 20"><path d="M7 4.5l9 5.5-9 5.5z"/></svg>
+                <svg class="i-pause" viewBox="0 0 20 20"><path d="M7 5v10M13 5v10"/></svg>
+              </button>
+              <button type="button" class="icon-btn" data-media="next" aria-label="Weiter"><svg viewBox="0 0 20 20"><path d="M14 5v10M5 5l6.5 5L5 15z"/></svg></button>
+            </div>
+          </div>
+          <div class="inbox agenda" id="agenda" hidden>
+            <div class="inbox-head"><span>Nächste Termine</span></div>
+            <div class="inbox-list" id="agendaList"></div>
+          </div>
           <div class="inbox" id="inbox" hidden>
             <div class="inbox-head"><span>Mitteilungen</span><button type="button" class="link" id="inboxClear">Löschen</button></div>
             <div class="inbox-list" id="inboxList"></div>
@@ -58,6 +78,9 @@
 
           <form class="composer" id="composer" autocomplete="off">
             <textarea id="input" rows="1" placeholder="Frag Buddy etwas" spellcheck="false"></textarea>
+            <button class="mic" id="micBtn" type="button" aria-label="Sprechen" title="Sprechen">
+              <svg viewBox="0 0 20 20"><rect x="7.5" y="3" width="5" height="9" rx="2.5"/><path d="M5 9.5a5 5 0 0 0 10 0M10 14.5V17"/></svg>
+            </button>
             <button class="send" id="sendBtn" type="submit" aria-label="Senden">
               <svg class="i-send" viewBox="0 0 20 20"><path d="M10 15V5M5.5 9.5L10 5l4.5 4.5"/></svg>
               <svg class="i-stop" viewBox="0 0 20 20"><rect x="6.5" y="6.5" width="7" height="7" rx="1.5"/></svg>
@@ -136,6 +159,58 @@
             </div>
             <p class="footer">Schalte in Windows «Nicht stören» ein, dann poppt unten rechts nichts mehr auf und alles kommt nur noch im Island. Die Inhalte bleiben auf deinem PC.</p>
 
+            <h3 class="section">Sprache</h3>
+            <div class="group">
+              <label class="row">
+                <span class="row-label">Auf «Hey Buddy» hören</span>
+                <span class="switch"><input type="checkbox" id="wakeToggle"><span></span></span>
+              </label>
+              <label class="row">
+                <span class="row-label">Antworten vorlesen (nach Spracheingabe)</span>
+                <span class="switch"><input type="checkbox" id="speakToggle"><span></span></span>
+              </label>
+              <div class="row">
+                <span class="row-label">Spracherkennung</span>
+                <span class="row-value" id="voiceStatus">–</span>
+              </div>
+            </div>
+            <p class="footer">Sprich über das Mikrofon im Island, dein Tastenkürzel oder mit «Hey Buddy». Das Zuhören auf «Hey Buddy» passiert nur auf deinem PC und braucht etwas Rechenleistung, deshalb ist es standardmässig aus.</p>
+
+            <h3 class="section">Musik</h3>
+            <div class="group">
+              <label class="row">
+                <span class="row-label">Laufende Musik im Island zeigen</span>
+                <span class="switch"><input type="checkbox" id="mediaToggle"><span></span></span>
+              </label>
+            </div>
+            <p class="footer">Funktioniert mit Spotify, YouTube im Browser und allen Apps, die Windows als Wiedergabe meldet.</p>
+
+            <h3 class="section">Kalender</h3>
+            <div class="group">
+              <div class="row">
+                <span class="row-label">Kalender</span>
+                <span class="row-value" id="calStatus">Nicht verbunden</span>
+                <button type="button" class="link danger" id="calRemove" hidden>Entfernen</button>
+              </div>
+              <div class="row field-row">
+                <input id="calInput" type="password" placeholder="Privater iCal-Link (https://… oder webcal://…)" spellcheck="false" autocomplete="off" aria-label="iCal-Link">
+                <button type="button" class="button primary small" id="calSave">Verbinden</button>
+              </div>
+              <label class="row">
+                <span class="row-label">Erinnerung vor Terminen</span>
+                <select id="calLead" class="row-select">
+                  <option value="0">Aus</option>
+                  <option value="5">5 Min.</option>
+                  <option value="10">10 Min.</option>
+                  <option value="15">15 Min.</option>
+                  <option value="30">30 Min.</option>
+                  <option value="60">1 Std.</option>
+                </select>
+              </label>
+            </div>
+            <p class="footer" id="calMsg"></p>
+            <p class="footer">Google Kalender: Einstellungen → dein Kalender → «Privatadresse im iCal-Format». Outlook: Einstellungen → Kalender → Freigegebene Kalender → «Kalender veröffentlichen» → ICS-Link. Der Link wird verschlüsselt gespeichert.</p>
+
             <h3 class="section">Buddy</h3>
             <div class="group">
               <label class="row">
@@ -179,6 +254,10 @@
                 <span class="row-label">Aufgabe stoppen</span>
                 <button type="button" class="hotkey" data-shortcut="stop"></button>
               </div>
+              <div class="row">
+                <span class="row-label">Sprechen</span>
+                <button type="button" class="hotkey" data-shortcut="voice"></button>
+              </div>
             </div>
             <p class="footer" id="hotkeyMsg"></p>
             <p class="footer">Klick auf ein Kürzel und drück die neuen Tasten. Entf löscht es, Esc bricht ab. Die Kürzel funktionieren überall in Windows.</p>
@@ -193,6 +272,14 @@
             <h3 class="section">Allgemein</h3>
             <div class="group">
               <label class="row">
+                <span class="row-label">Spielmodus (nicht stören)</span>
+                <span class="switch"><input type="checkbox" id="gameToggle"><span></span></span>
+              </label>
+              <label class="row">
+                <span class="row-label">Bildschirm</span>
+                <select id="displaySelect" class="row-select"></select>
+              </label>
+              <label class="row">
                 <span class="row-label">Ton, wenn etwas fertig ist</span>
                 <span class="switch"><input type="checkbox" id="soundToggle"><span></span></span>
               </label>
@@ -200,6 +287,34 @@
                 <span class="row-label">Mit Windows starten</span>
                 <span class="switch"><input type="checkbox" id="autostartToggle"><span></span></span>
               </label>
+            </div>
+
+            <p class="footer">Im Spielmodus versteckt sich Buddy, sobald ein Spiel oder eine Vollbild-App läuft: keine Pop-ups, kein Ton, keine PC-Steuerung. Verpasste Mitteilungen zeigt er danach.</p>
+
+            <h3 class="section">Über Buddy</h3>
+            <div class="group">
+              <div class="row">
+                <span class="row-label">Version</span>
+                <span class="row-value" id="versionValue">–</span>
+              </div>
+              <div class="row">
+                <span class="row-label">Updates</span>
+                <span class="row-value" id="updateStatus">–</span>
+                <button type="button" class="button small" id="updateBtn">Prüfen</button>
+              </div>
+              <button type="button" class="row row-button left" id="diagBtn">Selbsttest starten</button>
+              <div id="diagList" class="diag" hidden></div>
+              <button type="button" class="row row-button left" id="logsBtn">Log-Ordner öffnen</button>
+              <details class="row disclosure">
+                <summary><span class="row-label">Datenschutz</span></summary>
+                <div class="privacy">
+                  <p>Buddy läuft auf deinem PC und hat keine eigenen Server. Es gibt keine Werbung und keine Statistiken.</p>
+                  <p><b>An Claude (Anthropic)</b> geht nur, was du Buddy schreibst oder sagst, seine Antworten und, nur bei der PC-Steuerung, Bildschirmfotos. Das läuft über deinen eigenen API-Key.</p>
+                  <p><b>Nur auf deinem PC</b> bleiben: API-Key und Kalender-Link (verschlüsselt), Chatverlauf, Mitteilungen, Musik-Infos, Kalender-Termine und das Protokoll. Mitteilungen und Termine sieht Claude nur, wenn du danach fragst.</p>
+                  <p><b>Sprache:</b> «Hey Buddy» wird auf dem PC erkannt. Fürs Diktat nutzt Buddy die Spracherkennung von Windows; ist dort die Online-Erkennung an, verarbeitet Microsoft das Gesprochene.</p>
+                  <p><b>Updates</b> lädt Buddy von GitHub, sobald das Repo öffentlich ist.</p>
+                </div>
+              </details>
             </div>
 
             <div class="group last">

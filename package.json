@@ -1,19 +1,21 @@
 {
   "name": "buddy-island",
   "productName": "Buddy Island",
-  "version": "0.1.0",
-  "description": "Ein kleines Island oben am Windows-Bildschirm mit Claude als Assistent: Chat, Timer, Mitteilungen und PC-Steuerung.",
+  "version": "0.2.0",
+  "description": "Ein kleiner Claude-Assistent im Dynamic-Island-Stil für Windows: Chat, Timer, Musik, Kalender, Mitteilungen, Sprache und PC-Steuerung.",
   "main": "src/main.js",
   "author": "Wolf Widmer",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node test/claude.test.js",
-    "pack:win": "electron-packager . \"Buddy Island\" --platform=win32 --arch=x64 --out=dist --overwrite --asar --icon=assets/icon.ico --app-copyright=\"Wolf Widmer\" --win32metadata.CompanyName=\"Wolf Widmer\" --win32metadata.FileDescription=\"Buddy Island\" --win32metadata.ProductName=\"Buddy Island\" --ignore=\"^/dist\" --ignore=\"^/test\" --ignore=\"^/docs\" --ignore=\"^/\\.git\""
+    "test": "node test/claude.test.js && node test/calendar.test.js",
+    "pack:win": "electron-packager . \"Buddy Island\" --platform=win32 --arch=x64 --out=dist --overwrite --asar --icon=assets/icon.ico --app-copyright=\"Wolf Widmer\" --win32metadata.CompanyName=\"Wolf Widmer\" --win32metadata.FileDescription=\"Buddy Island\" --win32metadata.ProductName=\"Buddy Island\" --ignore=\"^/dist\" --ignore=\"^/test\" --ignore=\"^/docs\" --ignore=\"^/\\.git\"",
+    "dist:win": "electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",
-    "electron": "^45.2.1"
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
   },
   "keywords": [
     "claude",
@@ -24,5 +26,60 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wolfawidmer-sudo/buddy-island.git"
+  },
+  "build": {
+    "appId": "ch.wolfwidmer.buddyisland",
+    "productName": "Buddy Island",
+    "copyright": "© 2026 Wolf Widmer",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json",
+      "LICENSE"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "artifactName": "BuddyIsland-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Buddy Island",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "wolfawidmer-sudo",
+        "repo": "buddy-island",
+        "releaseType": "release"
+      }
+    ]
   }
 }

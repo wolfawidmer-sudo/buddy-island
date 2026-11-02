@@ -301,16 +301,26 @@ const sleep = (ms, signal) => new Promise((resolve, reject) => {
 
 // ---------- Steuerung ----------
 
-function createComputer({ scriptDir, onPointer, beforeInput, afterInput, beforeCapture, afterCapture }) {
+function createComputer({ scriptDir, getDisplay, onPointer, beforeInput, afterInput, beforeCapture, afterCapture }) {
   const helper = new InputHelper(scriptDir);
   let shot = null; // { w, h } Grösse des letzten Bildschirmfotos
 
+  let lastDisplayId = null;
+
+  // Ziel-Bildschirm in echten Pixeln (inkl. Lage im Gesamtbild aller Bildschirme)
   function display() {
-    const d = screen.getPrimaryDisplay();
+    const d = getDisplay ? getDisplay() : screen.getPrimaryDisplay();
+    if (lastDisplayId !== d.id) { lastDisplayId = d.id; shot = null; }
+    let origin = { x: Math.round(d.bounds.x * d.scaleFactor), y: Math.round(d.bounds.y * d.scaleFactor) };
+    if (process.platform === 'win32' && typeof screen.dipToScreenPoint === 'function') {
+      try { origin = screen.dipToScreenPoint({ x: d.bounds.x, y: d.bounds.y }); } catch { /* Schätzung behalten */ }
+    }
     return {
       d,
       physW: Math.round(d.size.width * d.scaleFactor),
       physH: Math.round(d.size.height * d.scaleFactor),
+      ox: origin.x,
+      oy: origin.y,
     };
   }
 
@@ -323,24 +333,24 @@ function createComputer({ scriptDir, onPointer, beforeInput, afterInput, beforeC
 
   // Bildschirmfoto-Koordinaten -> echte Bildschirmpixel
   function toPhysical([x, y]) {
-    const { physW, physH } = display();
+    const { physW, physH, ox, oy } = display();
     const s = shotSize();
     const px = Math.round((Number(x) * physW) / s.w);
     const py = Math.round((Number(y) * physH) / s.h);
     if (!Number.isFinite(px) || !Number.isFinite(py)) throw new Error('Ungültige Koordinate.');
-    return [Math.min(physW - 1, Math.max(0, px)), Math.min(physH - 1, Math.max(0, py))];
+    return [ox + Math.min(physW - 1, Math.max(0, px)), oy + Math.min(physH - 1, Math.max(0, py))];
   }
 
-  function toShot([px, py]) {
-    const { physW, physH } = display();
+  function toShot([ax, ay]) {
+    const { physW, physH, ox, oy } = display();
     const s = shotSize();
-    return [Math.round((px * s.w) / physW), Math.round((py * s.h) / physH)];
+    return [Math.round(((ax - ox) * s.w) / physW), Math.round(((ay - oy) * s.h) / physH)];
   }
 
-  // Für die Klick-Welle im Overlay (in DIP relativ zum Bildschirm)
+  // Für die Klick-Welle im Overlay (in DIP relativ zum Ziel-Bildschirm)
   function pointer(phys, kind) {
-    const { d } = display();
-    onPointer?.(phys[0] / d.scaleFactor, phys[1] / d.scaleFactor, kind);
+    const { d, ox, oy } = display();
+    onPointer?.((phys[0] - ox) / d.scaleFactor, (phys[1] - oy) / d.scaleFactor, kind);
   }
 
   async function grab(width, height) {
@@ -373,9 +383,10 @@ function createComputer({ scriptDir, onPointer, beforeInput, afterInput, beforeC
 
   async function zoom(region) {
     if (!Array.isArray(region) || region.length !== 4) throw new Error('region braucht [x0, y0, x1, y1].');
-    const [x0, y0] = toPhysical([region[0], region[1]]);
-    const [x1, y1] = toPhysical([region[2], region[3]]);
-    const { physW, physH } = display();
+    const { physW, physH, ox, oy } = display();
+    const [ax0, ay0] = toPhysical([region[0], region[1]]);
+    const [ax1, ay1] = toPhysical([region[2], region[3]]);
+    const [x0, y0, x1, y1] = [ax0 - ox, ay0 - oy, ax1 - ox, ay1 - oy];
     const full = await grab(physW, physH);
     const size = full.getSize();
     const fx = size.width / physW;
