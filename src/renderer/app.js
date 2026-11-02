@@ -47,7 +47,9 @@
     promptInput: $('promptInput'),
     swatches: $('swatches'),
     customColor: $('customColor'),
-    hotkeyBtn: $('hotkeyBtn'),
+    shortcutGroup: $('shortcutGroup'),
+    customList: $('customList'),
+    addShortcut: $('addShortcut'),
     hotkeyMsg: $('hotkeyMsg'),
     soundToggle: $('soundToggle'),
     autostartToggle: $('autostartToggle'),
@@ -112,6 +114,10 @@
       .replace(/Shift/g, 'Umschalt')
       .replace(/Space/g, 'Leertaste')
       .replace(/Super/g, 'Win')
+      .replace(/Delete/g, 'Entf')
+      .replace(/Backspace/g, 'Rücktaste')
+      .replace(/\bUp\b/g, '↑').replace(/\bDown\b/g, '↓').replace(/\bLeft\b/g, '←').replace(/\bRight\b/g, '→')
+      .replace(/num(\d)/g, 'Num $1')
       .replace(/\+/g, ' + ');
   }
 
@@ -864,7 +870,7 @@
     const status = s.notifications ? s.notifyStatus : 'Off';
     el.notifyStatus.textContent = NOTIFY_STATUS[status] || status || '–';
     el.dndBtn.textContent = status === 'Denied' ? 'Zugriff in Windows erlauben' : '«Nicht stören» in Windows öffnen';
-    el.hotkeyBtn.textContent = prettyHotkey(s.hotkey);
+    fillShortcuts();
     for (const b of el.effortSeg.querySelectorAll('button')) {
       b.classList.toggle('on', b.dataset.value === s.effort);
       b.setAttribute('aria-checked', String(b.dataset.value === s.effort));
@@ -998,40 +1004,184 @@
     return KEY_NAMES[code] || null;
   }
 
+  // Ein Aufnahme-Vorgang für alle Kürzel-Knöpfe
+  let recording = null; // { button, apply(keys|''), allowClear, label }
+
   function stopHotkeyRecording() {
-    if (!state.recordingHotkey) return;
+    if (!recording) return;
+    const { button, label } = recording;
+    recording = null;
     state.recordingHotkey = false;
-    el.hotkeyBtn.classList.remove('recording');
-    el.hotkeyBtn.textContent = prettyHotkey(state.settings?.hotkey);
+    api.suspendShortcuts(false);
+    button.classList.remove('recording');
+    button.textContent = label;
   }
 
-  el.hotkeyBtn.addEventListener('click', () => {
-    if (state.recordingHotkey) { stopHotkeyRecording(); return; }
+  function startRecording(button, apply, allowClear) {
+    stopHotkeyRecording();
+    recording = { button, apply, allowClear, label: button.textContent };
     state.recordingHotkey = true;
-    el.hotkeyBtn.classList.add('recording');
-    el.hotkeyBtn.textContent = 'Tasten drücken …';
-    footer(el.hotkeyMsg, '');
-  });
+    // Bestehende Kürzel kurz pausieren, sonst lösen sie statt der Aufnahme aus
+    api.suspendShortcuts(true);
+    button.classList.add('recording');
+    button.textContent = 'Tasten drücken …';
+    button.focus();
+  }
 
-  el.hotkeyBtn.addEventListener('keydown', async (event) => {
-    if (!state.recordingHotkey) return;
+  function shortcutLabel(keys) {
+    return keys ? prettyHotkey(keys) : 'Nicht festgelegt';
+  }
+
+  document.addEventListener('keydown', async (event) => {
+    if (!recording) return;
     event.preventDefault();
     event.stopPropagation();
-    if (event.key === 'Escape') { stopHotkeyRecording(); return; }
+    const current = recording;
+    const plain = !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey;
+    if (event.key === 'Escape' && plain) { stopHotkeyRecording(); return; }
+    if ((event.key === 'Delete' || event.key === 'Backspace') && plain) {
+      if (!current.allowClear) {
+        footer(el.hotkeyMsg, 'Zum Öffnen braucht Buddy immer ein Kürzel.', 'err');
+        return;
+      }
+      stopHotkeyRecording();
+      await current.apply('');
+      return;
+    }
     const key = keyFromCode(event.code);
-    if (!key) return;
+    if (!key) return; // nur Strg/Alt/Umschalt gedrückt
     const mods = [];
     if (event.ctrlKey) mods.push('Control');
     if (event.altKey) mods.push('Alt');
     if (event.shiftKey) mods.push('Shift');
     if (event.metaKey) mods.push('Super');
-    if (!mods.length) {
-      footer(el.hotkeyMsg, 'Bitte mit Strg, Alt oder Umschalt kombinieren.', 'err');
+    if (!mods.length && !/^F\d{1,2}$/.test(key)) {
+      footer(el.hotkeyMsg, 'Bitte mit Strg, Alt oder Umschalt kombinieren (F-Tasten gehen auch allein).', 'err');
       return;
     }
-    const result = await save({ hotkey: [...mods, key].join('+') });
     stopHotkeyRecording();
+    await current.apply([...mods, key].join('+'));
+  }, true);
+
+  async function saveShortcuts(patch) {
+    const result = await save(patch);
     footer(el.hotkeyMsg, result.ok ? 'Gespeichert.' : result.error, result.ok ? 'ok' : 'err');
+    fillShortcuts();
+    return result;
+  }
+
+  function fillShortcuts() {
+    const s = state.settings;
+    if (!s) return;
+    for (const button of el.shortcutGroup.querySelectorAll('[data-shortcut]')) {
+      const id = button.dataset.shortcut;
+      const keys = id === 'toggle' ? s.hotkey : (s.shortcuts || {})[id];
+      button.textContent = shortcutLabel(keys);
+      button.classList.toggle('empty', !keys);
+    }
+    renderCustomShortcuts();
+  }
+
+  el.shortcutGroup.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-shortcut]');
+    if (!button) return;
+    if (recording?.button === button) { stopHotkeyRecording(); return; }
+    const id = button.dataset.shortcut;
+    startRecording(button, (keys) => {
+      if (id === 'toggle') return saveShortcuts({ hotkey: keys });
+      return saveShortcuts({ shortcuts: { ...(state.settings.shortcuts || {}), [id]: keys } });
+    }, id !== 'toggle');
+  });
+
+  // Eigene Kurzbefehle: Kürzel + fester Auftrag an Buddy
+  function customList() {
+    return (state.settings?.customShortcuts || []).map((c) => ({ ...c }));
+  }
+
+  function renderCustomShortcuts() {
+    el.customList.textContent = '';
+    for (const item of state.settings?.customShortcuts || []) {
+      const row = document.createElement('div');
+      row.className = 'row stacked custom-sc';
+      row.dataset.id = item.id;
+
+      const top = document.createElement('div');
+      top.className = 'custom-top';
+      const keyBtn = document.createElement('button');
+      keyBtn.type = 'button';
+      keyBtn.className = 'hotkey' + (item.keys ? '' : ' empty');
+      keyBtn.textContent = item.keys ? prettyHotkey(item.keys) : 'Kürzel wählen';
+      keyBtn.addEventListener('click', () => {
+        if (recording?.button === keyBtn) { stopHotkeyRecording(); return; }
+        startRecording(keyBtn, (keys) => {
+          const list = customList();
+          const target = list.find((c) => c.id === item.id);
+          if (target) target.keys = keys;
+          return saveShortcuts({ customShortcuts: list });
+        }, true);
+      });
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'link danger';
+      remove.textContent = 'Entfernen';
+      remove.addEventListener('click', () => saveShortcuts({ customShortcuts: customList().filter((c) => c.id !== item.id) }));
+      top.append(keyBtn, remove);
+
+      const prompt = document.createElement('input');
+      prompt.type = 'text';
+      prompt.maxLength = 500;
+      prompt.placeholder = 'Was soll Buddy tun? z. B. Pausier die Musik';
+      prompt.value = item.prompt || '';
+      prompt.setAttribute('aria-label', 'Auftrag für Buddy');
+      prompt.addEventListener('change', () => {
+        const list = customList();
+        const target = list.find((c) => c.id === item.id);
+        if (target) target.prompt = prompt.value;
+        saveShortcuts({ customShortcuts: list });
+      });
+
+      const toggleLabel = document.createElement('label');
+      toggleLabel.className = 'mini-toggle';
+      toggleLabel.innerHTML = '<span class="switch small"><input type="checkbox"><span></span></span><span>Island dabei öffnen</span>';
+      const checkbox = toggleLabel.querySelector('input');
+      checkbox.checked = Boolean(item.open);
+      checkbox.addEventListener('change', () => {
+        const list = customList();
+        const target = list.find((c) => c.id === item.id);
+        if (target) target.open = checkbox.checked;
+        save({ customShortcuts: list });
+      });
+
+      row.append(top, prompt, toggleLabel);
+      el.customList.appendChild(row);
+    }
+    el.addShortcut.hidden = (state.settings?.customShortcuts || []).length >= 20;
+  }
+
+  el.addShortcut.addEventListener('click', async () => {
+    const list = customList();
+    list.push({ id: uid(), keys: '', prompt: '', open: false });
+    await save({ customShortcuts: list });
+    renderCustomShortcuts();
+    const rows = el.customList.querySelectorAll('.custom-sc');
+    rows[rows.length - 1]?.querySelector('input[type="text"]').focus();
+  });
+
+  // Kurzbefehle von überall: Auftrag direkt an Buddy schicken
+  api.onShortcutPrompt(({ prompt, open: shouldOpen }) => {
+    if (!prompt) return;
+    if (!state.settings?.hasKey) { open('settings'); return; }
+    if (state.stream) { pop(); return; } // Buddy arbeitet schon
+    if (shouldOpen && !state.open) open('chat');
+    if (state.view !== 'chat') showView('chat');
+    send(prompt);
+  });
+
+  api.onShortcutAction((action) => {
+    if (action === 'newChat') {
+      open('chat');
+      newChat();
+    }
   });
 
   // ---------- Kopfzeile & Tastatur ----------

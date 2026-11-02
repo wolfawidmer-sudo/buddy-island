@@ -32,6 +32,8 @@ const DEFAULTS = {
   effort: 'low',
   maxTokens: 4096,
   hotkey: 'Control+Shift+Space',
+  shortcuts: { newChat: '', settings: '', stop: '' },
+  customShortcuts: [], // [{ id, keys, prompt, open }]
   sound: true,
   autostart: false,
   accent: '#F2F2F7',
@@ -49,6 +51,15 @@ const DEFAULTS = {
   keyHint: null,
   shortcutsCreated: false,
 };
+
+function prettyKeys(acc) {
+  return String(acc || '')
+    .replace(/CommandOrControl|Control/g, 'Strg')
+    .replace(/Shift/g, 'Umschalt')
+    .replace(/Space/g, 'Leertaste')
+    .replace(/Super/g, 'Win')
+    .replace(/\+/g, ' + ');
+}
 
 let win = null;
 let glow = null;
@@ -302,20 +313,92 @@ function setCaptureHidden(hidden) {
 
 // ---------- Tastenkürzel, Tray, Autostart, Verknüpfungen ----------
 
-function registerHotkey(accelerator) {
-  globalShortcut.unregisterAll();
-  try {
-    return globalShortcut.register(accelerator, () => {
-      // Während Buddy steuert, stoppt das Kürzel die Aufgabe.
-      if (controlling) {
-        for (const c of running.values()) c.abort();
-        return;
-      }
-      win?.webContents.send('island:toggle');
-    });
-  } catch {
-    return false;
+const SHORTCUT_NAMES = {
+  toggle: 'Buddy öffnen',
+  newChat: 'Neuer Chat',
+  settings: 'Einstellungen öffnen',
+  stop: 'Aufgabe stoppen',
+};
+let shortcutsSuspended = false; // während in den Einstellungen ein Kürzel aufgenommen wird
+
+function abortAll() {
+  for (const c of running.values()) c.abort();
+}
+
+function shortcutList(source = settings) {
+  const list = [];
+  if (source.hotkey) list.push({ id: 'toggle', keys: source.hotkey, name: SHORTCUT_NAMES.toggle });
+  for (const [id, keys] of Object.entries(source.shortcuts || {})) {
+    if (keys && SHORTCUT_NAMES[id]) list.push({ id, keys, name: SHORTCUT_NAMES[id] });
   }
+  for (const c of source.customShortcuts || []) {
+    if (c.keys && c.prompt && c.prompt.trim()) {
+      list.push({ id: `custom:${c.id}`, keys: c.keys, name: `«${c.prompt.trim().slice(0, 40)}»`, custom: c });
+    }
+  }
+  return list;
+}
+
+function runShortcut(entry) {
+  if (!win) return;
+  switch (entry.id) {
+    case 'toggle':
+      // Während Buddy steuert, stoppt das Öffnen-Kürzel die Aufgabe.
+      if (controlling) abortAll();
+      else win.webContents.send('island:toggle');
+      break;
+    case 'stop':
+      abortAll();
+      break;
+    case 'newChat':
+      win.webContents.send('shortcut:action', 'newChat');
+      break;
+    case 'settings':
+      openIsland('settings');
+      break;
+    default:
+      if (entry.custom) win.webContents.send('shortcut:prompt', { prompt: entry.custom.prompt.trim(), open: Boolean(entry.custom.open) });
+  }
+}
+
+// Registriert alle Kürzel neu und gibt die zurück, die Windows nicht hergibt.
+function registerShortcuts() {
+  globalShortcut.unregisterAll();
+  if (shortcutsSuspended) return [];
+  const failed = [];
+  for (const entry of shortcutList()) {
+    let ok = false;
+    try {
+      ok = globalShortcut.register(entry.keys, () => runShortcut(entry));
+    } catch {
+      ok = false;
+    }
+    if (!ok) failed.push(entry);
+  }
+  return failed;
+}
+
+const normKeys = (k) => String(k || '').toLowerCase().split('+').sort().join('+');
+
+function cleanCustomShortcuts(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 20).map((c) => ({
+    id: String(c?.id || Math.random().toString(36).slice(2, 9)).slice(0, 20),
+    keys: String(c?.keys || '').slice(0, 60),
+    prompt: String(c?.prompt || '').slice(0, 500),
+    open: Boolean(c?.open),
+  }));
+}
+
+// Prüft, ob zwei Aktionen dasselbe Kürzel haben.
+function findDuplicate(source) {
+  const seen = new Map();
+  for (const entry of shortcutList(source)) {
+    const key = normKeys(entry.keys);
+    if (seen.has(key)) return [seen.get(key), entry];
+    seen.set(key, entry);
+  }
+  return null;
 }
 
 function applyAutostart() {
@@ -538,17 +621,44 @@ function setupIpc() {
 
   ipcMain.on('app:quit', () => app.quit());
 
+  ipcMain.on('shortcuts:suspend', (_e, suspend) => {
+    shortcutsSuspended = Boolean(suspend);
+    registerShortcuts();
+  });
+
   ipcMain.handle('settings:get', () => publicSettings());
 
   ipcMain.handle('settings:set', (_e, patch = {}) => {
     const allowedKeys = ['name', 'model', 'effort', 'maxTokens', 'sound', 'autostart', 'accent', 'systemPrompt', 'workspaceId', 'computerUse', 'confirmControl', 'glow', 'notifications'];
     for (const k of allowedKeys) if (k in patch) settings[k] = patch[k];
 
-    let hotkeyOk = true;
-    if (patch.hotkey && patch.hotkey !== settings.hotkey) {
-      hotkeyOk = registerHotkey(patch.hotkey);
-      if (hotkeyOk) settings.hotkey = patch.hotkey;
-      else registerHotkey(settings.hotkey);
+    // Tastenkürzel: erst prüfen, dann übernehmen, bei Problemen zurück auf den alten Stand
+    let shortcutError = null;
+    if ('hotkey' in patch || 'shortcuts' in patch || 'customShortcuts' in patch) {
+      const before = {
+        hotkey: settings.hotkey,
+        shortcuts: { ...settings.shortcuts },
+        customShortcuts: settings.customShortcuts.map((c) => ({ ...c })),
+      };
+      const next = {
+        hotkey: 'hotkey' in patch && patch.hotkey ? String(patch.hotkey) : settings.hotkey,
+        shortcuts: 'shortcuts' in patch ? { ...DEFAULTS.shortcuts, ...settings.shortcuts, ...patch.shortcuts } : settings.shortcuts,
+        customShortcuts: 'customShortcuts' in patch ? cleanCustomShortcuts(patch.customShortcuts) : settings.customShortcuts,
+      };
+      for (const id of Object.keys(next.shortcuts)) if (!SHORTCUT_NAMES[id]) delete next.shortcuts[id];
+      const dup = findDuplicate(next);
+      if (dup) {
+        shortcutError = `${prettyKeys(dup[1].keys)} ist schon für ${dup[0].name} belegt.`;
+      } else {
+        Object.assign(settings, next);
+        const beforeKeys = new Set(shortcutList(before).map((e) => normKeys(e.keys)));
+        const failed = registerShortcuts().filter((e) => !beforeKeys.has(normKeys(e.keys)));
+        if (failed.length) {
+          shortcutError = `${prettyKeys(failed[0].keys)} wird schon von Windows oder einem anderen Programm benutzt.`;
+          Object.assign(settings, before);
+          registerShortcuts();
+        }
+      }
     }
     if ('autostart' in patch) applyAutostart();
     if ('glow' in patch && !settings.glow) setGlow('off');
@@ -557,7 +667,7 @@ function setupIpc() {
       else { watcher?.stop(); notifyStatus = 'Off'; }
     }
     saveSettings();
-    return { ok: hotkeyOk, settings: publicSettings(), error: hotkeyOk ? null : 'Dieses Tastenkürzel ist schon von einem anderen Programm belegt.' };
+    return { ok: !shortcutError, settings: publicSettings(), error: shortcutError };
   });
 
   ipcMain.handle('key:set', async (_e, { key, workspaceId } = {}) => {
@@ -702,9 +812,11 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     createWindow();
     createTray();
     createShortcuts();
-    if (!registerHotkey(settings.hotkey)) {
+    settings.shortcuts = { ...DEFAULTS.shortcuts, ...settings.shortcuts };
+    settings.customShortcuts = cleanCustomShortcuts(settings.customShortcuts);
+    if (registerShortcuts().some((e) => e.id === 'toggle')) {
       settings.hotkey = DEFAULTS.hotkey;
-      registerHotkey(settings.hotkey);
+      registerShortcuts();
     }
     applyAutostart();
   });

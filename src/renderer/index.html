@@ -161,12 +161,37 @@
               </div>
             </div>
 
+            <h3 class="section">Tastenkürzel</h3>
+            <div class="group" id="shortcutGroup">
+              <div class="row">
+                <span class="row-label">Buddy öffnen / schliessen</span>
+                <button type="button" class="hotkey" data-shortcut="toggle"></button>
+              </div>
+              <div class="row">
+                <span class="row-label">Neuer Chat</span>
+                <button type="button" class="hotkey" data-shortcut="newChat"></button>
+              </div>
+              <div class="row">
+                <span class="row-label">Einstellungen öffnen</span>
+                <button type="button" class="hotkey" data-shortcut="settings"></button>
+              </div>
+              <div class="row">
+                <span class="row-label">Aufgabe stoppen</span>
+                <button type="button" class="hotkey" data-shortcut="stop"></button>
+              </div>
+            </div>
+            <p class="footer" id="hotkeyMsg"></p>
+            <p class="footer">Klick auf ein Kürzel und drück die neuen Tasten. Entf löscht es, Esc bricht ab. Die Kürzel funktionieren überall in Windows.</p>
+
+            <h3 class="section">Eigene Kurzbefehle</h3>
+            <div class="group" id="customGroup">
+              <div id="customList"></div>
+              <button type="button" class="row row-button left" id="addShortcut">Kurzbefehl hinzufügen</button>
+            </div>
+            <p class="footer">Ein Kurzbefehl schickt Buddy einen festen Auftrag, z. B. «Pausier die Musik» oder «Stell einen Timer auf 5 Minuten». Das klappt von überall, auch wenn das Island zu ist.</p>
+
             <h3 class="section">Allgemein</h3>
             <div class="group">
-              <div class="row">
-                <span class="row-label">Tastenkürzel</span>
-                <button type="button" class="hotkey" id="hotkeyBtn"></button>
-              </div>
               <label class="row">
                 <span class="row-label">Ton, wenn etwas fertig ist</span>
                 <span class="switch"><input type="checkbox" id="soundToggle"><span></span></span>
@@ -176,7 +201,6 @@
                 <span class="switch"><input type="checkbox" id="autostartToggle"><span></span></span>
               </label>
             </div>
-            <p class="footer" id="hotkeyMsg"></p>
 
             <div class="group last">
               <button type="button" class="row row-button danger" id="quitBtn">Buddy Island beenden</button>

@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('buddy', {
   setMouseCapture: (capture) => ipcRenderer.send('mouse:capture', Boolean(capture)),
   releaseWindow: () => ipcRenderer.send('window:release'),
   quit: () => ipcRenderer.send('app:quit'),
+  suspendShortcuts: (suspend) => ipcRenderer.send('shortcuts:suspend', Boolean(suspend)),
   openLink: (url) => ipcRenderer.send('link:open', url),
 
   getSettings: () => ipcRenderer.invoke('settings:get'),
@@ -43,4 +44,6 @@ contextBridge.exposeInMainWorld('buddy', {
   onTimerDone: (cb) => on('timer:done', cb),
   onNotify: (cb) => on('notify', cb),
   onNotifyStatus: (cb) => on('notify:status', cb),
+  onShortcutAction: (cb) => on('shortcut:action', cb),
+  onShortcutPrompt: (cb) => on('shortcut:prompt', cb),
 });

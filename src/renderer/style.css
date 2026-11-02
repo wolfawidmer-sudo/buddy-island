@@ -778,3 +778,21 @@ input::placeholder, textarea::placeholder { color: var(--label-3); }
 .note-text { font-size: 13px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .note-text b { font-weight: 600; }
 .row-button.left { justify-content: flex-start; color: var(--accent); }
+
+/* ---------- Tastenkürzel ---------- */
+
+.hotkey { min-width: 92px; text-align: center; }
+.hotkey.empty { color: var(--label-3); }
+#customList:empty { display: none; }
+#customList + .row-button::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; border-top: 0.5px solid var(--sep); }
+#customList:empty + .row-button::before { display: none; }
+.row-button { position: relative; }
+.custom-sc { gap: 8px; }
+.custom-sc + .custom-sc::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; border-top: 0.5px solid var(--sep); }
+.custom-top { display: flex; align-items: center; gap: 10px; }
+.custom-top .hotkey { flex: 1; text-align: left; }
+.custom-top .link { flex: none; font-size: 13px; }
+.mini-toggle { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--label-2); }
+.switch.small { width: 38px; height: 23px; }
+.switch.small span::after { width: 19px; height: 19px; }
+.switch.small input:checked + span::after { transform: translateX(15px); }
