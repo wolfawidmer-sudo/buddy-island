@@ -1,0 +1,46 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+function on(channel, callback) {
+  const handler = (_event, payload) => callback(payload);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+}
+
+contextBridge.exposeInMainWorld('buddy', {
+  setLayout: (layout) => ipcRenderer.send('layout', layout),
+  setMouseCapture: (capture) => ipcRenderer.send('mouse:capture', Boolean(capture)),
+  releaseWindow: () => ipcRenderer.send('window:release'),
+  quit: () => ipcRenderer.send('app:quit'),
+  openLink: (url) => ipcRenderer.send('link:open', url),
+
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  setSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
+  setKey: (key, workspaceId) => ipcRenderer.invoke('key:set', { key, workspaceId }),
+  clearKey: () => ipcRenderer.invoke('key:clear'),
+  listModels: () => ipcRenderer.invoke('models:list'),
+
+  sendChat: (id, messages) => ipcRenderer.send('chat:send', { id, messages }),
+  abortChat: (id) => ipcRenderer.send('chat:abort', id),
+  confirmControl: (id, allow) => ipcRenderer.send('agent:confirm-reply', { id, allow }),
+  getTimers: () => ipcRenderer.invoke('timers:get'),
+  cancelTimer: (id) => ipcRenderer.send('timer:cancel', id),
+  listNotifications: () => ipcRenderer.invoke('notify:list'),
+  clearNotifications: () => ipcRenderer.send('notify:clear'),
+  openNotificationSettings: () => ipcRenderer.send('notify:settings'),
+  openNotificationPrivacy: () => ipcRenderer.send('notify:privacy'),
+
+  onToggle: (cb) => on('island:toggle', cb),
+  onOpen: (cb) => on('island:open', cb),
+  onBlur: (cb) => on('island:blur', cb),
+  onDelta: (cb) => on('chat:delta', cb),
+  onDone: (cb) => on('chat:done', cb),
+  onError: (cb) => on('chat:error', cb),
+  onTool: (cb) => on('chat:tool', cb),
+  onConfirm: (cb) => on('agent:confirm', cb),
+  onControl: (cb) => on('agent:control', cb),
+  onAction: (cb) => on('agent:action', cb),
+  onTimers: (cb) => on('timers:update', cb),
+  onTimerDone: (cb) => on('timer:done', cb),
+  onNotify: (cb) => on('notify', cb),
+  onNotifyStatus: (cb) => on('notify:status', cb),
+});

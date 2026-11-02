@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none';">
+  <title>Buddy Island</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="island" class="island" data-state="idle">
+    <div class="top" id="top">
+      <button class="face-btn" id="faceBtn" type="button" aria-label="Island öffnen">
+        <span class="face" aria-hidden="true"><i class="eye"></i><i class="eye"></i></span>
+      </button>
+      <span class="label" id="label">Buddy</span>
+      <span class="peek" id="peek" hidden><span class="peek-app" id="peekApp"></span><span class="peek-text" id="peekText"></span></span>
+      <span class="meter" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="badge" aria-hidden="true"></span>
+      <button class="stop" id="stopBtn" type="button" title="Stoppen" aria-label="Stoppen"><i></i></button>
+
+      <div class="actions">
+        <button class="icon-btn" id="newBtn" type="button" title="Neuer Chat (Strg+N)" aria-label="Neuer Chat">
+          <svg viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11"/></svg>
+        </button>
+        <button class="icon-btn" id="settingsBtn" type="button" title="Einstellungen (Strg+,)" aria-label="Einstellungen">
+          <svg viewBox="0 0 20 20"><path d="M3.5 6h8M15.5 6h1M3.5 14h1M8.5 14h8"/><circle cx="13.5" cy="6" r="2"/><circle cx="6.5" cy="14" r="2"/></svg>
+        </button>
+        <button class="icon-btn" id="closeBtn" type="button" title="Schliessen (Esc)" aria-label="Schliessen">
+          <svg viewBox="0 0 20 20"><path d="M6 8.5l4 4 4-4"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="body-inner">
+
+        <!-- Chat -->
+        <section class="view" id="chatView">
+          <div class="inbox" id="inbox" hidden>
+            <div class="inbox-head"><span>Mitteilungen</span><button type="button" class="link" id="inboxClear">Löschen</button></div>
+            <div class="inbox-list" id="inboxList"></div>
+          </div>
+          <div class="timers" id="timers" hidden></div>
+          <div class="messages" id="messages"></div>
+
+          <div class="empty" id="empty" hidden>
+            <p class="empty-title" id="emptyTitle">Was kann ich für dich tun?</p>
+            <p class="empty-text" id="emptyText"></p>
+            <div class="chips" id="chips">
+              <button type="button" class="chip" data-send="Stell einen Timer auf 10 Minuten für die Pizza">Timer 10 Min. für die Pizza</button>
+              <button type="button" class="chip" data-send="Mach die Musik etwas leiser">Musik leiser</button>
+              <button type="button" class="chip" data-send="Öffne den Rechner">Rechner öffnen</button>
+              <button type="button" class="chip" data-send="Öffne den Editor und schreib eine Einkaufsliste für Spaghetti Bolognese hinein">Einkaufsliste im Editor schreiben</button>
+            </div>
+            <button type="button" class="button primary" id="connectBtn" hidden>API-Key verbinden</button>
+          </div>
+
+          <form class="composer" id="composer" autocomplete="off">
+            <textarea id="input" rows="1" placeholder="Frag Buddy etwas" spellcheck="false"></textarea>
+            <button class="send" id="sendBtn" type="submit" aria-label="Senden">
+              <svg class="i-send" viewBox="0 0 20 20"><path d="M10 15V5M5.5 9.5L10 5l4.5 4.5"/></svg>
+              <svg class="i-stop" viewBox="0 0 20 20"><rect x="6.5" y="6.5" width="7" height="7" rx="1.5"/></svg>
+            </button>
+          </form>
+          <p class="footnote" id="footnote"></p>
+        </section>
+
+        <!-- Einstellungen -->
+        <section class="view settings" id="settingsView" hidden>
+          <div class="settings-scroll">
+
+            <h3 class="section">Claude</h3>
+            <div class="group">
+              <div class="row">
+                <span class="row-label">API-Key</span>
+                <span class="row-value" id="keyStatus">Nicht verbunden</span>
+                <button type="button" class="link danger" id="keyRemove" hidden>Entfernen</button>
+              </div>
+              <div class="row field-row">
+                <input id="keyInput" type="password" placeholder="sk-ant-…" spellcheck="false" autocomplete="off" aria-label="API-Key">
+                <button type="button" class="button primary small" id="keySave">Verbinden</button>
+              </div>
+              <details class="row disclosure">
+                <summary><span class="row-label">Workspace-ID</span><span class="row-value">nur falls nötig</span></summary>
+                <input id="workspaceInput" type="text" placeholder="wrkspc_…" spellcheck="false" aria-label="Workspace-ID">
+              </details>
+            </div>
+            <p class="footer" id="keyMsg"></p>
+            <p class="footer">Den Key erstellst du in der <a href="https://platform.claude.com/settings/keys">Claude Console</a>. Er wird verschlüsselt auf diesem PC gespeichert und nur an Claude geschickt.</p>
+
+            <h3 class="section">Modell</h3>
+            <div class="group">
+              <label class="row">
+                <span class="row-label">Modell</span>
+                <select id="modelSelect" class="row-select"></select>
+              </label>
+              <div class="row stacked">
+                <span class="row-label">Denktiefe</span>
+                <div class="segmented" id="effortSeg" role="radiogroup" aria-label="Denktiefe">
+                  <button type="button" data-value="low">Schnell</button>
+                  <button type="button" data-value="medium">Normal</button>
+                  <button type="button" data-value="high">Gründlich</button>
+                </div>
+              </div>
+            </div>
+
+            <h3 class="section">PC-Steuerung</h3>
+            <div class="group">
+              <label class="row">
+                <span class="row-label">Buddy darf den PC steuern</span>
+                <span class="switch"><input type="checkbox" id="computerToggle"><span></span></span>
+              </label>
+              <label class="row">
+                <span class="row-label">Vor jeder Aufgabe fragen</span>
+                <span class="switch"><input type="checkbox" id="confirmToggle"><span></span></span>
+              </label>
+              <label class="row">
+                <span class="row-label">Leuchtender Bildschirmrand</span>
+                <span class="switch"><input type="checkbox" id="glowToggle"><span></span></span>
+              </label>
+            </div>
+            <p class="footer">Buddy sieht dabei deinen Bildschirm und benutzt Maus und Tastatur. Stoppen kannst du jederzeit mit deinem Tastenkürzel oder dem Stopp-Knopf im Island.</p>
+
+            <h3 class="section">Mitteilungen</h3>
+            <div class="group">
+              <label class="row">
+                <span class="row-label">Windows-Mitteilungen im Island</span>
+                <span class="switch"><input type="checkbox" id="notifyToggle"><span></span></span>
+              </label>
+              <div class="row">
+                <span class="row-label">Status</span>
+                <span class="row-value" id="notifyStatus">–</span>
+              </div>
+              <button type="button" class="row row-button left" id="dndBtn">«Nicht stören» in Windows öffnen</button>
+            </div>
+            <p class="footer">Schalte in Windows «Nicht stören» ein, dann poppt unten rechts nichts mehr auf und alles kommt nur noch im Island. Die Inhalte bleiben auf deinem PC.</p>
+
+            <h3 class="section">Buddy</h3>
+            <div class="group">
+              <label class="row">
+                <span class="row-label">Name</span>
+                <input id="nameInput" class="row-input" type="text" maxlength="20">
+              </label>
+              <div class="row stacked">
+                <span class="row-label">Akzentfarbe</span>
+                <div class="swatches" id="swatches">
+                  <button type="button" data-color="#F2F2F7" style="--c:#F2F2F7" aria-label="Weiss" title="Weiss"></button>
+                  <button type="button" data-color="#8E8E93" style="--c:#8E8E93" aria-label="Grau" title="Grau"></button>
+                  <button type="button" data-color="#0A84FF" style="--c:#0A84FF" aria-label="Blau" title="Blau"></button>
+                  <button type="button" data-color="#30D158" style="--c:#30D158" aria-label="Grün" title="Grün"></button>
+                  <button type="button" data-color="#FF9F0A" style="--c:#FF9F0A" aria-label="Orange" title="Orange"></button>
+                  <button type="button" data-color="#FF375F" style="--c:#FF375F" aria-label="Pink" title="Pink"></button>
+                  <button type="button" data-color="#BF5AF2" style="--c:#BF5AF2" aria-label="Lila" title="Lila"></button>
+                  <label class="custom-color" title="Eigene Farbe"><input type="color" id="customColor" aria-label="Eigene Farbe"></label>
+                </div>
+              </div>
+              <div class="row stacked">
+                <span class="row-label">Persönlichkeit</span>
+                <textarea id="promptInput" rows="4" aria-label="Persönlichkeit"></textarea>
+              </div>
+            </div>
+
+            <h3 class="section">Allgemein</h3>
+            <div class="group">
+              <div class="row">
+                <span class="row-label">Tastenkürzel</span>
+                <button type="button" class="hotkey" id="hotkeyBtn"></button>
+              </div>
+              <label class="row">
+                <span class="row-label">Ton, wenn etwas fertig ist</span>
+                <span class="switch"><input type="checkbox" id="soundToggle"><span></span></span>
+              </label>
+              <label class="row">
+                <span class="row-label">Mit Windows starten</span>
+                <span class="switch"><input type="checkbox" id="autostartToggle"><span></span></span>
+              </label>
+            </div>
+            <p class="footer" id="hotkeyMsg"></p>
+
+            <div class="group last">
+              <button type="button" class="row row-button danger" id="quitBtn">Buddy Island beenden</button>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <script src="markdown.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,280 @@
+// Werkzeuge, die Buddy auf dem PC benutzen darf.
+// Bewusst nur harmlose Aktionen: Timer, Apps/Websites öffnen, Medien & Lautstärke.
+// Volle Maus-/Tastatursteuerung kommt später mit Freigabe vor jeder Aktion.
+
+const { shell } = require('electron');
+const { spawn } = require('child_process');
+const os = require('os');
+
+// App-Name -> wie sie unter Windows geöffnet wird
+const APPS = {
+  rechner: { uri: 'calculator:' },
+  editor: { exe: 'notepad.exe' },
+  paint: { exe: 'mspaint.exe' },
+  explorer: { path: os.homedir() },
+  einstellungen: { uri: 'ms-settings:' },
+  uhr: { uri: 'ms-clock:' },
+  kamera: { uri: 'microsoft.windows.camera:' },
+  store: { uri: 'ms-windows-store:' },
+  taskmanager: { exe: 'taskmgr.exe' },
+  spotify: { uri: 'spotify:' },
+  whatsapp: { uri: 'whatsapp:' },
+  edge: { uri: 'microsoft-edge:' },
+};
+
+// Virtuelle Tastencodes für Medientasten (über WScript.Shell SendKeys)
+const MEDIA_KEYS = {
+  play_pause: 179,
+  next: 176,
+  previous: 177,
+  volume_up: 175,
+  volume_down: 174,
+  mute: 173,
+};
+
+const TOOL_DEFINITIONS = [
+  {
+    name: 'set_timer',
+    description:
+      'Stellt einen Timer auf dem PC. Der Countdown erscheint im Island, am Ende gibt es einen Ton und eine Windows-Benachrichtigung. ' +
+      'Nutze das, wenn der Nutzer einen Timer, Wecker in X Minuten oder eine Erinnerung in kurzer Zeit will.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        minutes: { type: 'number', description: 'Dauer in Minuten (kann mit seconds kombiniert werden).' },
+        seconds: { type: 'number', description: 'Zusätzliche Sekunden.' },
+        label: { type: 'string', description: 'Kurzer Name, z. B. «Pizza» oder «Pause».' },
+      },
+    },
+  },
+  {
+    name: 'list_timers',
+    description: 'Zeigt alle laufenden Timer mit Restzeit.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'cancel_timer',
+    description: 'Stoppt einen laufenden Timer anhand seines Namens oder seiner ID. Ohne Angabe werden alle Timer gestoppt.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        label: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'open_website',
+    description: 'Öffnet eine Website im Standardbrowser des Nutzers. Nur http(s)-Adressen.',
+    input_schema: {
+      type: 'object',
+      properties: { url: { type: 'string', description: 'Vollständige Adresse mit https://' } },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'open_app',
+    description: 'Öffnet ein Programm auf dem Windows-PC.',
+    input_schema: {
+      type: 'object',
+      properties: { app: { type: 'string', enum: Object.keys(APPS) } },
+      required: ['app'],
+    },
+  },
+  {
+    name: 'recent_notifications',
+    description:
+      'Liest die letzten Windows-Mitteilungen (z. B. WhatsApp, Mail, Discord), die Buddy seit dem Start gesehen hat. ' +
+      'Nur benutzen, wenn der Nutzer fragt, was er verpasst hat oder was in einer Mitteilung stand.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'integer', description: 'Wie viele (1 bis 30, Standard 10).' },
+        app: { type: 'string', description: 'Optional nur Mitteilungen dieser App, z. B. «WhatsApp».' },
+      },
+    },
+  },
+  {
+    name: 'media_control',
+    description:
+      'Steuert Musik und Lautstärke wie die Medientasten der Tastatur: abspielen/pausieren, nächster/vorheriger Titel, lauter, leiser, stumm. ' +
+      'Ein Lautstärke-Schritt entspricht etwa 2 Prozent.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: Object.keys(MEDIA_KEYS) },
+        steps: { type: 'integer', description: 'Wie oft die Taste gedrückt wird (nur für lauter/leiser, 1 bis 50).' },
+      },
+      required: ['action'],
+    },
+  },
+];
+
+// Kurze, deutsche Beschriftung für die Anzeige im Island
+function describe(name, input = {}) {
+  switch (name) {
+    case 'set_timer': return `Timer ${formatDuration(durationMs(input))}${input.label ? ` · ${input.label}` : ''}`;
+    case 'list_timers': return 'Timer angeschaut';
+    case 'recent_notifications': return 'Mitteilungen gelesen';
+    case 'cancel_timer': return 'Timer gestoppt';
+    case 'open_website': return `Website geöffnet`;
+    case 'open_app': return `${capitalize(input.app || 'App')} geöffnet`;
+    case 'media_control': return {
+      play_pause: 'Wiedergabe umgeschaltet', next: 'Nächster Titel', previous: 'Vorheriger Titel',
+      volume_up: 'Lauter', volume_down: 'Leiser', mute: 'Stumm umgeschaltet',
+    }[input.action] || 'Medien gesteuert';
+    default: return name;
+  }
+}
+
+function capitalize(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function durationMs({ minutes = 0, seconds = 0 } = {}) {
+  return Math.round((Number(minutes) || 0) * 60000 + (Number(seconds) || 0) * 1000);
+}
+
+function formatDuration(ms) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h) return `${h} Std. ${m} Min.`;
+  if (m && s) return `${m} Min. ${s} Sek.`;
+  if (m) return `${m} Min.`;
+  return `${s} Sek.`;
+}
+
+function clock(ts) {
+  return new Date(ts).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+}
+
+function pressMediaKey(code, times) {
+  return new Promise((resolve, reject) => {
+    if (process.platform !== 'win32') {
+      reject(new Error('Medientasten gehen nur unter Windows.'));
+      return;
+    }
+    const script = `$s = New-Object -ComObject WScript.Shell; 1..${times} | ForEach-Object { $s.SendKeys([char]${code}) }`;
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+      windowsHide: true,
+    });
+    child.on('error', reject);
+    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error('PowerShell-Fehler'))));
+  });
+}
+
+function openApp(name) {
+  const entry = APPS[name];
+  if (!entry) throw new Error(`Unbekannte App: ${name}`);
+  if (entry.uri) return shell.openExternal(entry.uri);
+  if (entry.path) return shell.openPath(entry.path);
+  return new Promise((resolve, reject) => {
+    const child = spawn(entry.exe, [], { detached: true, stdio: 'ignore', windowsHide: false });
+    child.on('error', reject);
+    child.unref();
+    resolve();
+  });
+}
+
+function createTools({ onTimersChanged, onTimerDone, getNotifications = () => [] }) {
+  const timers = new Map(); // id -> { id, label, endsAt, durationMs, handle }
+  let counter = 0;
+
+  function snapshot() {
+    return [...timers.values()]
+      .map(({ id, label, endsAt, durationMs: total }) => ({ id, label, endsAt, durationMs: total }))
+      .sort((a, b) => a.endsAt - b.endsAt);
+  }
+
+  function changed() {
+    onTimersChanged(snapshot());
+  }
+
+  function addTimer(ms, label) {
+    const id = `t${++counter}`;
+    const endsAt = Date.now() + ms;
+    const handle = setTimeout(() => {
+      const timer = timers.get(id);
+      timers.delete(id);
+      changed();
+      if (timer) onTimerDone({ id, label: timer.label, durationMs: timer.durationMs });
+    }, ms);
+    timers.set(id, { id, label, endsAt, durationMs: ms, handle });
+    changed();
+    return { id, endsAt };
+  }
+
+  function cancel({ id, label } = {}) {
+    let removed = [];
+    for (const timer of timers.values()) {
+      const match = id ? timer.id === id : label ? timer.label.toLowerCase() === String(label).toLowerCase() : true;
+      if (match) {
+        clearTimeout(timer.handle);
+        removed.push(timer);
+      }
+    }
+    removed.forEach((t) => timers.delete(t.id));
+    if (removed.length) changed();
+    return removed;
+  }
+
+  async function run(name, input = {}) {
+    switch (name) {
+      case 'set_timer': {
+        const ms = durationMs(input);
+        if (ms < 1000) return { error: true, text: 'Die Dauer muss mindestens 1 Sekunde sein.' };
+        if (ms > 24 * 3600 * 1000) return { error: true, text: 'Timer können höchstens 24 Stunden dauern.' };
+        const label = String(input.label || 'Timer').slice(0, 40);
+        const { id, endsAt } = addTimer(ms, label);
+        return { text: `Timer «${label}» (ID ${id}) gestellt auf ${formatDuration(ms)}, klingelt um ${clock(endsAt)} Uhr.` };
+      }
+      case 'list_timers': {
+        const list = snapshot();
+        if (!list.length) return { text: 'Es läuft kein Timer.' };
+        return {
+          text: list.map((t) => `${t.id}: «${t.label}», noch ${formatDuration(t.endsAt - Date.now())} (bis ${clock(t.endsAt)} Uhr)`).join('\n'),
+        };
+      }
+      case 'cancel_timer': {
+        const removed = cancel(input);
+        if (!removed.length) return { error: true, text: 'Kein passender Timer gefunden.' };
+        return { text: `Gestoppt: ${removed.map((t) => `«${t.label}»`).join(', ')}` };
+      }
+      case 'recent_notifications': {
+        const limit = Math.min(30, Math.max(1, Math.round(Number(input.limit) || 10)));
+        const app = String(input.app || '').toLowerCase();
+        const list = getNotifications().filter((n) => !app || n.app.toLowerCase().includes(app)).slice(0, limit);
+        if (!list.length) return { text: 'Keine Mitteilungen gefunden (Buddy sieht nur Mitteilungen seit seinem Start).' };
+        return {
+          text: list.map((n) => `${clock(n.time)} · ${n.app}: ${[n.title, n.body].filter(Boolean).join(' – ')}`).join('\n'),
+        };
+      }
+      case 'open_website': {
+        const url = String(input.url || '').trim();
+        if (!/^https?:\/\/[^\s]+$/i.test(url)) return { error: true, text: 'Nur http(s)-Adressen sind erlaubt.' };
+        await shell.openExternal(url);
+        return { text: `Geöffnet: ${url}` };
+      }
+      case 'open_app': {
+        await openApp(input.app);
+        return { text: `${capitalize(input.app)} wurde geöffnet.` };
+      }
+      case 'media_control': {
+        const code = MEDIA_KEYS[input.action];
+        if (!code) return { error: true, text: 'Unbekannte Aktion.' };
+        const isVolume = input.action === 'volume_up' || input.action === 'volume_down';
+        const steps = isVolume ? Math.min(50, Math.max(1, Math.round(Number(input.steps) || 5))) : 1;
+        await pressMediaKey(code, steps);
+        return { text: `Erledigt (${input.action}${isVolume ? `, ${steps} Schritte` : ''}).` };
+      }
+      default:
+        return { error: true, text: `Unbekanntes Werkzeug: ${name}` };
+    }
+  }
+
+  return { definitions: TOOL_DEFINITIONS, run, cancel, snapshot, describe };
+}
+
+module.exports = { createTools, formatDuration, describe, TOOL_DEFINITIONS };
