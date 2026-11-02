@@ -2,6 +2,8 @@
 
 Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windows-Bildschirms wohnt. Buddy läuft mit deinem eigenen Claude-API-Key: Er beantwortet Fragen, stellt Timer, zeigt Musik, Termine und Windows-Mitteilungen, hört auf «Hey Buddy» und kann auf Wunsch den ganzen PC mit Maus und Tastatur bedienen.
 
+**Website:** https://wolfawidmer-sudo.github.io/buddy-island/
+
 > **Status:** Testversion (0.2). Getestet mit einer simulierten Claude-API unter Linux. Auf echten Windows-PCs bitte den Selbsttest in den Einstellungen laufen lassen.
 
 <p align="center"><img src="docs/island-states.png" alt="Buddy Island im Ruhezustand, fertig und mit einer Mitteilung" width="420"></p>

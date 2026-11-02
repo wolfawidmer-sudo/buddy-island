@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Datenschutz – Buddy Island</title>
+  <meta name="description" content="Wie Buddy Island mit deinen Daten umgeht.">
+  <link rel="icon" href="favicon.png">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="./" aria-label="Buddy Island">
+      <span class="brand-pill"><i></i><i></i></span>
+      Buddy Island
+    </a>
+    <a class="btn small" href="./#download" style="margin-left:auto">Download</a>
+  </header>
+  <main>
+    <article class="doc">
+      <h1>Datenschutz bei Buddy Island</h1>
+      <p>Stand: November 2026</p>
+      <p>Buddy Island ist ein privates Testprojekt von Wolf Widmer. Die App läuft vollständig auf deinem Windows-PC. Es gibt keine Server von Buddy Island, kein Konto, keine Werbung und keine Statistiken.</p>
+      <h2>Was an Claude (Anthropic) geht</h2>
+      <p>Buddy benutzt die Claude-API mit <b>deinem eigenen API-Key</b>. An Anthropic gehen nur:</p>
+      <ul>
+      <li>was du Buddy schreibst oder sagst, und seine Antworten,</li>
+      <li>Ergebnisse der Werkzeuge, die Buddy für deine Anfrage benutzt (zum Beispiel «Timer gestellt», deine Termine oder Mitteilungen, aber nur wenn du danach fragst),</li>
+      <li>bei der <b>PC-Steuerung</b> Bildschirmfotos deines Bildschirms. Buddy fragt vorher um Erlaubnis. Lass ihn nicht steuern, während Passwörter oder Privates offen sind.</li>
+      </ul>
+      <p>Wie Anthropic diese Daten behandelt, steht in der Datenschutzerklärung von Anthropic für die API.</p>
+      <h2>Was nur auf deinem PC bleibt</h2>
+      <ul>
+      <li>Dein <b>API-Key</b> und dein <b>Kalender-Link</b>: mit der Windows-Verschlüsselung (DPAPI) gespeichert.</li>
+      <li><b>Chatverlauf</b>, <b>Einstellungen</b> und ein kurzes <b>Protokoll</b> für die Fehlersuche (ohne Chat-Inhalte) im Ordner <code>%APPDATA%\Buddy Island</code>.</li>
+      <li><b>Windows-Mitteilungen</b>, <b>«Läuft gerade»</b> (Musik) und <b>Termine</b>: Buddy liest sie nur, um sie im Island zu zeigen. Sie werden nicht dauerhaft gespeichert.</li>
+      <li><b>Spielmodus</b>: Buddy schaut nur, welches Programm im Vordergrund ist und ob Windows «Vollbild» meldet.</li>
+      </ul>
+      <h2>Sprache</h2>
+      <ul>
+      <li>«Hey Buddy» wird mit der eingebauten Windows-Spracherkennung <b>auf dem PC</b> erkannt.</li>
+      <li>Für das Diktat nutzt Buddy die Spracherkennung von Windows. Ist in Windows die <b>Online-Spracherkennung</b> eingeschaltet, verarbeitet Microsoft das Gesprochene. Sonst bleibt alles auf dem PC.</li>
+      <li>Vorlesen läuft mit den Windows-Stimmen auf dem PC.</li>
+      </ul>
+      <h2>Kalender</h2>
+      <p>Buddy lädt deinen privaten iCal-Link direkt bei deinem Kalenderanbieter (z. B. Google oder Microsoft), etwa alle 15 Minuten.</p>
+      <h2>Updates</h2>
+      <p>Buddy fragt bei GitHub nach neuen Versionen, sobald das Repository öffentlich ist. Dabei wird nur die Versionsdatei abgerufen.</p>
+      <h2>Löschen</h2>
+      <p>Deinstalliere Buddy über die Windows-Einstellungen und lösche den Ordner <code>%APPDATA%\Buddy Island</code>. Danach ist nichts mehr von Buddy auf deinem PC.</p>
+    </article>
+  </main>
+  <footer class="footer">
+    <p>Buddy Island ist ein Testprojekt von Wolf Widmer · <a href="./">Zur Startseite</a></p>
+  </footer>
+</body>
+</html>

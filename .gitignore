@@ -8,3 +8,5 @@ settings.json
 selftest.txt
 .DS_Store
 Thumbs.db
+
+.netlify
