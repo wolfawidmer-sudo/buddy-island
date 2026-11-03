@@ -146,7 +146,7 @@ function toPlainMessages(messages, system) {
 
 /**
  * @param {{ scriptDir: string, getRuntime: () => Promise<PythonRuntime|null>, getToken?: () => string|null, log?: (m: string) => void, spawnImpl?: typeof spawn, onStatus?: (s: {state: string, model: string|null, device: string|null, error: string|null}) => void }} opts
- * @returns {LlmClient & { status: () => {state: string, model: string|null, device: string|null, error: string|null}, preload: (model: string) => Promise<void> }}
+ * @returns {LlmClient & { status: () => {state: string, model: string|null, device: string|null, error: string|null, pid: number|null}, preload: (model: string) => Promise<void> }}
  */
 function createHuggingFaceClient({ scriptDir, getRuntime, getToken = () => null, log = () => {}, spawnImpl = spawn, onStatus = () => {} }) {
   /** @type {null | { model: string, proc: import('child_process').ChildProcess, ready: Promise<void>, pending: Map<string, any>, buffer: string, idle?: ReturnType<typeof setTimeout> }} */
@@ -306,7 +306,7 @@ function createHuggingFaceClient({ scriptDir, getRuntime, getToken = () => null,
     streamMessage,
     json,
     stop,
-    status: () => ({ state: stateValue, model: helper?.model || null, device, error: lastError }),
+    status: () => ({ state: stateValue, model: helper?.model || null, device, error: lastError, pid: helper?.proc?.pid || null }),
     // Modell schon laden (z. B. wenn das Island aufgeht), Fehler werden über den Status gemeldet
     preload: (/** @type {string} */ model) => ensure(String(model).replace(/^hf:/, '')).catch(() => {}),
   };

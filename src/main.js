@@ -126,6 +126,29 @@ let files = null;
 let agent = null;
 let aiUsage = null;
 
+// Lokale KI für die Nutzungsansicht: Modell, Zustand und gemessener Arbeitsspeicher des Prozesses
+async function localUsage() {
+  const { execFile } = require('child_process');
+  const model = getSecret('hfModel');
+  if (!model && !discovery?.peek()?.python) return null;
+  const st = llm?.hfStatus() || {};
+  const loaded = st.state === 'ready' || st.state === 'busy';
+  let memoryMB = null;
+  if (st.pid) {
+    try {
+      if (process.platform === 'win32') {
+        const out = await new Promise((res) => execFile('tasklist', ['/FI', `PID eq ${st.pid}`, '/FO', 'CSV', '/NH'], { windowsHide: true, timeout: 5000 }, (e, o) => res(e ? '' : String(o))));
+        const kb = Number((out.split('","')[4] || '').replace(/[^\d]/g, ''));
+        if (kb) memoryMB = Math.round(kb / 1024);
+      } else {
+        const m = /VmRSS:\s+(\d+)/.exec(fs.readFileSync(`/proc/${st.pid}/status`, 'utf8'));
+        if (m) memoryMB = Math.round(Number(m[1]) / 1024);
+      }
+    } catch { /* nicht messbar */ }
+  }
+  return { model: model || '', loaded, device: st.device || null, memoryMB };
+}
+
 // Welche Nutzungs-Karten es gibt: nur für installierte Programme oder verbundene Keys
 function usagePresent(id) {
   const has = discovery?.peek()?.has || {};
@@ -134,7 +157,10 @@ function usagePresent(id) {
     case 'claude_api': return key('anthropic') || Boolean(getSecret('anthropicAdmin'));
     case 'claude_code': return Boolean(has.claude_code);
     case 'codex': return Boolean(has.codex);
-    case 'chatgpt': return Boolean(has.chatgpt_app || has.codex) || key('openai') || Boolean(getSecret('openaiAdmin'));
+    case 'chatgpt': return Boolean(has.chatgpt_app || has.codex);
+    case 'openai_api': return key('openai') || Boolean(getSecret('openaiAdmin'));
+    case 'gemini': return key('gemini') || Boolean(has.gemini_cli);
+    case 'local': return Boolean(getSecret('hfModel')) || Boolean(discovery?.peek()?.python);
     case 'grok': return Boolean(has.grok_cli) || key('xai');
     default: return true;
   }
@@ -1157,6 +1183,7 @@ function createAgentRuntime() {
     listProcesses,
     isEnabled: () => settings.usageLocal !== false,
     isPresent: (id) => usagePresent(id),
+    getLocalUsage: () => localUsage(),
     log,
   });
   // Buddy kann die Nutzung auch im Chat beantworten

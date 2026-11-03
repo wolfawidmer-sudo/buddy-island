@@ -130,6 +130,37 @@ const { createAiUsage, matchPrograms, windowLabel } = require('../src/ai-usage')
   assert.strictEqual(windowLabel(10080), 'Wochenlimit');
   assert.deepStrictEqual(matchPrograms([{ name: 'claude', path: 'C:\\Users\\W\\AppData\\Local\\AnthropicClaude\\app-1\\claude.exe' }]), [{ name: 'Claude (App)', count: 1 }]);
 
+  // Abo, API und lokal getrennt; lokal nicht in Buddys API-Kosten; Zwischenspeicher gekennzeichnet
+  {
+    let localCalls = 0;
+    const u2 = createAiUsage({
+      home, env: {}, getSecret: () => null, fetchJson: async () => ({}),
+      getBuddyUsage: () => ({ totals: { cost: 0.3, input: 900, output: 90, cacheRead: 0, cacheWrite: 0 }, estimate: 1, budget: { limit: 0, level: 'none' },
+        models: [{ id: 'claude-haiku-5-5', cost: 0.1, input: 300, output: 30 }, { id: 'gemini-2.5-flash', cost: 0.2, input: 400, output: 40 }, { id: 'hf:Qwen/Qwen2.5-1.5B-Instruct', cost: 0, input: 200, output: 20 }] }),
+      getBuddyHistory: () => [], listProcesses: async () => [],
+      getLocalUsage: async () => { localCalls += 1; return { model: 'Qwen/Qwen2.5-1.5B-Instruct', loaded: true, device: 'cpu', memoryMB: 3100 }; },
+    });
+    const r1 = await u2.collect();
+    const cat = Object.fromEntries(r1.providers.map((p) => [p.id, p.category]));
+    assert.strictEqual(cat.buddy, 'api');
+    assert.strictEqual(cat.claude_code, 'subscription');
+    assert.strictEqual(cat.chatgpt, 'subscription');
+    assert.strictEqual(cat.openai_api, 'api');
+    assert.strictEqual(cat.gemini, 'api');
+    assert.strictEqual(cat.local, 'local');
+    const buddy = r1.providers.find((p) => p.id === 'buddy');
+    const rows = buddy.metrics.map((m) => m.label);
+    assert.ok(rows.includes('Google Gemini') && rows.includes('Anthropic Claude'), `pro Anbieter: ${rows}`);
+    assert.ok(!rows.some((r) => /Hugging|lokal/i.test(r)), 'lokale Nutzung nicht bei den API-Kosten');
+    const local = r1.providers.find((p) => p.id === 'local');
+    assert.ok(local.metrics.some((m) => m.value === '3100 MB' && m.kind === 'measured'), 'Arbeitsspeicher gemessen');
+    assert.strictEqual(r1.providers.find((p) => p.id === 'gemini').status, 'unavailable', 'nichts erfunden');
+    assert.strictEqual(r1.cached, false);
+    const r2 = await u2.collect();
+    assert.strictEqual(r2.cached, true, 'zweiter Abruf kommt aus dem Zwischenspeicher');
+    assert.strictEqual(localCalls, 1);
+  }
+
   fs.rmSync(home, { recursive: true, force: true });
   console.log('Nutzungs-Tests ok');
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -129,6 +129,7 @@ function claudeCodeProvider({ home, env, cached, now }) {
   const base = env.CLAUDE_CONFIG_DIR || path.join(home, '.claude');
   return {
     id: 'claude_code',
+    category: 'subscription',
     name: t('Claude Code'),
     async collect() {
       const dir = path.join(base, 'projects');
@@ -249,6 +250,7 @@ function codexProvider({ home, env, cached, now }) {
   const base = env.CODEX_HOME || path.join(home, '.codex');
   return {
     id: 'codex',
+    category: 'subscription',
     name: t('Codex'),
     async collect() {
       const dir = path.join(base, 'sessions');
@@ -320,6 +322,7 @@ function codexProvider({ home, env, cached, now }) {
 function claudeApiProvider({ getSecret, fetchJson, now }) {
   return {
     id: 'claude_api',
+    category: 'api',
     name: t('Claude API (Organisation)'),
     async collect() {
       const key = getSecret('anthropicAdmin');
@@ -362,17 +365,30 @@ function claudeApiProvider({ getSecret, fetchJson, now }) {
 
 // ---------- OpenAI API (Admin-Key) und ChatGPT ----------
 
-function chatgptProvider({ getSecret, fetchJson, now }) {
+// ChatGPT-Abo: Limits gibt OpenAI nicht heraus
+function chatgptProvider() {
   return {
     id: 'chatgpt',
-    name: t('ChatGPT / OpenAI'),
+    category: 'subscription',
+    name: t('ChatGPT (Abo)'),
     async collect() {
-      const base = {
-        limits: [],
+      return {
+        status: 'unavailable', limits: [],
         limitsNote: t('OpenAI gibt die Nachrichtenlimits von ChatGPT-Abos über keine offizielle Schnittstelle heraus. Buddy kann sie darum nicht anzeigen.'),
       };
+    },
+  };
+}
+
+// OpenAI-API der ganzen Organisation (nur mit Admin-Key)
+function openaiApiProvider({ getSecret, fetchJson, now }) {
+  return {
+    id: 'openai_api',
+    category: 'api',
+    name: t('OpenAI API (Organisation)'),
+    async collect() {
       const key = getSecret('openaiAdmin');
-      if (!key) return { ...base, status: 'unavailable', note: t('Mit einem OpenAI-Admin-Key (beginnt mit sk-admin-) zeigt Buddy zusätzlich Tokens und Kosten deiner OpenAI-API-Nutzung.') };
+      if (!key) return { status: 'setup', limits: [], note: t('Mit einem OpenAI-Admin-Key (beginnt mit sk-admin-) zeigt Buddy zusätzlich Tokens und Kosten deiner OpenAI-API-Nutzung.') };
       const nowTs = now();
       const start = Math.floor((startOfDay(nowTs) - 6 * DAY) / 1000);
       const headers = { authorization: `Bearer ${key}` };
@@ -388,7 +404,45 @@ function chatgptProvider({ getSecret, fetchJson, now }) {
       } catch (err) {
         metrics.push({ label: t('API-Kosten 7 Tage'), value: t('nicht verfügbar'), kind: 'unavailable', hint: err.message });
       }
-      return { ...base, status: 'ok', source: t('OpenAI Admin API (Usage und Costs)'), metrics };
+      return { status: 'ok', source: t('OpenAI Admin API (Usage und Costs)'), metrics, limits: [], limitsNote: t('Rate-Limits stehen auf platform.openai.com unter «Limits».') };
+    },
+  };
+}
+
+// Gemini API: Google bietet für AI-Studio-Keys keine öffentliche Verbrauchs-Schnittstelle
+function geminiProvider() {
+  return {
+    id: 'gemini',
+    category: 'api',
+    name: t('Gemini API'),
+    async collect() {
+      return {
+        status: 'unavailable', limits: [],
+        limitsNote: t('Google bietet für Gemini-API-Keys aus AI Studio keine öffentliche Schnittstelle für Verbrauch oder Kontingent. Du siehst beides in Google AI Studio. Buddys eigene Gemini-Anfragen stehen bei «Buddy».'),
+      };
+    },
+  };
+}
+
+// Lokale KI: Ressourcen des lokalen Modells auf diesem PC
+function localProvider({ getLocalUsage, getBuddyUsage }) {
+  return {
+    id: 'local',
+    category: 'local',
+    name: t('Lokale KI'),
+    async collect() {
+      const l = (await getLocalUsage?.()) || null;
+      if (!l) return { status: 'empty', limits: [], note: t('Keine lokale KI eingerichtet.') };
+      const own = (getBuddyUsage().models || []).filter((m) => String(m.id).startsWith('hf:'));
+      const sum = own.reduce((a, m) => ({ input: a.input + num(m.input), output: a.output + num(m.output) }), { input: 0, output: 0 });
+      const metrics = [
+        { label: t('Modell'), value: l.model || t('nicht gewählt'), kind: 'measured' },
+        { label: t('Status'), value: l.loaded ? t('geladen ({d})', { d: l.device === 'cuda' ? t('Grafikkarte') : l.device || t('Prozessor') }) : t('nicht geladen (belegt nichts)'), kind: 'measured' },
+        l.memoryMB ? { label: t('Arbeitsspeicher'), value: `${l.memoryMB} MB`, kind: 'measured' } : { label: t('Arbeitsspeicher'), value: l.loaded ? t('nicht verfügbar') : '0 MB', kind: l.loaded ? 'unavailable' : 'measured' },
+        { label: t('Tokens diesen Monat'), value: t('{in} ein · {out} aus', { in: fmtTokens(sum.input), out: fmtTokens(sum.output) }), kind: 'measured' },
+        { label: t('Kosten'), value: '$0.00', kind: 'measured', hint: t('Lokale Modelle kosten nur Strom.') },
+      ];
+      return { status: 'ok', source: t('Buddys lokaler Modell-Prozess'), metrics, limits: [], limitsNote: t('Keine Limits: das Modell läuft auf deinem PC.') };
     },
   };
 }
@@ -396,7 +450,8 @@ function chatgptProvider({ getSecret, fetchJson, now }) {
 function grokProvider() {
   return {
     id: 'grok',
-    name: t('Grok'),
+    category: 'subscription',
+    name: t('Grok (Abo)'),
     async collect() {
       return {
         status: 'unavailable',
@@ -412,7 +467,8 @@ function grokProvider() {
 function buddyProvider({ getBuddyUsage, getBuddyHistory, isRunning }) {
   return {
     id: 'buddy',
-    name: t('Buddy (Claude API)'),
+    category: 'api',
+    name: t('Buddy (eigene API-Anfragen)'),
     async collect() {
       const u = getBuddyUsage();
       const tasks = getBuddyHistory();
@@ -428,6 +484,8 @@ function buddyProvider({ getBuddyUsage, getBuddyHistory, isRunning }) {
           { label: t('Hochrechnung Monat'), value: usdText(u.estimate), kind: 'estimate' },
           { label: t('Aufgaben heute'), value: t('{n}, davon {e} mit Fehlern', { n: todayTasks.length, e: todayTasks.filter((x) => ['error', 'partial', 'stopped'].includes(x.status)).length }), kind: 'measured' },
           { label: t('Tokens diesen Monat'), value: t('{in} ein · {out} aus', { in: fmtTokens(u.totals.input + u.totals.cacheRead + u.totals.cacheWrite), out: fmtTokens(u.totals.output) }), kind: 'measured' },
+          // Aufgeschlüsselt nach Anbieter (lokale Modelle stehen bei «Lokale KI»)
+          ...byProvider(u.models || []).map((x) => ({ label: x.name, value: t('{c} · {in} ein · {out} aus', { c: usdText(x.cost), in: fmtTokens(x.input), out: fmtTokens(x.output) }), kind: 'measured' })),
         ],
         limits,
         limitsNote: b.limit ? null : t('Kein Ausgabenlimit gesetzt (Einstellungen → Kosten).'),
@@ -446,6 +504,19 @@ function buddyProvider({ getBuddyUsage, getBuddyHistory, isRunning }) {
       };
     },
   };
+}
+
+function byProvider(list) {
+  /** @type {Record<string, {name: string, cost: number, input: number, output: number}>} */
+  const out = {};
+  for (const m of list) {
+    const pid = models.providerOf(m.id);
+    if (pid === 'huggingface') continue;
+    const name = models.PROVIDERS[pid]?.name || pid;
+    const e = out[pid] || (out[pid] = { name, cost: 0, input: 0, output: 0 });
+    e.cost += num(m.cost); e.input += num(m.input) + num(m.cacheRead) + num(m.cacheWrite); e.output += num(m.output);
+  }
+  return Object.values(out).sort((a, b) => b.cost - a.cost);
 }
 
 function nextMonth() {
@@ -537,22 +608,26 @@ const TOOL_DEFINITIONS = [
   },
 ];
 
-function createAiUsage({ home, env = process.env, getSecret, fetchJson, getBuddyUsage, getBuddyHistory, isBuddyRunning = () => false, listProcesses, isEnabled = () => true, isPresent = () => true, log = () => {}, now = () => Date.now() }) {
+function createAiUsage({ home, env = process.env, getSecret, fetchJson, getBuddyUsage, getBuddyHistory, getLocalUsage, isBuddyRunning = () => false, listProcesses, isEnabled = () => true, isPresent = () => true, log = () => {}, now = () => Date.now() }) {
   const cached = fileCache();
   const providers = [
     buddyProvider({ getBuddyUsage, getBuddyHistory, isRunning: isBuddyRunning }),
     claudeApiProvider({ getSecret, fetchJson, now }),
     claudeCodeProvider({ home, env, cached, now }),
     codexProvider({ home, env, cached, now }),
-    chatgptProvider({ getSecret, fetchJson, now }),
+    openaiApiProvider({ getSecret, fetchJson, now }),
+    geminiProvider(),
+    chatgptProvider(),
     grokProvider(),
+    localProvider({ getLocalUsage, getBuddyUsage }),
   ];
   const LOCAL = new Set(['claude_code', 'codex']);
   let last = null;
   let pending = null;
 
   async function collect({ force = false } = {}) {
-    if (!force && last && now() - last.updatedAt < CACHE_MS) return last;
+    // Aus dem Zwischenspeicher: so markiert, damit die Oberfläche «live» und «zwischengespeichert» unterscheidet
+    if (!force && last && now() - last.updatedAt < CACHE_MS) return { ...last, cached: true };
     if (pending) return pending;
     pending = (async () => {
       // Nur was auf dem PC installiert oder verbunden ist; der Rest erscheint gar nicht
@@ -560,14 +635,14 @@ function createAiUsage({ home, env = process.env, getSecret, fetchJson, getBuddy
       const results = await Promise.all(active.map(async (p) => {
         const startedAt = now();
         if (LOCAL.has(p.id) && !isEnabled()) {
-          return { id: p.id, name: p.name, status: 'off', note: t('Lesen lokaler Protokolle ist in den Einstellungen ausgeschaltet.'), updatedAt: startedAt };
+          return { id: p.id, name: p.name, category: p.category, status: 'off', note: t('Lesen lokaler Protokolle ist in den Einstellungen ausgeschaltet.'), updatedAt: startedAt };
         }
         try {
           const r = await p.collect();
-          return { id: p.id, name: p.name, updatedAt: now(), metrics: [], limits: [], activity: [], running: [], ...r };
+          return { id: p.id, name: p.name, category: p.category, updatedAt: now(), metrics: [], limits: [], activity: [], running: [], ...r };
         } catch (err) {
           log(`KI-Nutzung ${p.id}: ${err.message}`);
-          return { id: p.id, name: p.name, status: 'error', error: err.message, updatedAt: now(), metrics: [], limits: [], activity: [], running: [] };
+          return { id: p.id, name: p.name, category: p.category, status: 'error', error: err.message, updatedAt: now(), metrics: [], limits: [], activity: [], running: [] };
         }
       }));
       let programs = [];
@@ -578,7 +653,7 @@ function createAiUsage({ home, env = process.env, getSecret, fetchJson, getBuddy
         programsError = err.message;
       }
       const running = results.flatMap((r) => r.running || []);
-      last = { updatedAt: now(), providers: results, programs, programsError, running };
+      last = { updatedAt: now(), cached: false, providers: results, programs, programsError, running };
       return last;
     })();
     try {

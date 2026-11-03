@@ -2017,7 +2017,9 @@
   }
 
   function renderUsage(report) {
-    el.usageUpdated.textContent = t('Zuletzt aktualisiert: {time}', { time: clock(report.updatedAt) });
+    el.usageUpdated.textContent = report.cached
+      ? t('Zwischengespeichert, Stand {time}', { time: clock(report.updatedAt) })
+      : t('Live abgefragt: {time}', { time: clock(report.updatedAt) });
     el.usageCards.textContent = '';
 
     // Laufende KI-Programme zuerst
@@ -2037,7 +2039,25 @@
     live.appendChild(box);
     el.usageCards.appendChild(live);
 
-    for (const p of report.providers) {
+    // Getrennt nach Art: Abo, API und lokal werden nie zusammengezählt
+    const GROUPS = [
+      ['subscription', t('Abo-Nutzung'), t('Nutzung über deine Abos (Claude, ChatGPT, Grok …), soweit die Anbieter sie herausgeben.')],
+      ['api', t('API-Nutzung'), t('Anfragen, Tokens und Kosten über API-Keys.')],
+      ['local', t('Lokal auf diesem PC'), t('Was lokale Modelle auf deinem PC belegen.')],
+    ];
+    const ordered = [];
+    for (const [cat, title, sub] of GROUPS) {
+      const list = report.providers.filter((p) => (p.category || 'api') === cat);
+      if (!list.length) continue;
+      ordered.push({ header: title, sub }, ...list);
+    }
+    for (const p of ordered) {
+      if (p.header) {
+        const h = node('div', 'ugroup');
+        h.append(node('b', '', p.header), node('small', '', p.sub));
+        el.usageCards.appendChild(h);
+        continue;
+      }
       const card = node('div', 'ucard');
       const head = node('div', 'ucard-head');
       head.append(node('b', '', p.name), node('span', `tag ${p.status}`, t(USAGE_STATUS[p.status] || p.status)));
