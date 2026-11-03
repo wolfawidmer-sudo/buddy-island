@@ -172,7 +172,8 @@ function info(modelId) {
     short: pretty,
     price: TIER_FALLBACK_PRICE[tier] || TIER_FALLBACK_PRICE.sonnet,
     priceEstimated: true,
-    efforts: isClaude ? ['low', 'medium', 'high'] : [],
+    // Gemini ab Version 3 steuert das Denken über thinkingLevel (der Adapter übersetzt low/medium/high)
+    efforts: isClaude || (provider === 'gemini' && /gemini-([3-9]|\d{2})/i.test(String(modelId))) ? ['low', 'medium', 'high'] : [],
     caps: { vision: true, tools: true, computerUse: isClaude, structured: true },
     estimated: true,
   };

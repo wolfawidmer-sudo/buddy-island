@@ -154,6 +154,22 @@ function toFunctionDeclarations(tools, jsonSchema) {
   return { decls, dropped };
 }
 
+/** Gemini 3 und neuer (thinkingLevel statt thinkingBudget) @param {string} model */
+const isGemini3 = (model) => /gemini-([3-9]|\d{2})/i.test(model);
+
+/**
+ * Buddys Aufwand → Gemini-3-Denkstufe. Flash und Flash-Lite können «minimal» (am schnellsten),
+ * Pro beginnt bei «low». Ohne Aufwand (Auto bei manueller Modellwahl): «low».
+ * @param {string} model @param {string|null|undefined} effort
+ */
+function thinkingLevelFor(model, effort) {
+  const pro = /pro/i.test(model) && !/flash/i.test(model);
+  if (effort === 'high' || effort === 'xhigh' || effort === 'max') return 'high';
+  if (effort === 'medium') return 'medium';
+  if (effort === 'low') return pro ? 'low' : 'minimal';
+  return 'low';
+}
+
 /** @param {string|undefined} reason @param {boolean} hasCalls */
 function mapFinish(reason, hasCalls) {
   if (hasCalls) return 'tool_use';
@@ -276,7 +292,13 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
     const isPro = /pro/i.test(model);
     /** @type {any} */
     const generationConfig = { maxOutputTokens: isPro ? maxTokens + 4096 : maxTokens };
-    if (effort === 'low' && /flash/i.test(model) && !/gemini-[3-9]/i.test(model)) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    const gen3 = isGemini3(model);
+    if (gen3) {
+      // Ohne Angabe denkt Gemini 3 auf «high» und braucht dann für ein «Hallo» schnell 30 Sekunden.
+      generationConfig.thinkingConfig = { thinkingLevel: thinkingLevelFor(model, effort) };
+    } else if (effort === 'low' && /flash/i.test(model)) {
+      generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    }
     if (format) {
       generationConfig.responseMimeType = 'application/json';
       generationConfig.responseJsonSchema = format;
@@ -293,7 +315,17 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
       { test: /parametersJsonSchema|parameters_json_schema/i, apply: () => { if (!jsonSchemaTools) return false; jsonSchemaTools = false; converted = toolSet(); body.tools = [{ functionDeclarations: converted.decls }]; return true; } },
       { test: /responseJsonSchema|response_json_schema/i, apply: () => { if (!generationConfig.responseJsonSchema) return false; generationConfig.responseSchema = toOpenApiSchema(generationConfig.responseJsonSchema); delete generationConfig.responseJsonSchema; return true; } },
       { test: /responseSchema|response_schema|response_mime_type|responseMimeType/i, apply: () => { if (!generationConfig.responseMimeType) return false; delete generationConfig.responseSchema; delete generationConfig.responseJsonSchema; delete generationConfig.responseMimeType; droppedFormat = true; return true; } },
-      { test: /thinking/i, apply: () => (generationConfig.thinkingConfig ? (delete generationConfig.thinkingConfig, true) : false) },
+      {
+        test: /thinking/i,
+        apply: () => {
+          const tc = generationConfig.thinkingConfig;
+          if (!tc) return false;
+          // «minimal» kennt nicht jedes Modell (z. B. Pro): eine Stufe höher versuchen, erst dann weglassen
+          if (tc.thinkingLevel === 'minimal') { tc.thinkingLevel = 'low'; return true; }
+          delete generationConfig.thinkingConfig;
+          return true;
+        },
+      },
     ];
     const url = streaming ? `${base()}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse` : `${base()}/models/${encodeURIComponent(model)}:generateContent`;
     const ctx = { model, endpoint: url };
@@ -429,4 +461,4 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
   return { provider: 'gemini', listModels, streamMessage, json };
 }
 
-module.exports = { createGeminiClient, toContents, toFunctionDeclarations, toOpenApiSchema, mapFinish, SKIP_SIGNATURE };
+module.exports = { createGeminiClient, toContents, toFunctionDeclarations, toOpenApiSchema, mapFinish, thinkingLevelFor, isGemini3, SKIP_SIGNATURE };
