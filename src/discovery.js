@@ -11,7 +11,7 @@ const { t } = require('./i18n');
 
 /** @typedef {{ id: string, name: string, kind: 'cli'|'app'|'runtime', version?: string|null, path?: string|null, detail?: string|null }} DetectedTool */
 /** @typedef {{ exe: string, args: string[], version: string, transformers: string, torch: string, hub: string|null, cuda: boolean, device: string, vramGB: number|null, gpu: string|null }} PythonRuntime */
-/** @typedef {{ at: number, tools: DetectedTool[], python: PythonRuntime|null, hfModels: {id: string, size: number}[], has: Record<string, boolean> }} DiscoveryResult */
+/** @typedef {{ at: number, tools: DetectedTool[], python: PythonRuntime|null, pythonIssue?: object|null, hfModels: {id: string, size: number}[], has: Record<string, boolean> }} DiscoveryResult */
 
 /**
  * Führt einen Befehl kurz aus und gibt stdout zurück (oder null).
@@ -43,7 +43,7 @@ async function which(name) {
   return out.split(/\r?\n/).map((l) => l.trim()).find(Boolean) || null;
 }
 
-const PY_PROBE = 'import json,sys\nr={"version":sys.version.split()[0]}\ntry:\n import transformers;r["transformers"]=transformers.__version__\nexcept Exception: r["transformers"]=None\ntry:\n import torch;r["torch"]=torch.__version__;r["cuda"]=bool(torch.cuda.is_available())\n r["vram"]=round(torch.cuda.get_device_properties(0).total_memory/1073741824,1) if r["cuda"] else None\n r["gpu"]=torch.cuda.get_device_name(0) if r["cuda"] else None\n mps=getattr(torch.backends,"mps",None)\n r["mps"]=bool(mps and mps.is_available())\nexcept Exception: r["torch"]=None;r["cuda"]=False;r["mps"]=False\ntry:\n import huggingface_hub;r["hub"]=huggingface_hub.__version__\nexcept Exception: r["hub"]=None\nprint(json.dumps(r))';
+const PY_PROBE = 'import json,sys\nr={"version":sys.version.split()[0]}\ntry:\n import transformers;r["transformers"]=transformers.__version__\nexcept Exception as e: r["transformers"]=None;r["transformers_error"]=str(e)[:300]\ntry:\n import torch;r["torch"]=torch.__version__;r["cuda"]=bool(torch.cuda.is_available())\n r["vram"]=round(torch.cuda.get_device_properties(0).total_memory/1073741824,1) if r["cuda"] else None\n r["gpu"]=torch.cuda.get_device_name(0) if r["cuda"] else None\n mps=getattr(torch.backends,"mps",None)\n r["mps"]=bool(mps and mps.is_available())\nexcept Exception as e: r["torch"]=None;r["cuda"]=False;r["mps"]=False;r["torch_error"]=str(e)[:300]\ntry:\n import huggingface_hub;r["hub"]=huggingface_hub.__version__\nexcept Exception: r["hub"]=None\nprint(json.dumps(r))';
 
 /** @returns {Promise<{exe: string, args: string[], version: string}|null>} irgendein Python 3 (auch ohne Pakete) */
 async function findPythonExe() {
@@ -56,8 +56,13 @@ async function findPythonExe() {
   return null;
 }
 
+/** Warum das letzte gefundene Python nicht reicht (z. B. torch fehlt oder startet nicht) */
+/** @type {{exe: string, version: string, torch: string|null, transformers: string|null, torchError: string|null, transformersError: string|null}|null} */
+let lastIssue = null;
+
 /** @returns {Promise<PythonRuntime|null>} Python mit transformers und torch */
 async function findPython() {
+  lastIssue = null;
   /** @type {Array<[string, string[]]>} */
   const candidates = process.platform === 'win32'
     ? [['py', ['-3']], ['python', []], ['python3', []]]
@@ -67,7 +72,9 @@ async function findPython() {
     if (!out) continue;
     try {
       const r = JSON.parse(out.split(/\r?\n/).pop() || '{}');
+      if (!lastIssue) lastIssue = { exe, version: r.version, torch: r.torch || null, transformers: r.transformers || null, torchError: r.torch_error || null, transformersError: r.transformers_error || null };
       if (r.transformers && r.torch) {
+        lastIssue = null;
         return { exe, args, version: r.version, transformers: r.transformers, torch: r.torch, hub: r.hub, cuda: Boolean(r.cuda), device: r.cuda ? 'cuda' : r.mps ? 'mps' : 'cpu', vramGB: r.vram || null, gpu: r.gpu || null };
       }
     } catch { /* nächster Kandidat */ }
@@ -162,7 +169,7 @@ function createDiscovery({ home, env = process.env, localAppData = env.LOCALAPPD
     /** @type {Record<string, boolean>} */
     const has = {};
     for (const t of tools) has[t.id] = true;
-    return { at: Date.now(), tools, python, hfModels, has };
+    return { at: Date.now(), tools, python, pythonIssue: python ? null : lastIssue, hfModels, has };
   }
 
   /** @param {{force?: boolean}} [opts] @returns {Promise<DiscoveryResult>} */

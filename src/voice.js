@@ -210,6 +210,18 @@ function createVoice({ scriptDir, onEvent, log }) {
     if (wake) start();
   }
 
+  // Laufendes Zuhören abbrechen und das Mikrofon sofort freigeben
+  function cancel() {
+    pendingListen = false;
+    if (proc) {
+      const p = proc;
+      proc = null;
+      try { p.kill(); } catch { /* weg */ }
+    }
+    clearTimeout(idleTimer);
+    if (wake) setTimeout(() => { if (!proc) start(); }, 400);
+  }
+
   function stop() {
     clearTimeout(idleTimer);
     if (!proc) return;
@@ -219,7 +231,7 @@ function createVoice({ scriptDir, onEvent, log }) {
     setTimeout(() => { try { p.kill(); } catch { /* weg */ } }, 1500);
   }
 
-  return { listen, setWake, stop, info: () => ({ ...info, running: Boolean(proc) }) };
+  return { listen, cancel, setWake, stop, info: () => ({ ...info, running: Boolean(proc) }) };
 }
 
 module.exports = { createVoice, SCRIPT };

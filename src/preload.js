@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld('buddy', {
   clearCalendar: () => ipcRenderer.invoke('calendar:clear'),
   upcomingEvents: () => ipcRenderer.invoke('calendar:upcoming'),
   voiceListen: () => ipcRenderer.send('voice:listen'),
+  voiceCancel: () => ipcRenderer.send('voice:cancel'),
+  voiceState: (on) => ipcRenderer.send('voice:state', Boolean(on)),
   checkUpdates: () => ipcRenderer.send('update:check'),
   installUpdate: () => ipcRenderer.send('update:install'),
   rollbackUpdate: () => ipcRenderer.invoke('update:rollback'),

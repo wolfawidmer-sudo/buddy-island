@@ -732,9 +732,14 @@
       } else if (!s?.discovery) {
         el.emptyText.textContent = t('Ich schaue kurz, ob auf deinem PC eine lokale KI laufen kann …');
       } else {
+        const issue = s?.discovery?.pythonIssue;
         el.emptyText.textContent = setup?.state === 'error'
           ? setup.error
-          : t('Ich kann direkt auf deinem PC laufen, ohne Kosten und ohne Internet. Dafür richte ich einmalig eine lokale KI ein. Oder du fügst einen API-Key hinzu.');
+          : issue?.dllError
+            ? t('PyTorch ist installiert, startet aber nicht, weil eine Windows-Bibliothek fehlt. Tippe auf «Lokale KI einrichten», Buddy zeigt dir, was fehlt.')
+            : s?.localIncomplete || issue?.torch || issue?.transformers
+              ? t('Die lokale KI ist noch nicht fertig eingerichtet. Tippe auf «Lokale KI einrichten», Buddy macht dort weiter, wo er aufgehört hat.')
+              : t('Ich kann direkt auf deinem PC laufen, ohne Kosten und ohne Internet. Dafür richte ich einmalig eine lokale KI ein. Oder du fügst einen API-Key hinzu.');
         el.localBtn.hidden = false;
       }
     } else {
@@ -1090,6 +1095,7 @@
 
   el.stopBtn.addEventListener('click', (event) => {
     event.stopPropagation();
+    if (state.listening) { stopVoice(); return; }
     if (state.stream) api.abortChat(state.stream.id);
   });
 
@@ -1369,13 +1375,34 @@
     voiceNoteTimer = setTimeout(() => { state.voiceNote = ''; render(); }, 2200);
   }
 
+  // Sicherung: Meldet der Sprach-Helfer nichts mehr, nicht ewig «hört zu» anzeigen
+  let listenGuard = 0;
+  let voiceCancelled = false;
+  function setListening(value) {
+    state.listening = value;
+    clearTimeout(listenGuard);
+    if (value) listenGuard = setTimeout(() => { if (state.listening) stopVoice(); }, 45000);
+    api.voiceState?.(Boolean(value));
+    el.micBtn.setAttribute('aria-pressed', value ? 'true' : 'false');
+    el.micBtn.title = value ? t('Zuhören beenden') : t('Sprechen');
+  }
+
   function startVoice() {
-    if (state.listening) return;
+    if (state.listening) { stopVoice(); return; } // zweiter Klick beendet
     if (!state.settings?.hasKey) { open('settings'); return; }
     stopSpeaking();
-    state.listening = 'starting';
+    voiceCancelled = false;
+    setListening('starting');
     render();
     api.voiceListen();
+  }
+
+  function stopVoice() {
+    if (!state.listening) return;
+    voiceCancelled = true;
+    setListening('');
+    api.voiceCancel();
+    render();
   }
 
   el.micBtn.addEventListener('click', startVoice);
@@ -1383,35 +1410,44 @@
   api.onVoice((msg) => {
     switch (msg.kind) {
       case 'starting':
-        state.listening = state.listening || 'starting';
+        voiceCancelled = false;
+        setListening(state.listening || 'starting');
         break;
       case 'wake':
         if (state.game.active) return;
+        voiceCancelled = false;
         pop();
-        state.listening = 'listening';
+        setListening('listening');
         break;
       case 'listening':
-        state.listening = 'listening';
+        if (voiceCancelled) return;
+        setListening('listening');
         if (state.settings?.sound) chime(true);
         break;
+      case 'cancelled':
+        voiceCancelled = true;
+        setListening('');
+        break;
       case 'text':
-        state.listening = '';
+        if (voiceCancelled) return; // nach dem Abbrechen Gehörtes nicht mehr senden
+        setListening('');
         if (msg.text && msg.text.trim()) {
           if (state.stream) { voiceNote(t('Buddy arbeitet noch …')); break; }
           send(msg.text, true);
         }
         break;
       case 'nothing':
-        state.listening = '';
+        if (voiceCancelled) return;
+        setListening('');
         voiceNote(t('Nichts gehört'));
         return;
       case 'unavailable':
-        state.listening = '';
+        setListening('');
         voiceNote(t('Sprache geht nur unter Windows'));
         return;
       case 'ready':
         if (state.settings) state.settings.voiceInfo = { ...msg, ready: true };
-        if (!msg.offline && !msg.online) { state.listening = ''; voiceNote(t('Keine Spracherkennung gefunden')); }
+        if (!msg.offline && !msg.online) { setListening(''); voiceNote(t('Keine Spracherkennung gefunden')); }
         if (state.view === 'settings') fillSettings();
         return;
       default:
@@ -2631,6 +2667,7 @@
     if (state.recordingHotkey) return;
     if (event.key === 'Escape') {
       event.preventDefault();
+      if (state.listening) { stopVoice(); return; } // Esc beendet zuerst das Zuhören
       if (state.view === 'settings') showView('chat');
       else close();
     } else if (event.ctrlKey && event.key.toLowerCase() === 'n') {

@@ -653,4 +653,8 @@ module.exports = {
   "Installiere PyTorch für deine NVIDIA-Grafikkarte (ca. 3 GB, dauert einige Minuten) …": "Installing PyTorch for your NVIDIA graphics card (about 3 GB, takes a few minutes) …",
   "Start fehlgeschlagen": "Start failed",
   "NVIDIA-Grafikkarte gefunden, aber PyTorch nutzt sie noch nicht (CUDA fehlt). Mit «pip install torch --index-url https://download.pytorch.org/whl/cu128» wird es viel schneller.": "NVIDIA graphics card found, but PyTorch doesn't use it yet (CUDA missing). With «pip install torch --index-url https://download.pytorch.org/whl/cu128» it gets much faster.",
+  "Zuhören beenden": "Stop listening",
+  "Die lokale KI ist noch nicht fertig eingerichtet. Tippe auf «Lokale KI einrichten», Buddy macht dort weiter, wo er aufgehört hat.": "The local AI isn't fully set up yet. Tap «Set up local AI» and Buddy continues where it left off.",
+  "PyTorch ist installiert, startet aber nicht, weil eine Windows-Bibliothek fehlt. Tippe auf «Lokale KI einrichten», Buddy zeigt dir, was fehlt.": "PyTorch is installed but doesn't start because a Windows library is missing. Tap «Set up local AI» and Buddy shows you what's missing.",
+  "PyTorch ist installiert, startet aber nicht, weil eine Windows-Bibliothek fehlt. Installiere auf der geöffneten Microsoft-Seite das «Visual C++ Redistributable» (X64) und tippe danach nochmals auf «Lokale KI einrichten».": "PyTorch is installed but doesn't start because a Windows library is missing. Install the «Visual C++ Redistributable» (X64) from the Microsoft page that just opened, then tap «Set up local AI» again.",
 };

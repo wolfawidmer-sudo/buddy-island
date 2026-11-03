@@ -174,7 +174,7 @@ function createHuggingFaceClient({ scriptDir, getRuntime, getToken = () => null,
     if (helper && helper.model === modelPath) return helper.ready;
     stop();
     const runtime = await getRuntime();
-    if (!runtime) throw new ProviderError(0, t('Für lokale Modelle braucht Buddy Python mit den Hugging-Face-Paketen «transformers» und «torch». Installiere sie mit: pip install transformers torch'), 'local_error', NAME);
+    if (!runtime) throw new ProviderError(0, t('Die lokale KI ist noch nicht fertig eingerichtet. Tippe auf «Lokale KI einrichten», Buddy macht dort weiter, wo er aufgehört hat.'), 'local_error', NAME);
     fs.mkdirSync(scriptDir, { recursive: true });
     const file = path.join(scriptDir, 'buddy-hf.py');
     fs.writeFileSync(file, HELPER_SCRIPT, 'utf8');
@@ -213,7 +213,7 @@ function createHuggingFaceClient({ scriptDir, getRuntime, getToken = () => null,
             const missing = String(msg.error).startsWith('missing:');
             lastError = missing ? t('Python-Pakete «transformers» und «torch» fehlen.') : String(msg.error);
             setState('error');
-            reject(new ProviderError(0, missing ? t('Für lokale Modelle braucht Buddy Python mit den Hugging-Face-Paketen «transformers» und «torch». Installiere sie mit: pip install transformers torch') : t('Das Modell «{model}» konnte nicht geladen werden: {error}', { model: modelPath, error: String(msg.error).slice(0, 200) }), 'local_error', NAME));
+            reject(new ProviderError(0, missing ? t('Die lokale KI ist noch nicht fertig eingerichtet. Tippe auf «Lokale KI einrichten», Buddy macht dort weiter, wo er aufgehört hat.') : t('Das Modell «{model}» konnte nicht geladen werden: {error}', { model: modelPath, error: String(msg.error).slice(0, 200) }), 'local_error', NAME));
           } else {
             const p = h.pending.get(msg.id);
             if (!p) continue;

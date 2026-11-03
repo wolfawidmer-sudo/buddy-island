@@ -871,6 +871,9 @@ input::placeholder, textarea::placeholder { color: var(--label-3); }
   animation: ping 1.4s var(--ease) infinite;
 }
 .island[data-state="listen"] .mic-dot { display: block; }
+/* Beim Zuhören: Stopp-Knopf im Island und Mikrofon-Knopf als «an» markiert, zum Beenden */
+.island[data-state="listen"]:not(.open) .stop { display: grid; }
+#micBtn[aria-pressed="true"] { background: var(--red, #ff453a); color: #fff; }
 .island[data-state="listen"] .eye { height: 13px; }
 
 /* ---------- Diagnose & Datenschutz ---------- */

@@ -259,7 +259,14 @@ function providerList() {
 }
 
 function publicDiscovery(r) {
-  return { at: r.at, tools: r.tools, has: r.has, python: r.python ? { version: r.python.version, transformers: r.python.transformers, torch: r.python.torch, device: r.python.device, gpu: r.python.gpu, vramGB: r.python.vramGB } : null, hfModels: r.hfModels };
+  const issue = r.pythonIssue ? { version: r.pythonIssue.version, torch: r.pythonIssue.torch, transformers: r.pythonIssue.transformers, dllError: isDllError(r.pythonIssue.torchError) } : null;
+  return { at: r.at, tools: r.tools, has: r.has, python: r.python ? { version: r.python.version, transformers: r.python.transformers, torch: r.python.torch, device: r.python.device, gpu: r.python.gpu, vramGB: r.python.vramGB } : null, pythonIssue: issue, hfModels: r.hfModels };
+}
+
+// PyTorch installiert, startet aber nicht: unter Windows fast immer eine fehlende
+// Microsoft-Laufzeitbibliothek (Visual C++ Redistributable)
+function isDllError(text) {
+  return /dll|WinError (126|127|1114)|DLL load failed|vcruntime|msvcp/i.test(String(text || ''));
 }
 
 function publicSettings() {
@@ -278,7 +285,9 @@ function publicSettings() {
     languages: i18n.languages(),
     hasAnthropicAdmin: Boolean(settings.anthropicAdminEncrypted || settings.anthropicAdminPlain),
     hasOpenaiAdmin: Boolean(settings.openaiAdminEncrypted || settings.openaiAdminPlain),
-    hasKey: Boolean(getApiKey(currentProvider())),
+    // Lokal zählt erst als verbunden, wenn Python mit torch und transformers wirklich läuft
+    hasKey: currentProvider() === 'huggingface' ? Boolean(getSecret('hfModel') && discovery?.peek()?.python) : Boolean(getApiKey(currentProvider())),
+    localIncomplete: currentProvider() === 'huggingface' && Boolean(discovery?.peek()) && !discovery.peek().python,
     hasCalendar: Boolean(settings.calendarEncrypted || settings.calendarPlain),
     calendarStatus: calendar?.status() || null,
     canControl: process.platform === 'win32',
@@ -460,24 +469,38 @@ async function runLocalSetup() {
       if (!py) return fail(r.ok ? t('Python ist installiert, aber noch nicht bereit. Starte Buddy neu und tippe nochmals auf «Lokale KI einrichten».') : t('Python konnte nicht installiert werden: {e}', { e: r.last }));
     }
 
-    // PyTorch passend zur Hardware: mit NVIDIA-Grafikkarte die CUDA-Version, sonst die kleinere CPU-Version
-    const nvidia = Boolean(await run('nvidia-smi', ['-L'], 6000));
-    step(nvidia ? t('Installiere PyTorch für deine NVIDIA-Grafikkarte (ca. 3 GB, dauert einige Minuten) …') : t('Installiere PyTorch (ca. 200 MB) …'), { percent: 10 });
-    const bar = await progressArgs(py);
-    const torchArgs = [...py.args, '-m', 'pip', 'install', '--user', '--upgrade', ...bar, 'torch', '--index-url', nvidia ? 'https://download.pytorch.org/whl/cu128' : 'https://download.pytorch.org/whl/cpu'];
-    let r = await stream(py.exe, torchArgs, t('Installiere PyTorch …'), [10, 42]);
-    if (!r.ok) {
-      log(`Lokale KI: PyTorch-Index fehlgeschlagen: ${r.last}`);
-      // Ausweichen auf das normale Paketverzeichnis
-      r = await stream(py.exe, [...py.args, '-m', 'pip', 'install', '--user', '--upgrade', ...bar, 'torch'], t('Installiere PyTorch …'), [10, 42]);
-      if (!r.ok) return fail(t('PyTorch konnte nicht installiert werden: {e}', { e: r.last }));
+    // Was schon da ist, nicht nochmals installieren (Einrichtung kann jederzeit fortgesetzt werden)
+    const before = await discovery.get({ force: true });
+    const have = before.python ? { torch: true, transformers: true } : { torch: Boolean(before.pythonIssue?.torch), transformers: Boolean(before.pythonIssue?.transformers) };
+    const bar = (!have.torch || !have.transformers) ? await progressArgs(py) : [];
+    let r;
+    if (!have.torch) {
+      // Zuerst die kleine Version vom schnellen Paketverzeichnis (PyPI, ca. 200 MB). Die viel grössere
+      // Grafikkarten-Version (ca. 3 GB) ist ein späterer, freiwilliger Schritt.
+      step(t('Installiere PyTorch (ca. 200 MB) …'), { percent: 10 });
+      r = await stream(py.exe, [...py.args, '-m', 'pip', 'install', '--user', ...bar, 'torch'], t('Installiere PyTorch …'), [10, 42]);
+      if (!r.ok) {
+        log(`Lokale KI: PyPI fehlgeschlagen: ${r.last}`);
+        r = await stream(py.exe, [...py.args, '-m', 'pip', 'install', '--user', ...bar, 'torch', '--index-url', 'https://download.pytorch.org/whl/cpu'], t('Installiere PyTorch …'), [10, 42]);
+        if (!r.ok) return fail(t('PyTorch konnte nicht installiert werden: {e}', { e: r.last }));
+      }
     }
-    step(t('Installiere Hugging Face Transformers …'), { percent: 45 });
-    r = await stream(py.exe, [...py.args, '-m', 'pip', 'install', '--user', '--upgrade', ...bar, 'transformers', 'huggingface_hub'], t('Installiere Hugging Face Transformers …'), [45, 53]);
-    if (!r.ok) return fail(t('Transformers konnte nicht installiert werden: {e}', { e: r.last }));
+    if (!have.transformers) {
+      step(t('Installiere Hugging Face Transformers …'), { percent: 45 });
+      r = await stream(py.exe, [...py.args, '-m', 'pip', 'install', '--user', ...bar, 'transformers', 'huggingface_hub'], t('Installiere Hugging Face Transformers …'), [45, 53]);
+      if (!r.ok) return fail(t('Transformers konnte nicht installiert werden: {e}', { e: r.last }));
+    }
 
     const found = await discovery.get({ force: true });
-    if (!found.python) return fail(t('Die Pakete sind installiert, aber Python findet sie noch nicht. Starte Buddy neu.'));
+    if (!found.python) {
+      if (isDllError(found.pythonIssue?.torchError)) {
+        log(`Lokale KI: torch startet nicht: ${found.pythonIssue?.torchError}`);
+        shell.openExternal('https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist');
+        return fail(t('PyTorch ist installiert, startet aber nicht, weil eine Windows-Bibliothek fehlt. Installiere auf der geöffneten Microsoft-Seite das «Visual C++ Redistributable» (X64) und tippe danach nochmals auf «Lokale KI einrichten».'));
+      }
+      log(`Lokale KI: Pakete nicht ladbar: ${found.pythonIssue?.torchError || ''} ${found.pythonIssue?.transformersError || ''}`);
+      return fail(t('Die Pakete sind installiert, aber Python findet sie noch nicht. Starte Buddy neu.'));
+    }
     win?.webContents.send('discovery', publicDiscovery(found));
 
     // Empfohlenes Modell wählen und herunterladen (über huggingface_hub)
@@ -879,7 +902,9 @@ function runShortcut(entry) {
       openIsland('settings');
       break;
     case 'voice':
-      startListening();
+      // Tastenkürzel schaltet um: einmal drücken hört zu, nochmals drücken beendet
+      if (listeningNow) stopListening();
+      else startListening();
       break;
     default:
       if (entry.custom) win.webContents.send('shortcut:prompt', { prompt: entry.custom.prompt.trim(), open: Boolean(entry.custom.open) });
@@ -1181,6 +1206,14 @@ function startListening() {
   }
   win?.webContents.send('voice', { kind: 'starting' });
   voice.listen();
+}
+
+// Zuhören beenden (zweiter Klick auf das Mikrofon, Esc oder Tastenkürzel)
+let listeningNow = false;
+function stopListening() {
+  listeningNow = false;
+  voice?.cancel();
+  win?.webContents.send('voice', { kind: 'cancelled' });
 }
 
 // ---------- Updates (electron-updater + Signaturprüfung + Rollback) ----------
@@ -1890,6 +1923,8 @@ function setupIpc() {
   });
 
   ipcMain.on('voice:listen', () => startListening());
+  ipcMain.on('voice:cancel', () => stopListening());
+  ipcMain.on('voice:state', (_e, on) => { listeningNow = Boolean(on); });
 
   ipcMain.on('update:check', () => updater?.check());
   ipcMain.on('update:install', () => updater?.install());
@@ -1957,6 +1992,8 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     setTimeout(() => discovery.get().then(async () => {
       win?.webContents.send('discovery', publicDiscovery(discovery.peek()));
       await autoSelectLocal().catch((err) => log(`Lokale Auswahl: ${err.message}`));
+      // Oberfläche weiss jetzt, ob die lokale KI wirklich bereit ist
+      win?.webContents.send('settings:changed', publicSettings());
     }), 1500);
 
     computer = createComputer({
