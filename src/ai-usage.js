@@ -11,6 +11,7 @@ const fsp = fs.promises;
 const path = require('path');
 const readline = require('readline');
 const models = require('./models');
+const { t, localeOf } = require('./i18n');
 
 const DAY = 864e5;
 const LOOKBACK_DAYS = 7;
@@ -18,7 +19,7 @@ const ACTIVE_MS = 3 * 60 * 1000; // Datei so frisch = Sitzung läuft wohl gerade
 const CACHE_MS = 45 * 1000;
 const MAX_FILE_BYTES = 200 * 1024 * 1024;
 
-const startOfDay = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const startOfDay = (ts) => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const short = (text, n = 80) => String(text || '').replace(/\s+/g, ' ').trim().slice(0, n);
 const baseName = (p) => String(p || '').split(/[\\/]+/).filter(Boolean).pop() || '';
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -73,15 +74,15 @@ function fileCache() {
 // ---------- Claude Code (lokale Protokolle) ----------
 
 function isRealPrompt(text) {
-  const t = String(text || '').trim();
-  return t && !t.startsWith('<') && !t.startsWith('Caveat:') && !t.startsWith('[Request interrupted') && !t.startsWith('This session is being continued');
+  const q = String(text || '').trim();
+  return q && !q.startsWith('<') && !q.startsWith('Caveat:') && !q.startsWith('[Request interrupted') && !q.startsWith('This session is being continued');
 }
 
 async function parseClaudeCodeFile(file) {
   const s = { id: path.basename(file, '.jsonl'), cwd: '', title: '', start: 0, end: 0, tools: {}, errors: 0, messages: new Map(), byDay: {} };
   await eachLine(file, (o) => {
-    const t = Date.parse(o.timestamp || '') || 0;
-    if (t) { s.start = s.start ? Math.min(s.start, t) : t; s.end = Math.max(s.end, t); }
+    const ts = Date.parse(o.timestamp || '') || 0;
+    if (ts) { s.start = s.start ? Math.min(s.start, ts) : ts; s.end = Math.max(s.end, ts); }
     if (o.cwd && !s.cwd) s.cwd = o.cwd;
     if (o.type === 'summary' && o.summary && !s.summary) s.summary = short(o.summary, 90);
     const msg = o.message;
@@ -103,7 +104,7 @@ async function parseClaudeCodeFile(file) {
       const prev = s.messages.get(key);
       const tools = { ...(prev?.tools || {}) };
       for (const b of Array.isArray(msg.content) ? msg.content : []) if (b.type === 'tool_use' && b.name) tools[b.id || `${b.name}:${Object.keys(tools).length}`] = b.name;
-      s.messages.set(key, { model: msg.model, usage: msg.usage, day: startOfDay(t || s.end), tools });
+      s.messages.set(key, { model: msg.model, usage: msg.usage, day: startOfDay(ts || s.end), tools });
     }
   });
   for (const m of s.messages.values()) for (const name of Object.values(m.tools)) s.tools[name] = (s.tools[name] || 0) + 1;
@@ -128,14 +129,14 @@ function claudeCodeProvider({ home, env, cached, now }) {
   const base = env.CLAUDE_CONFIG_DIR || path.join(home, '.claude');
   return {
     id: 'claude_code',
-    name: 'Claude Code',
+    name: t('Claude Code'),
     async collect() {
       const dir = path.join(base, 'projects');
       if (!fs.existsSync(dir)) {
-        return { status: 'empty', note: 'Keine Claude-Code-Protokolle auf diesem PC gefunden (Ordner .claude\\projects fehlt). Läuft Claude Code in WSL, liegen sie dort und sind für Buddy nicht erreichbar.' };
+        return { status: 'empty', note: t('Keine Claude-Code-Protokolle auf diesem PC gefunden (Ordner .claude\\projects fehlt). Läuft Claude Code in WSL, liegen sie dort und sind für Buddy nicht erreichbar.') };
       }
-      const t = now();
-      const files = await recentFiles(dir, { since: t - LOOKBACK_DAYS * DAY, depth: 1 });
+      const nowTs = now();
+      const files = await recentFiles(dir, { since: nowTs - LOOKBACK_DAYS * DAY, depth: 1 });
       const sessions = [];
       for (const f of files) {
         try {
@@ -143,7 +144,7 @@ function claudeCodeProvider({ home, env, cached, now }) {
           sessions.push({ ...s, mtime: f.mtime, project: baseName(s.cwd || path.dirname(f.file)) });
         } catch { /* unlesbare Datei überspringen */ }
       }
-      const today = startOfDay(t);
+      const today = startOfDay(nowTs);
       const sum = (days) => {
         const r = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, requests: 0 };
         for (const s of sessions) {
@@ -157,33 +158,33 @@ function claudeCodeProvider({ home, env, cached, now }) {
       const todaySum = sum(today);
       const weekSum = sum(today - 6 * DAY);
       const todaySessions = sessions.filter((s) => s.end >= today);
-      const running = sessions.filter((s) => t - s.mtime < ACTIVE_MS);
+      const running = sessions.filter((s) => nowTs - s.mtime < ACTIVE_MS);
       const activity = sessions
         .sort((a, b) => b.end - a.end)
         .slice(0, 12)
         .map((s) => ({
-          title: s.summary || s.title || 'Sitzung ohne erkennbaren Auftrag',
+          title: s.summary || s.title || t('Sitzung ohne erkennbaren Auftrag'),
           project: s.project,
           start: s.start,
           end: s.end,
           durationMs: Math.max(0, s.end - s.start),
           tools: Object.entries(s.tools).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n, c]) => `${n} ×${c}`),
           errors: s.errors,
-          running: t - s.mtime < ACTIVE_MS,
+          running: nowTs - s.mtime < ACTIVE_MS,
         }));
       return {
         status: sessions.length ? 'ok' : 'empty',
-        source: 'Lokale Protokolle von Claude Code',
+        source: t('Lokale Protokolle von Claude Code'),
         metrics: [
-          { label: 'Sitzungen heute', value: String(todaySessions.length), kind: 'measured' },
-          { label: 'Tokens heute', value: tokensText(todaySum), kind: 'measured' },
-          { label: 'Tokens 7 Tage', value: tokensText(weekSum), kind: 'measured' },
-          { label: 'Wert zu API-Preisen heute', value: usdText(todaySum.cost), kind: 'estimate', hint: 'Mit einem Claude-Abo zahlst du das nicht so, es ist nur der Gegenwert zu API-Preisen.' },
-          { label: 'Fehlgeschlagene Werkzeug-Aufrufe heute', value: String(todaySessions.reduce((a, s) => a + s.errors, 0)), kind: 'measured' },
+          { label: t('Sitzungen heute'), value: String(todaySessions.length), kind: 'measured' },
+          { label: t('Tokens heute'), value: tokensText(todaySum), kind: 'measured' },
+          { label: t('Tokens 7 Tage'), value: tokensText(weekSum), kind: 'measured' },
+          { label: t('Wert zu API-Preisen heute'), value: usdText(todaySum.cost), kind: 'estimate', hint: t('Mit einem Claude-Abo zahlst du das nicht so, es ist nur der Gegenwert zu API-Preisen.') },
+          { label: t('Fehlgeschlagene Werkzeug-Aufrufe heute'), value: String(todaySessions.reduce((a, s) => a + s.errors, 0)), kind: 'measured' },
         ],
         limits: [],
-        limitsNote: 'Die Abo-Limits von Claude (5-Stunden- und Wochenlimit) gibt Anthropic über keine offizielle Schnittstelle heraus. In Claude Code siehst du sie mit /usage.',
-        running: running.map((s) => ({ name: 'Claude Code', detail: `${s.project}: ${s.summary || s.title || 'Sitzung'}` })),
+        limitsNote: t('Die Abo-Limits von Claude (5-Stunden- und Wochenlimit) gibt Anthropic über keine offizielle Schnittstelle heraus. In Claude Code siehst du sie mit /usage.'),
+        running: running.map((s) => ({ name: t('Claude Code'), detail: `${s.project}: ${s.summary || s.title || t('Sitzung')}` })),
         activity,
       };
     },
@@ -196,8 +197,8 @@ async function parseCodexFile(file) {
   const s = { id: path.basename(file, '.jsonl'), cwd: '', title: '', model: '', start: 0, end: 0, tools: {}, errors: 0, total: null, byDay: {}, rate: null };
   let lastTotal = null;
   await eachLine(file, (o) => {
-    const t = Date.parse(o.timestamp || '') || 0;
-    if (t) { s.start = s.start ? Math.min(s.start, t) : t; s.end = Math.max(s.end, t); }
+    const ts = Date.parse(o.timestamp || '') || 0;
+    if (ts) { s.start = s.start ? Math.min(s.start, ts) : ts; s.end = Math.max(s.end, ts); }
     const p = o.payload || {};
     if (o.type === 'session_meta') {
       s.cwd = p.cwd || s.cwd;
@@ -220,7 +221,7 @@ async function parseCodexFile(file) {
         if (total) {
           // Zuwachs seit dem letzten Stand dem Tag zuordnen
           const prev = lastTotal || { input_tokens: 0, cached_input_tokens: 0, output_tokens: 0 };
-          const day = startOfDay(t || s.end);
+          const day = startOfDay(ts || s.end);
           const d = s.byDay[day] || (s.byDay[day] = { input: 0, cached: 0, output: 0 });
           d.input += Math.max(0, num(total.input_tokens) - num(prev.input_tokens));
           d.cached += Math.max(0, num(total.cached_input_tokens) - num(prev.cached_input_tokens));
@@ -228,7 +229,7 @@ async function parseCodexFile(file) {
           lastTotal = total;
           s.total = total;
         }
-        if (p.rate_limits && (p.rate_limits.primary || p.rate_limits.secondary)) s.rate = { at: t, limits: p.rate_limits };
+        if (p.rate_limits && (p.rate_limits.primary || p.rate_limits.secondary)) s.rate = { at: ts, limits: p.rate_limits };
       }
     }
   });
@@ -237,31 +238,31 @@ async function parseCodexFile(file) {
 
 function windowLabel(minutes) {
   const m = num(minutes);
-  if (m === 300) return '5-Stunden-Fenster';
-  if (m === 10080) return 'Wochenlimit';
-  if (m >= 1440) return `${Math.round(m / 1440)}-Tage-Fenster`;
-  if (m >= 60) return `${Math.round(m / 60)}-Stunden-Fenster`;
-  return m ? `${m}-Minuten-Fenster` : 'Limit';
+  if (m === 300) return t('5-Stunden-Fenster');
+  if (m === 10080) return t('Wochenlimit');
+  if (m >= 1440) return t('{n}-Tage-Fenster', { n: Math.round(m / 1440) });
+  if (m >= 60) return t('{n}-Stunden-Fenster', { n: Math.round(m / 60) });
+  return m ? t('{m}-Minuten-Fenster', { m }) : t('Limit');
 }
 
 function codexProvider({ home, env, cached, now }) {
   const base = env.CODEX_HOME || path.join(home, '.codex');
   return {
     id: 'codex',
-    name: 'Codex',
+    name: t('Codex'),
     async collect() {
       const dir = path.join(base, 'sessions');
       if (!fs.existsSync(dir)) return { status: 'empty', note: 'Keine Codex-Protokolle gefunden (Ordner .codex\\sessions fehlt).' };
-      const t = now();
-      const files = await recentFiles(dir, { since: t - LOOKBACK_DAYS * DAY, depth: 3 });
+      const nowTs = now();
+      const files = await recentFiles(dir, { since: nowTs - LOOKBACK_DAYS * DAY, depth: 3 });
       const sessions = [];
       for (const f of files) {
         try {
           const s = await cached(f, parseCodexFile);
-          sessions.push({ ...s, mtime: f.mtime, project: baseName(s.cwd) || 'Codex' });
+          sessions.push({ ...s, mtime: f.mtime, project: baseName(s.cwd) || t('Codex') });
         } catch { /* überspringen */ }
       }
-      const today = startOfDay(t);
+      const today = startOfDay(nowTs);
       const tok = (since) => sessions.reduce((r, s) => {
         for (const [day, d] of Object.entries(s.byDay)) if (Number(day) >= since) { r.input += d.input; r.cached += d.cached; r.output += d.output; }
         return r;
@@ -276,37 +277,37 @@ function codexProvider({ home, env, cached, now }) {
           const l = latest.limits[key];
           if (!l || l.used_percent === undefined) continue;
           let resetsAt = l.resets_at ? num(l.resets_at) * 1000 : l.resets_in_seconds !== undefined ? latest.at + num(l.resets_in_seconds) * 1000 : 0;
-          const passed = resetsAt && resetsAt < t;
+          const passed = resetsAt && resetsAt < nowTs;
           limits.push({
             label: windowLabel(l.window_minutes),
             usedPercent: passed ? null : Math.round(num(l.used_percent)),
             resetsAt: resetsAt || null,
             asOf: latest.at,
             kind: 'measured',
-            note: passed ? 'Seit dem letzten Stand zurückgesetzt (neuer Wert erst nach der nächsten Codex-Nutzung).' : null,
+            note: passed ? t('Seit dem letzten Stand zurückgesetzt (neuer Wert erst nach der nächsten Codex-Nutzung).') : null,
           });
         }
       }
       return {
         status: sessions.length ? 'ok' : 'empty',
-        source: 'Lokale Protokolle von Codex',
+        source: t('Lokale Protokolle von Codex'),
         metrics: [
-          { label: 'Sitzungen heute', value: String(sessions.filter((s) => s.end >= today).length), kind: 'measured' },
-          { label: 'Tokens heute', value: `${fmtTokens(td.input)} ein (davon ${fmtTokens(td.cached)} aus dem Cache) · ${fmtTokens(td.output)} aus`, kind: 'measured' },
-          { label: 'Tokens 7 Tage', value: `${fmtTokens(wk.input)} ein · ${fmtTokens(wk.output)} aus`, kind: 'measured' },
+          { label: t('Sitzungen heute'), value: String(sessions.filter((s) => s.end >= today).length), kind: 'measured' },
+          { label: t('Tokens heute'), value: t('{in} ein (davon {cached} aus dem Cache) · {out} aus', { in: fmtTokens(td.input), cached: fmtTokens(td.cached), out: fmtTokens(td.output) }), kind: 'measured' },
+          { label: t('Tokens 7 Tage'), value: t('{in} ein · {out} aus', { in: fmtTokens(wk.input), out: fmtTokens(wk.output) }), kind: 'measured' },
         ],
         limits,
-        limitsNote: latest ? null : 'Noch kein Limit-Stand in den Protokollen. Er erscheint, sobald du Codex benutzt hast.',
-        running: sessions.filter((s) => t - s.mtime < ACTIVE_MS).map((s) => ({ name: 'Codex', detail: `${s.project}: ${s.title || 'Sitzung'}` })),
+        limitsNote: latest ? null : t('Noch kein Limit-Stand in den Protokollen. Er erscheint, sobald du Codex benutzt hast.'),
+        running: sessions.filter((s) => nowTs - s.mtime < ACTIVE_MS).map((s) => ({ name: t('Codex'), detail: `${s.project}: ${s.title || t('Sitzung')}` })),
         activity: sessions.sort((a, b) => b.end - a.end).slice(0, 12).map((s) => ({
-          title: s.title || 'Sitzung ohne Text',
+          title: s.title || t('Sitzung ohne Text'),
           project: s.project,
           start: s.start,
           end: s.end,
           durationMs: Math.max(0, s.end - s.start),
           tools: Object.entries(s.tools).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n, c]) => `${n} ×${c}`),
           errors: s.errors,
-          running: t - s.mtime < ACTIVE_MS,
+          running: nowTs - s.mtime < ACTIVE_MS,
           model: s.model,
         })),
       };
@@ -319,14 +320,14 @@ function codexProvider({ home, env, cached, now }) {
 function claudeApiProvider({ getSecret, fetchJson, now }) {
   return {
     id: 'claude_api',
-    name: 'Claude API (Organisation)',
+    name: t('Claude API (Organisation)'),
     async collect() {
       const key = getSecret('anthropicAdmin');
       if (!key) {
-        return { status: 'setup', note: 'Für die Nutzung aller Keys deiner Organisation braucht Buddy einen Admin-Key (beginnt mit sk-ant-admin). Ohne ihn siehst du oben nur Buddys eigene Nutzung.' };
+        return { status: 'setup', note: t('Für die Nutzung aller Keys deiner Organisation braucht Buddy einen Admin-Key (beginnt mit sk-ant-admin). Ohne ihn siehst du oben nur Buddys eigene Nutzung.') };
       }
-      const t = now();
-      const from = new Date(startOfDay(t) - 6 * DAY).toISOString().replace(/\.\d{3}Z$/, 'Z');
+      const nowTs = now();
+      const from = new Date(startOfDay(nowTs) - 6 * DAY).toISOString().replace(/\.\d{3}Z$/, 'Z');
       const headers = { 'x-api-key': key, 'anthropic-version': '2023-06-01' };
       const base = 'https://api.anthropic.com/v1/organizations';
       const usage = await fetchJson(`${base}/usage_report/messages?starting_at=${encodeURIComponent(from)}&bucket_width=1d&limit=7`, headers);
@@ -343,18 +344,18 @@ function claudeApiProvider({ getSecret, fetchJson, now }) {
         }
       }
       const metrics = [
-        { label: 'Tokens heute (UTC-Tag)', value: `${fmtTokens(todayTok.in)} ein · ${fmtTokens(todayTok.out)} aus`, kind: 'measured' },
-        { label: 'Tokens 7 Tage', value: `${fmtTokens(weekTok.in)} ein · ${fmtTokens(weekTok.out)} aus`, kind: 'measured' },
+        { label: t('Tokens heute (UTC-Tag)'), value: t('{in} ein · {out} aus', { in: fmtTokens(todayTok.in), out: fmtTokens(todayTok.out) }), kind: 'measured' },
+        { label: t('Tokens 7 Tage'), value: t('{in} ein · {out} aus', { in: fmtTokens(weekTok.in), out: fmtTokens(weekTok.out) }), kind: 'measured' },
       ];
       try {
         const cost = await fetchJson(`${base}/cost_report?starting_at=${encodeURIComponent(from)}&limit=7`, headers);
         let cents = 0;
         for (const bucket of cost.data || []) for (const r of bucket.results || []) cents += num(r.amount);
-        metrics.push({ label: 'Kosten 7 Tage', value: usdText(cents / 100), kind: 'measured', hint: 'Laut Cost-API von Anthropic (in US-Dollar).' });
+        metrics.push({ label: t('Kosten 7 Tage'), value: usdText(cents / 100), kind: 'measured', hint: t('Laut Cost-API von Anthropic (in US-Dollar).') });
       } catch (err) {
-        metrics.push({ label: 'Kosten 7 Tage', value: 'nicht verfügbar', kind: 'unavailable', hint: err.message });
+        metrics.push({ label: t('Kosten 7 Tage'), value: t('nicht verfügbar'), kind: 'unavailable', hint: err.message });
       }
-      return { status: 'ok', source: 'Anthropic Admin API (Usage- und Cost-Report)', metrics, limits: [], limitsNote: 'Rate-Limits der API stehen in der Claude Console unter «Limits».' };
+      return { status: 'ok', source: t('Anthropic Admin API (Usage- und Cost-Report)'), metrics, limits: [], limitsNote: t('Rate-Limits der API stehen in der Claude Console unter «Limits».') };
     },
   };
 }
@@ -364,30 +365,30 @@ function claudeApiProvider({ getSecret, fetchJson, now }) {
 function chatgptProvider({ getSecret, fetchJson, now }) {
   return {
     id: 'chatgpt',
-    name: 'ChatGPT / OpenAI',
+    name: t('ChatGPT / OpenAI'),
     async collect() {
       const base = {
         limits: [],
-        limitsNote: 'OpenAI gibt die Nachrichtenlimits von ChatGPT-Abos über keine offizielle Schnittstelle heraus. Buddy kann sie darum nicht anzeigen.',
+        limitsNote: t('OpenAI gibt die Nachrichtenlimits von ChatGPT-Abos über keine offizielle Schnittstelle heraus. Buddy kann sie darum nicht anzeigen.'),
       };
       const key = getSecret('openaiAdmin');
-      if (!key) return { ...base, status: 'unavailable', note: 'Mit einem OpenAI-Admin-Key (beginnt mit sk-admin-) zeigt Buddy zusätzlich Tokens und Kosten deiner OpenAI-API-Nutzung.' };
-      const t = now();
-      const start = Math.floor((startOfDay(t) - 6 * DAY) / 1000);
+      if (!key) return { ...base, status: 'unavailable', note: t('Mit einem OpenAI-Admin-Key (beginnt mit sk-admin-) zeigt Buddy zusätzlich Tokens und Kosten deiner OpenAI-API-Nutzung.') };
+      const nowTs = now();
+      const start = Math.floor((startOfDay(nowTs) - 6 * DAY) / 1000);
       const headers = { authorization: `Bearer ${key}` };
       const usage = await fetchJson(`https://api.openai.com/v1/organization/usage/completions?start_time=${start}&bucket_width=1d&limit=7`, headers);
       let tin = 0; let tout = 0; let reqs = 0;
       for (const b of usage.data || []) for (const r of b.results || []) { tin += num(r.input_tokens); tout += num(r.output_tokens); reqs += num(r.num_model_requests); }
-      const metrics = [{ label: 'API-Tokens 7 Tage', value: `${fmtTokens(tin)} ein · ${fmtTokens(tout)} aus · ${reqs} Anfragen`, kind: 'measured' }];
+      const metrics = [{ label: t('API-Tokens 7 Tage'), value: t('{in} ein · {out} aus · {n} Anfragen', { in: fmtTokens(tin), out: fmtTokens(tout), n: reqs }), kind: 'measured' }];
       try {
         const costs = await fetchJson(`https://api.openai.com/v1/organization/costs?start_time=${start}&bucket_width=1d&limit=7`, headers);
         let usd = 0;
         for (const b of costs.data || []) for (const r of b.results || []) usd += num(r.amount?.value);
-        metrics.push({ label: 'API-Kosten 7 Tage', value: usdText(usd), kind: 'measured' });
+        metrics.push({ label: t('API-Kosten 7 Tage'), value: usdText(usd), kind: 'measured' });
       } catch (err) {
-        metrics.push({ label: 'API-Kosten 7 Tage', value: 'nicht verfügbar', kind: 'unavailable', hint: err.message });
+        metrics.push({ label: t('API-Kosten 7 Tage'), value: t('nicht verfügbar'), kind: 'unavailable', hint: err.message });
       }
-      return { ...base, status: 'ok', source: 'OpenAI Admin API (Usage und Costs)', metrics };
+      return { ...base, status: 'ok', source: t('OpenAI Admin API (Usage und Costs)'), metrics };
     },
   };
 }
@@ -395,12 +396,12 @@ function chatgptProvider({ getSecret, fetchJson, now }) {
 function grokProvider() {
   return {
     id: 'grok',
-    name: 'Grok',
+    name: t('Grok'),
     async collect() {
       return {
         status: 'unavailable',
         limits: [],
-        limitsNote: 'xAI bietet für Grok-Abos keine offizielle Schnittstelle für Nutzung oder Limits. Buddy zeigt darum nichts an, statt zu raten.',
+        limitsNote: t('xAI bietet für Grok-Abos keine offizielle Schnittstelle für Nutzung oder Limits. Buddy zeigt darum nichts an, statt zu raten.'),
       };
     },
   };
@@ -411,26 +412,26 @@ function grokProvider() {
 function buddyProvider({ getBuddyUsage, getBuddyHistory, isRunning }) {
   return {
     id: 'buddy',
-    name: 'Buddy (Claude API)',
+    name: t('Buddy (Claude API)'),
     async collect() {
       const u = getBuddyUsage();
       const tasks = getBuddyHistory();
       const today = startOfDay(Date.now());
       const todayTasks = tasks.filter((x) => x.started >= today);
       const b = u.budget;
-      const limits = b.limit ? [{ label: 'Ausgabenlimit diesen Monat', usedPercent: Math.round(b.ratio * 100), resetsAt: nextMonth(), kind: 'measured', detail: `${usdText(b.spent)} von ${usdText(b.limit)}` }] : [];
+      const limits = b.limit ? [{ label: t('Ausgabenlimit diesen Monat'), usedPercent: Math.round(b.ratio * 100), resetsAt: nextMonth(), kind: 'measured', detail: t('{a} von {b}', { a: usdText(b.spent), b: usdText(b.limit) }) }] : [];
       return {
         status: 'ok',
-        source: 'Buddys eigene Messung (Token-Zahlen der API)',
+        source: t('Buddys eigene Messung (Token-Zahlen der API)'),
         metrics: [
-          { label: 'Kosten diesen Monat', value: usdText(u.totals.cost), kind: 'measured' },
-          { label: 'Hochrechnung Monat', value: usdText(u.estimate), kind: 'estimate' },
-          { label: 'Aufgaben heute', value: `${todayTasks.length}, davon ${todayTasks.filter((x) => ['error', 'partial', 'stopped'].includes(x.status)).length} mit Fehlern`, kind: 'measured' },
-          { label: 'Tokens diesen Monat', value: `${fmtTokens(u.totals.input + u.totals.cacheRead + u.totals.cacheWrite)} ein · ${fmtTokens(u.totals.output)} aus`, kind: 'measured' },
+          { label: t('Kosten diesen Monat'), value: usdText(u.totals.cost), kind: 'measured' },
+          { label: t('Hochrechnung Monat'), value: usdText(u.estimate), kind: 'estimate' },
+          { label: t('Aufgaben heute'), value: t('{n}, davon {e} mit Fehlern', { n: todayTasks.length, e: todayTasks.filter((x) => ['error', 'partial', 'stopped'].includes(x.status)).length }), kind: 'measured' },
+          { label: t('Tokens diesen Monat'), value: t('{in} ein · {out} aus', { in: fmtTokens(u.totals.input + u.totals.cacheRead + u.totals.cacheWrite), out: fmtTokens(u.totals.output) }), kind: 'measured' },
         ],
         limits,
-        limitsNote: b.limit ? null : 'Kein Ausgabenlimit gesetzt (Einstellungen → Kosten).',
-        running: isRunning() ? [{ name: 'Buddy', detail: 'arbeitet gerade an einer Aufgabe' }] : [],
+        limitsNote: b.limit ? null : t('Kein Ausgabenlimit gesetzt (Einstellungen → Kosten).'),
+        running: isRunning() ? [{ name: t('Buddy'), detail: t('arbeitet gerade an einer Aufgabe') }] : [],
         activity: tasks.slice(0, 8).map((x) => ({
           title: x.title,
           project: (x.models || []).map((m) => models.info(m).short).join(' → '),
@@ -455,16 +456,16 @@ function nextMonth() {
 // ---------- Laufende KI-Programme ----------
 
 const PROGRAMS = [
-  { name: 'Claude Code', test: (p) => (/^claude(\.exe)?$/i.test(p.name) && !/AnthropicClaude|\\Claude\\app|WindowsApps/i.test(p.path)) || /@anthropic-ai[\\/]claude-code|claude-code[\\/]cli/i.test(p.cmd) },
-  { name: 'Claude (App)', test: (p) => /^claude(\.exe)?$/i.test(p.name) && /AnthropicClaude|\\Claude\\app|WindowsApps/i.test(p.path) },
-  { name: 'Codex', test: (p) => /^codex(\.exe)?$/i.test(p.name) || /@openai[\\/]codex/i.test(p.cmd) },
-  { name: 'ChatGPT (App)', test: (p) => /^chatgpt(\.exe)?$/i.test(p.name) },
-  { name: 'Gemini CLI', test: (p) => /@google[\\/]gemini-cli/i.test(p.cmd) },
-  { name: 'GitHub Copilot CLI', test: (p) => /@github[\\/]copilot/i.test(p.cmd) },
-  { name: 'Cursor', test: (p) => /^cursor(\.exe)?$/i.test(p.name) },
-  { name: 'Windsurf', test: (p) => /^windsurf(\.exe)?$/i.test(p.name) },
-  { name: 'Ollama', test: (p) => /^ollama( app)?(\.exe)?$/i.test(p.name) },
-  { name: 'LM Studio', test: (p) => /^lm studio(\.exe)?$/i.test(p.name) },
+  { name: t('Claude Code'), test: (p) => (/^claude(\.exe)?$/i.test(p.name) && !/AnthropicClaude|\\Claude\\app|WindowsApps/i.test(p.path)) || /@anthropic-ai[\\/]claude-code|claude-code[\\/]cli/i.test(p.cmd) },
+  { name: t('Claude (App)'), test: (p) => /^claude(\.exe)?$/i.test(p.name) && /AnthropicClaude|\\Claude\\app|WindowsApps/i.test(p.path) },
+  { name: t('Codex'), test: (p) => /^codex(\.exe)?$/i.test(p.name) || /@openai[\\/]codex/i.test(p.cmd) },
+  { name: t('ChatGPT (App)'), test: (p) => /^chatgpt(\.exe)?$/i.test(p.name) },
+  { name: t('Gemini CLI'), test: (p) => /@google[\\/]gemini-cli/i.test(p.cmd) },
+  { name: t('GitHub Copilot CLI'), test: (p) => /@github[\\/]copilot/i.test(p.cmd) },
+  { name: t('Cursor'), test: (p) => /^cursor(\.exe)?$/i.test(p.name) },
+  { name: t('Windsurf'), test: (p) => /^windsurf(\.exe)?$/i.test(p.name) },
+  { name: t('Ollama'), test: (p) => /^ollama( app)?(\.exe)?$/i.test(p.name) },
+  { name: t('LM Studio'), test: (p) => /^lm studio(\.exe)?$/i.test(p.name) },
 ];
 
 function matchPrograms(list) {
@@ -485,14 +486,14 @@ function fmtTokens(n) {
   if (v < 1e6) return `${(v / 1000).toFixed(1)}k`;
   return `${(v / 1e6).toFixed(2)} Mio.`;
 }
-const tokensText = (r) => `${fmtTokens(r.input + r.cacheRead + r.cacheWrite)} ein · ${fmtTokens(r.output)} aus`;
+const tokensText = (r) => t('{in} ein · {out} aus', { in: fmtTokens(r.input + r.cacheRead + r.cacheWrite), out: fmtTokens(r.output) });
 function usdText(v) {
   const n = num(v);
   if (n === 0) return '$0.00';
   if (n < 0.01) return '< $0.01';
   return `$${n.toFixed(2)}`;
 }
-const timeText = (t) => new Date(t).toLocaleString('de-CH', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+const timeText = (ts) => new Date(ts).toLocaleString(localeOf(), { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 const durText = (ms) => (ms < 60000 ? `${Math.round(ms / 1000)} s` : ms < 3600e3 ? `${Math.round(ms / 60000)} min` : `${(ms / 3600e3).toFixed(1)} h`);
 
 function toText(report, only) {
@@ -502,19 +503,19 @@ function toText(report, only) {
     lines.push(`\n## ${p.name}${p.source ? ` (Quelle: ${p.source})` : ''}`);
     if (p.status === 'error') lines.push(`Fehler beim Abrufen: ${p.error}`);
     if (p.note) lines.push(p.note);
-    for (const m of p.metrics || []) lines.push(`- ${m.label}: ${m.value} [${m.kind === 'estimate' ? 'Schätzung' : m.kind === 'unavailable' ? 'nicht verfügbar' : 'gemessen'}]`);
+    for (const m of p.metrics || []) lines.push(`- ${m.label}: ${m.value} [${m.kind === 'estimate' ? t('Schätzung') : m.kind === 'unavailable' ? t('nicht verfügbar') : 'gemessen'}]`);
     for (const l of p.limits || []) {
-      lines.push(`- ${l.label}: ${l.usedPercent === null ? 'zurückgesetzt' : `${l.usedPercent} % genutzt, ${100 - l.usedPercent} % übrig`}${l.resetsAt ? `, setzt zurück ${timeText(l.resetsAt)}` : ''}${l.asOf ? ` (Stand ${timeText(l.asOf)})` : ''} [gemessen]`);
+      lines.push(`- ${l.label}: ${l.usedPercent === null ? t('zurückgesetzt') : `${l.usedPercent} % genutzt, ${100 - l.usedPercent} % übrig`}${l.resetsAt ? `, setzt zurück ${timeText(l.resetsAt)}` : ''}${l.asOf ? ` (Stand ${timeText(l.asOf)})` : ''} [gemessen]`);
     }
     if (p.limitsNote) lines.push(`- Limits: ${p.limitsNote} [nicht verfügbar]`);
     for (const a of (p.activity || []).slice(0, 6)) {
-      lines.push(`- ${a.running ? 'läuft: ' : ''}${timeText(a.end)} · ${a.project ? `${a.project}: ` : ''}${a.title} (${durText(a.durationMs)}${a.tools?.length ? `, Werkzeuge: ${a.tools.join(', ')}` : ''}${a.errors ? `, ${a.errors} Fehler` : ''})`);
+      lines.push(`- ${a.running ? t('läuft: ') : ''}${timeText(a.end)} · ${a.project ? `${a.project}: ` : ''}${a.title} (${durText(a.durationMs)}${a.tools?.length ? `, Werkzeuge: ${a.tools.join(', ')}` : ''}${a.errors ? `, ${a.errors} Fehler` : ''})`);
     }
   }
   if (!only || only === 'alle' || only === 'agents') {
     lines.push('\n## Laufende KI-Programme');
     if (report.programsError) lines.push(`Nicht prüfbar: ${report.programsError}`);
-    else if (!report.programs.length && !report.running.length) lines.push('Keine bekannten KI-Programme laufen gerade.');
+    else if (!report.programs.length && !report.running.length) lines.push(t('Keine bekannten KI-Programme laufen gerade.'));
     for (const r of report.programs) lines.push(`- ${r.name}`);
     for (const r of report.running) lines.push(`- aktive Sitzung: ${r.name} · ${r.detail}`);
   }
@@ -536,7 +537,7 @@ const TOOL_DEFINITIONS = [
   },
 ];
 
-function createAiUsage({ home, env = process.env, getSecret, fetchJson, getBuddyUsage, getBuddyHistory, isBuddyRunning = () => false, listProcesses, isEnabled = () => true, log = () => {}, now = () => Date.now() }) {
+function createAiUsage({ home, env = process.env, getSecret, fetchJson, getBuddyUsage, getBuddyHistory, isBuddyRunning = () => false, listProcesses, isEnabled = () => true, isPresent = () => true, log = () => {}, now = () => Date.now() }) {
   const cached = fileCache();
   const providers = [
     buddyProvider({ getBuddyUsage, getBuddyHistory, isRunning: isBuddyRunning }),
@@ -554,10 +555,12 @@ function createAiUsage({ home, env = process.env, getSecret, fetchJson, getBuddy
     if (!force && last && now() - last.updatedAt < CACHE_MS) return last;
     if (pending) return pending;
     pending = (async () => {
-      const results = await Promise.all(providers.map(async (p) => {
+      // Nur was auf dem PC installiert oder verbunden ist; der Rest erscheint gar nicht
+      const active = providers.filter((p) => p.id === 'buddy' || isPresent(p.id));
+      const results = await Promise.all(active.map(async (p) => {
         const startedAt = now();
         if (LOCAL.has(p.id) && !isEnabled()) {
-          return { id: p.id, name: p.name, status: 'off', note: 'Lesen lokaler Protokolle ist in den Einstellungen ausgeschaltet.', updatedAt: startedAt };
+          return { id: p.id, name: p.name, status: 'off', note: t('Lesen lokaler Protokolle ist in den Einstellungen ausgeschaltet.'), updatedAt: startedAt };
         }
         try {
           const r = await p.collect();
@@ -595,8 +598,8 @@ function createAiUsage({ home, env = process.env, getSecret, fetchJson, getBuddy
     collect,
     run,
     definitions: TOOL_DEFINITIONS,
-    names: new Set(TOOL_DEFINITIONS.map((t) => t.name)),
-    describe: () => 'KI-Nutzung abgefragt',
+    names: new Set(TOOL_DEFINITIONS.map((d) => d.name)),
+    describe: () => t('KI-Nutzung abgefragt'),
   };
 }
 

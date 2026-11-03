@@ -5,6 +5,8 @@
 // Hoch braucht immer eine ausdrückliche Zustimmung (oder ist ganz gesperrt).
 // Buddy selbst läuft ohne Administratorrechte und hat keinen freien Befehlszeilen-Zugang.
 
+const { t } = require('./i18n');
+
 const LEVELS = ['low', 'medium', 'high'];
 const LEVEL_LABEL = { low: 'Niedrig', medium: 'Mittel', high: 'Hoch' };
 
@@ -87,8 +89,8 @@ const TOOL_RISK = {
 };
 
 function scanText(text) {
-  const t = String(text || '');
-  for (const rule of TEXT_RULES) if (rule.test.test(t)) return rule;
+  const q = String(text || '');
+  for (const rule of TEXT_RULES) if (rule.test.test(q)) return rule;
   return null;
 }
 
@@ -105,12 +107,12 @@ function classify(call) {
     if (COMPUTER_LOW.has(name)) return result('low', 'screen');
     if (name === 'type') {
       const rule = scanText(input.text);
-      if (rule) return result(rule.level, rule.category, `Tippt: «${String(input.text).trim().slice(0, 120)}»`);
+      if (rule) return result(rule.level, rule.category, t('Tippt: «{text}»', { text: String(input.text).trim().slice(0, 120) }));
     }
     if (name === 'key' || name === 'hold_key') {
       const combo = normCombo(input.text);
       const rule = KEY_RULES.find((r) => r.test.test(combo));
-      if (rule) return result(rule.level, rule.category, `Drückt ${input.text}`);
+      if (rule) return result(rule.level, rule.category, t('Drückt {keys}', { keys: input.text }));
     }
     return result('medium', 'control');
   }
@@ -128,7 +130,7 @@ function classify(call) {
 }
 
 function result(level, category, summary = '', details = '') {
-  return { level, category, label: CATEGORY_LABEL[category] || category, levelLabel: LEVEL_LABEL[level], summary, details };
+  return { level, category, label: CATEGORY_LABEL[category] ? t(CATEGORY_LABEL[category]) : category, levelLabel: t(LEVEL_LABEL[level]), summary, details };
 }
 
 // Entscheidet anhand der Einstellungen und der für diese Aufgabe erteilten Freigaben.

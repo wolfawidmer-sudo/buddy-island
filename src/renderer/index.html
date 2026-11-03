@@ -87,7 +87,11 @@
               <button type="button" class="chip" data-send="Öffne den Editor und schreib eine Einkaufsliste für Spaghetti Bolognese hinein">Einkaufsliste im Editor schreiben</button>
               <button type="button" class="chip" data-send="Wie viel KI-Nutzung habe ich noch, und was haben meine KI-Tools heute gemacht?">KI-Nutzung heute</button>
             </div>
-            <button type="button" class="button primary" id="connectBtn" hidden>API-Key verbinden</button>
+            <div class="empty-actions">
+              <button type="button" class="button primary" id="localBtn" hidden>Lokale KI einrichten</button>
+              <button type="button" class="button" id="connectBtn" hidden>API-Key hinzufügen</button>
+            </div>
+            <div class="setup-progress" id="emptyProgress" hidden><i id="emptyBar"></i></div>
           </div>
 
           <form class="composer" id="composer" autocomplete="off">
@@ -113,6 +117,7 @@
             <div id="usageCards"></div>
             <h3 class="section">Verbindungen</h3>
             <div class="group">
+              <div id="adminAnthRows">
               <div class="row">
                 <span class="row-label two">Anthropic-Admin-Key<small>Nutzung und Kosten aller Claude-API-Keys deiner Organisation</small></span>
                 <span class="row-value" id="adminAnthStatus">–</span>
@@ -121,6 +126,8 @@
                 <input id="adminAnthInput" type="password" placeholder="sk-ant-admin…" spellcheck="false" autocomplete="off" aria-label="Anthropic-Admin-Key">
                 <button type="button" class="button small" id="adminAnthSave">Speichern</button>
               </div>
+              </div>
+              <div id="adminOaiRows">
               <div class="row">
                 <span class="row-label two">OpenAI-Admin-Key<small>Tokens und Kosten deiner OpenAI-API (nicht ChatGPT-Abo)</small></span>
                 <span class="row-value" id="adminOaiStatus">–</span>
@@ -129,7 +136,8 @@
                 <input id="adminOaiInput" type="password" placeholder="sk-admin-…" spellcheck="false" autocomplete="off" aria-label="OpenAI-Admin-Key">
                 <button type="button" class="button small" id="adminOaiSave">Speichern</button>
               </div>
-              <label class="row">
+              </div>
+              <label class="row" id="usageLocalUsageRow">
                 <span class="row-label two">Lokale Protokolle lesen<small>Claude Code und Codex auf diesem PC</small></span>
                 <span class="switch"><input type="checkbox" id="usageLocalToggle"><span></span></span>
               </label>
@@ -143,29 +151,79 @@
         <section class="view settings" id="settingsView" hidden>
           <div class="settings-scroll">
 
+            <nav class="cat-nav" aria-label="Bereiche">
+              <button type="button" data-cat="cat-provider">Provider</button>
+              <button type="button" data-cat="cat-tools">Tools</button>
+              <button type="button" data-cat="cat-av">Audio &amp; Visuals</button>
+              <button type="button" data-cat="cat-system">System</button>
+            </nav>
+
+            <h2 class="category" id="cat-provider">Provider &amp; API-Keys</h2>
             <h3 class="section">KI-Anbieter</h3>
             <div class="group">
               <label class="row">
                 <span class="row-label">Anbieter</span>
                 <select id="providerSelect" class="row-select"></select>
               </label>
-              <div class="row">
-                <span class="row-label">API-Key</span>
-                <span class="row-value" id="keyStatus">Nicht verbunden</span>
-                <button type="button" class="link danger" id="keyRemove" hidden>Entfernen</button>
+              <div id="keyBlock">
+                <div class="row">
+                  <span class="row-label">API-Key</span>
+                  <span class="row-value" id="keyStatus">Nicht verbunden</span>
+                  <button type="button" class="link danger" id="keyRemove" hidden>Entfernen</button>
+                </div>
+                <div class="row field-row">
+                  <input id="keyInput" type="password" placeholder="sk-ant-…" spellcheck="false" autocomplete="off" aria-label="API-Key">
+                  <button type="button" class="button primary small" id="keySave">Verbinden</button>
+                </div>
+                <details class="row disclosure" id="workspaceRow">
+                  <summary><span class="row-label">Workspace-ID</span><span class="row-value">nur falls nötig</span></summary>
+                  <input id="workspaceInput" type="text" placeholder="wrkspc_…" spellcheck="false" aria-label="Workspace-ID">
+                </details>
+                <button type="button" class="row row-button left danger" id="keyRevoke" hidden>Key widerrufen …</button>
               </div>
-              <div class="row field-row">
-                <input id="keyInput" type="password" placeholder="sk-ant-…" spellcheck="false" autocomplete="off" aria-label="API-Key">
-                <button type="button" class="button primary small" id="keySave">Verbinden</button>
+              <div id="localBlock" hidden>
+                <div class="row">
+                  <span class="row-label">Lokales Modell</span>
+                  <span class="row-value" id="hfStatus">–</span>
+                </div>
+                <div class="row field-row">
+                  <input id="hfModelInput" type="text" placeholder="Qwen/Qwen2.5-1.5B-Instruct oder Ordner" spellcheck="false" autocomplete="off" aria-label="Hugging-Face-Modell">
+                  <button type="button" class="button primary small" id="hfSave">Übernehmen</button>
+                </div>
+                <details class="row disclosure">
+                  <summary><span class="row-label">Hugging-Face-Token</span><span class="row-value">nur für geschützte Modelle</span></summary>
+                  <input id="hfTokenInput" type="password" placeholder="hf_…" spellcheck="false" autocomplete="off" aria-label="Hugging-Face-Token">
+                </details>
+                <button type="button" class="row row-button left" id="hfTest">Modell testen</button>
               </div>
-              <details class="row disclosure">
-                <summary><span class="row-label">Workspace-ID</span><span class="row-value">nur falls nötig</span></summary>
-                <input id="workspaceInput" type="text" placeholder="wrkspc_…" spellcheck="false" aria-label="Workspace-ID">
-              </details>
-              <button type="button" class="row row-button left danger" id="keyRevoke" hidden>Key widerrufen …</button>
             </div>
             <p class="footer" id="keyMsg"></p>
-            <p class="footer">Den Key erstellst du in der <a href="https://platform.claude.com/settings/keys">Claude Console</a>. Buddy speichert ihn mit der Windows-Verschlüsselung (DPAPI), schreibt ihn nie ins Protokoll und schickt ihn nur an api.anthropic.com. «Widerrufen» löscht ihn hier und öffnet die Console, wo du ihn endgültig sperrst.</p>
+            <p class="footer" id="keyFoot"></p>
+
+            <div id="setupBox" hidden>
+              <h3 class="section">Lokale KI einrichten</h3>
+              <div class="group">
+                <div class="row stacked">
+                  <span class="row-label" id="setupText">Für lokale Modelle braucht Buddy Python mit den Hugging-Face-Paketen «transformers» und «torch».</span>
+                  <div class="setup-progress" id="setupProgress" hidden><i id="setupBar"></i></div>
+                  <span class="setup-log" id="setupLog"></span>
+                </div>
+                <button type="button" class="row row-button left" id="setupBtn">Lokale KI einrichten</button>
+              </div>
+              <p class="footer">Lädt einmalig etwa 1 bis 3 GB (Python-Pakete und Modell). Danach läuft Buddy ohne Internet und ohne Kosten auf deinem PC.</p>
+            </div>
+
+            <div id="specsBox" hidden>
+              <h3 class="section">Empfehlung für deinen PC</h3>
+              <div class="group">
+                <div class="row stacked">
+                  <span class="row-label" id="specsLine">Prüfe die Hardware …</span>
+                  <span class="specs-sub" id="specsSummary"></span>
+                </div>
+                <div id="recoList"></div>
+              </div>
+              <p class="footer">Geschätzt aus Arbeitsspeicher, Prozessor und Grafikkarte. Modelle laufen in 16 Bit (etwa 2 GB pro Milliarde Parameter). Auf der Grafikkarte sind sie um ein Vielfaches schneller.</p>
+            </div>
 
             <h3 class="section">Modell und Denktiefe</h3>
             <div class="group">
@@ -248,6 +306,19 @@
             </div>
             <p class="footer">Buddy läuft ohne Administratorrechte, arbeitet mit Dateien nur in deinen Benutzerordnern, löscht nur in den Papierkorb und schaltet Windows-Sicherheitsfunktionen nie ab.</p>
 
+            <h3 class="section">PC-Steuerung</h3>
+            <div class="group">
+              <label class="row">
+                <span class="row-label">Buddy darf den PC steuern</span>
+                <span class="switch"><input type="checkbox" id="computerToggle"><span></span></span>
+              </label>
+              <label class="row">
+                <span class="row-label">Vor jeder Aufgabe fragen</span>
+                <span class="switch"><input type="checkbox" id="confirmToggle"><span></span></span>
+              </label>
+            </div>
+            <p class="footer">Buddy sieht dabei deinen Bildschirm und benutzt Maus und Tastatur. Stoppen kannst du jederzeit mit deinem Tastenkürzel oder dem Stopp-Knopf im Island.</p>
+
             <h3 class="section">Ausführungsverlauf</h3>
             <div class="group">
               <label class="row">
@@ -259,38 +330,44 @@
             </div>
             <p class="footer">Bleibt auf diesem PC. Gespeichert werden ein kurzer Titel, die Schritte, Modelle und Kosten, aber keine Antworten.</p>
 
-            <h3 class="section">PC-Steuerung</h3>
+            <h2 class="category" id="cat-tools">Erkannte System-Tools</h2>
+            <div class="group" id="toolsGroup">
+              <div id="toolsList"></div>
+              <label class="row" id="usageLocalRow" hidden>
+                <span class="row-label two">Protokolle für die KI-Nutzung lesen<small>Claude Code und Codex auf diesem PC</small></span>
+                <span class="switch"><input type="checkbox" id="usageLocalSettingsToggle"><span></span></span>
+              </label>
+              <button type="button" class="row row-button left" id="toolsRescan">Erneut suchen</button>
+            </div>
+            <p class="footer">Buddy zeigt nur Tools, die auf diesem PC installiert sind. Was fehlt, erscheint nirgends in Buddy.</p>
+
+            <h2 class="category" id="cat-av">Audio &amp; Visuals</h2>
+            <h3 class="section">Musik</h3>
             <div class="group">
               <label class="row">
-                <span class="row-label">Buddy darf den PC steuern</span>
-                <span class="switch"><input type="checkbox" id="computerToggle"><span></span></span>
+                <span class="row-label">Laufende Musik im Island zeigen</span>
+                <span class="switch"><input type="checkbox" id="mediaToggle"><span></span></span>
               </label>
               <label class="row">
-                <span class="row-label">Vor jeder Aufgabe fragen</span>
-                <span class="switch"><input type="checkbox" id="confirmToggle"><span></span></span>
+                <span class="row-label two">Musik-Visualizer<small>Balken folgen dem Systemton</small></span>
+                <span class="switch"><input type="checkbox" id="visualizerToggle"><span></span></span>
               </label>
+            </div>
+            <p class="footer">Funktioniert mit Spotify, YouTube im Browser und allen Apps, die Windows als Wiedergabe meldet. Für den Visualizer analysiert Buddy den Systemton direkt auf dem PC, nichts wird aufgenommen oder gespeichert.</p>
+
+            <h3 class="section">Darstellung und Ton</h3>
+            <div class="group">
               <label class="row">
                 <span class="row-label">Leuchtender Bildschirmrand</span>
                 <span class="switch"><input type="checkbox" id="glowToggle"><span></span></span>
               </label>
-            </div>
-            <p class="footer">Buddy sieht dabei deinen Bildschirm und benutzt Maus und Tastatur. Stoppen kannst du jederzeit mit deinem Tastenkürzel oder dem Stopp-Knopf im Island.</p>
-
-            <h3 class="section">Mitteilungen</h3>
-            <div class="group">
               <label class="row">
-                <span class="row-label">Windows-Mitteilungen im Island</span>
-                <span class="switch"><input type="checkbox" id="notifyToggle"><span></span></span>
+                <span class="row-label">Ton, wenn etwas fertig ist</span>
+                <span class="switch"><input type="checkbox" id="soundToggle"><span></span></span>
               </label>
-              <div class="row">
-                <span class="row-label">Status</span>
-                <span class="row-value" id="notifyStatus">–</span>
-              </div>
-              <button type="button" class="row row-button left" id="dndBtn">Windows-Banner unten rechts ausschalten</button>
             </div>
-            <p class="footer">Der Knopf öffnet direkt die Windows-Einstellungen «Benachrichtigungen». Schalte dort «Nicht stören» ein (dann kommt kein Banner mehr) oder bei einzelnen Apps «Benachrichtigungsbanner anzeigen» aus. Buddy zeigt die Mitteilungen trotzdem weiter im Island. Die Inhalte bleiben auf deinem PC.</p>
 
-            <h3 class="section">Sprache</h3>
+            <h3 class="section">Stimme</h3>
             <div class="group">
               <label class="row">
                 <span class="row-label">Auf «Hey Buddy» hören</span>
@@ -307,14 +384,54 @@
             </div>
             <p class="footer">Sprich über das Mikrofon im Island, dein Tastenkürzel oder mit «Hey Buddy». Das Zuhören auf «Hey Buddy» passiert nur auf deinem PC und braucht etwas Rechenleistung, deshalb ist es standardmässig aus.</p>
 
-            <h3 class="section">Musik</h3>
+            <h3 class="section">Buddy</h3>
             <div class="group">
               <label class="row">
-                <span class="row-label">Laufende Musik im Island zeigen</span>
-                <span class="switch"><input type="checkbox" id="mediaToggle"><span></span></span>
+                <span class="row-label">Name</span>
+                <input id="nameInput" class="row-input" type="text" maxlength="20">
+              </label>
+              <div class="row stacked">
+                <span class="row-label">Akzentfarbe</span>
+                <div class="swatches" id="swatches">
+                  <button type="button" data-color="#F2F2F7" style="--c:#F2F2F7" aria-label="Weiss" title="Weiss"></button>
+                  <button type="button" data-color="#8E8E93" style="--c:#8E8E93" aria-label="Grau" title="Grau"></button>
+                  <button type="button" data-color="#0A84FF" style="--c:#0A84FF" aria-label="Blau" title="Blau"></button>
+                  <button type="button" data-color="#30D158" style="--c:#30D158" aria-label="Grün" title="Grün"></button>
+                  <button type="button" data-color="#FF9F0A" style="--c:#FF9F0A" aria-label="Orange" title="Orange"></button>
+                  <button type="button" data-color="#FF375F" style="--c:#FF375F" aria-label="Pink" title="Pink"></button>
+                  <button type="button" data-color="#BF5AF2" style="--c:#BF5AF2" aria-label="Lila" title="Lila"></button>
+                  <label class="custom-color" title="Eigene Farbe"><input type="color" id="customColor" aria-label="Eigene Farbe"></label>
+                </div>
+              </div>
+              <div class="row stacked">
+                <span class="row-label">Persönlichkeit</span>
+                <textarea id="promptInput" rows="4" aria-label="Persönlichkeit"></textarea>
+              </div>
+            </div>
+
+            <h2 class="category" id="cat-system">System &amp; Sprache</h2>
+            <h3 class="section">Sprache der Oberfläche</h3>
+            <div class="group">
+              <label class="row">
+                <span class="row-label">Sprache</span>
+                <select id="langSelect" class="row-select"></select>
               </label>
             </div>
-            <p class="footer">Funktioniert mit Spotify, YouTube im Browser und allen Apps, die Windows als Wiedergabe meldet.</p>
+            <p class="footer" id="langFoot">Buddy übernimmt automatisch die Sprache von Windows. Antworten kommen in derselben Sprache.</p>
+
+            <h3 class="section">Mitteilungen</h3>
+            <div class="group">
+              <label class="row">
+                <span class="row-label">Windows-Mitteilungen im Island</span>
+                <span class="switch"><input type="checkbox" id="notifyToggle"><span></span></span>
+              </label>
+              <div class="row">
+                <span class="row-label">Status</span>
+                <span class="row-value" id="notifyStatus">–</span>
+              </div>
+              <button type="button" class="row row-button left" id="dndBtn">Windows-Banner unten rechts ausschalten</button>
+            </div>
+            <p class="footer">Der Knopf öffnet direkt die Windows-Einstellungen «Benachrichtigungen». Schalte dort «Nicht stören» ein (dann kommt kein Banner mehr) oder bei einzelnen Apps «Benachrichtigungsbanner anzeigen» aus. Buddy zeigt die Mitteilungen trotzdem weiter im Island. Die Inhalte bleiben auf deinem PC.</p>
 
             <h3 class="section">Kalender</h3>
             <div class="group">
@@ -341,31 +458,6 @@
             </div>
             <p class="footer" id="calMsg"></p>
             <p class="footer">Google Kalender: Einstellungen → dein Kalender → «Privatadresse im iCal-Format». Outlook: Einstellungen → Kalender → Freigegebene Kalender → «Kalender veröffentlichen» → ICS-Link. Der Link wird verschlüsselt gespeichert.</p>
-
-            <h3 class="section">Buddy</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label">Name</span>
-                <input id="nameInput" class="row-input" type="text" maxlength="20">
-              </label>
-              <div class="row stacked">
-                <span class="row-label">Akzentfarbe</span>
-                <div class="swatches" id="swatches">
-                  <button type="button" data-color="#F2F2F7" style="--c:#F2F2F7" aria-label="Weiss" title="Weiss"></button>
-                  <button type="button" data-color="#8E8E93" style="--c:#8E8E93" aria-label="Grau" title="Grau"></button>
-                  <button type="button" data-color="#0A84FF" style="--c:#0A84FF" aria-label="Blau" title="Blau"></button>
-                  <button type="button" data-color="#30D158" style="--c:#30D158" aria-label="Grün" title="Grün"></button>
-                  <button type="button" data-color="#FF9F0A" style="--c:#FF9F0A" aria-label="Orange" title="Orange"></button>
-                  <button type="button" data-color="#FF375F" style="--c:#FF375F" aria-label="Pink" title="Pink"></button>
-                  <button type="button" data-color="#BF5AF2" style="--c:#BF5AF2" aria-label="Lila" title="Lila"></button>
-                  <label class="custom-color" title="Eigene Farbe"><input type="color" id="customColor" aria-label="Eigene Farbe"></label>
-                </div>
-              </div>
-              <div class="row stacked">
-                <span class="row-label">Persönlichkeit</span>
-                <textarea id="promptInput" rows="4" aria-label="Persönlichkeit"></textarea>
-              </div>
-            </div>
 
             <h3 class="section">Tastenkürzel</h3>
             <div class="group" id="shortcutGroup">
@@ -411,10 +503,6 @@
                 <select id="displaySelect" class="row-select"></select>
               </label>
               <label class="row">
-                <span class="row-label">Ton, wenn etwas fertig ist</span>
-                <span class="switch"><input type="checkbox" id="soundToggle"><span></span></span>
-              </label>
-              <label class="row">
                 <span class="row-label">Mit Windows starten</span>
                 <span class="switch"><input type="checkbox" id="autostartToggle"><span></span></span>
               </label>
@@ -441,10 +529,10 @@
                 <summary><span class="row-label">Datenschutz</span></summary>
                 <div class="privacy">
                   <p>Buddy läuft auf deinem PC und hat keine eigenen Server. Es gibt keine Werbung und keine Statistiken.</p>
-                  <p><b>An Claude (Anthropic)</b> geht nur, was du Buddy schreibst oder sagst, seine Antworten und, nur bei der PC-Steuerung, Bildschirmfotos. Das läuft über deinen eigenen API-Key.</p>
+                  <p><b>An den gewählten KI-Anbieter</b> (Claude, OpenAI, Grok oder Gemini) geht nur, was du Buddy schreibst oder sagst, seine Antworten und, nur bei der PC-Steuerung mit Claude, Bildschirmfotos. Das läuft über deinen eigenen API-Key. <b>Lokale Modelle</b> laufen komplett auf deinem PC.</p>
                   <p><b>Nur auf deinem PC</b> bleiben: API-Key und Kalender-Link (verschlüsselt), Chatverlauf, Mitteilungen, Musik-Infos, Kalender-Termine und das Protokoll. Mitteilungen und Termine sieht Claude nur, wenn du danach fragst.</p>
                   <p><b>Sprache:</b> «Hey Buddy» wird auf dem PC erkannt. Fürs Diktat nutzt Buddy die Spracherkennung von Windows; ist dort die Online-Erkennung an, verarbeitet Microsoft das Gesprochene.</p>
-                  <p><b>Updates</b> lädt Buddy von GitHub, sobald das Repo öffentlich ist.</p>
+                  <p><b>Updates</b> lädt Buddy von GitHub und installiert sie nur mit gültiger Signatur.</p>
                 </div>
               </details>
             </div>

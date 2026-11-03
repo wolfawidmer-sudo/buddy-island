@@ -3,6 +3,10 @@
 // riskanten Aktionen um Erlaubnis. Alle Modelle teilen denselben Verlauf.
 
 const crypto = require('crypto');
+const { t, language } = require('./i18n');
+
+// Anfragen, die den Bildschirm brauchen (für die Rückmeldung bei Modellen ohne Bildverarbeitung)
+const SCREEN_REQUEST = /\b(bildschirm|screenshot|bildschirmfoto|klick\w*|steuer\w*|maus|screen|click|écran|cliqu\w*|schermo|clicc\w*)\b/i;
 const models = require('./models');
 const permissions = require('./permissions');
 const { tierForStep, budgetCap, availableTier, STEP_EFFORT } = require('./router');
@@ -94,6 +98,25 @@ Arbeitsweise als Agent:
 - Ist die Aufgabe für dich zu schwer oder scheiterst du wiederholt, rufe escalate auf.
 - Schliesse mit einer kurzen Zusammenfassung, was du gemacht und geprüft hast.`;
 
+// Gleiche Regeln auf Englisch für alle anderen Systemsprachen (Modelle folgen englischen
+// Anweisungen am zuverlässigsten; die Antwortsprache steht im Systemprompt)
+const AGENT_RULES_EN = `
+
+How to work as an agent:
+- Multi-step tasks: first create a short plan with update_plan (2 to 8 steps, exactly one in_progress) and update it whenever a step is done or something changes. difficulty: simple for easy parts such as the final summary, normal for the usual, hard only for genuinely difficult parts.
+- Observe the result after every action and verify important steps (screenshot, file list, tool feedback). Never claim something is done without having verified it. If something did not work, say so honestly and give the reason.
+- If a step fails: think about the cause, try a different approach and adjust the plan. Do not repeat an action that already had no effect.
+- For files use the file tools (list_files, find_duplicates, create_folder, move_files, delete_files) instead of mouse and keyboard. They only work in the user folders, and delete_files moves to the recycle bin.
+- Risk: medium = moving files, changing app settings, installing normal software. High = deleting files, admin commands, system or security settings. For such things via screen control, call request_permission first.
+- Never disable or bypass Windows security features (antivirus, firewall, User Account Control, SmartScreen), not even indirectly. If it is really necessary, explain it and ask the user to do it themselves.
+- If the user declines something, do not try a workaround.
+- If the task is too hard for you or you fail repeatedly, call escalate.
+- Finish with a short summary of what you did and verified.`;
+
+function AGENT_RULES_TEXT() {
+  return language() === 'de' ? AGENT_RULES : AGENT_RULES_EN;
+}
+
 const STATUS_LABEL = { pending: 'offen', in_progress: 'läuft', done: 'erledigt', failed: 'fehlgeschlagen', skipped: 'übersprungen' };
 
 const abortError = () => Object.assign(new Error('abgebrochen'), { name: 'AbortError' });
@@ -113,8 +136,8 @@ function lastUserText(messages) {
     const m = messages[i];
     if (m.role !== 'user') continue;
     if (typeof m.content === 'string') return m.content;
-    const t = (m.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-    if (t) return t;
+    const txt = (m.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+    if (txt) return txt;
   }
   return '';
 }
@@ -130,14 +153,14 @@ function validateInput(def, input) {
   for (const [k, v] of Object.entries(input)) {
     const prop = schema.properties?.[k];
     if (!prop || v === undefined || v === null) continue;
-    const t = prop.type;
-    const ok = !t
-      || (t === 'string' && typeof v === 'string')
-      || ((t === 'number' || t === 'integer') && typeof v === 'number' && Number.isFinite(v))
-      || (t === 'boolean' && typeof v === 'boolean')
-      || (t === 'array' && Array.isArray(v))
-      || (t === 'object' && typeof v === 'object');
-    if (!ok) return `Feld «${k}» hat den falschen Typ (erwartet: ${t}).`;
+    const ty = prop.type;
+    const ok = !ty
+      || (ty === 'string' && typeof v === 'string')
+      || ((ty === 'number' || ty === 'integer') && typeof v === 'number' && Number.isFinite(v))
+      || (ty === 'boolean' && typeof v === 'boolean')
+      || (ty === 'array' && Array.isArray(v))
+      || (ty === 'object' && typeof v === 'object');
+    if (!ok) return `Feld «${k}» hat den falschen Typ (erwartet: ${ty}).`;
     if (prop.enum && !prop.enum.includes(v)) return `Feld «${k}» muss einer dieser Werte sein: ${prop.enum.join(', ')}.`;
   }
   return null;
@@ -169,12 +192,15 @@ function createAgent(deps) {
   const {
     claude, router, usage, history, getKey, getSettings, getTools, getComputer, getFiles, isComputerAvailable,
     getAvailableModels, getGame, systemPrompt, askControl, askPermission, onControl, onAuthError, log = () => {},
+    getProvider = () => 'anthropic',
   } = deps;
+  // Aktiver Anbieter: Client über die Registry, in Tests direkt `claude`
+  const clientFor = (providerId) => (deps.getClient ? deps.getClient(providerId) : claude);
 
   async function run({ id, messages, meta = {}, send, signal }) {
     const apiKey = getKey();
     if (!apiKey) {
-      send('chat:error', { id, message: 'Noch kein API-Key verbunden. Öffne die Einstellungen.', code: 'key' });
+      send('chat:error', { id, message: t('Noch kein API-Key verbunden. Öffne die Einstellungen.'), code: 'key' });
       return;
     }
     const settings = getSettings();
@@ -183,17 +209,19 @@ function createAgent(deps) {
     const limit = Number(settings.monthlyLimit) || 0;
     let budget = usage.budget(limit);
     if (budget.level === 'blocked') {
-      send('chat:error', { id, code: 'budget', message: `Dein Ausgabenlimit von $${limit.toFixed(2)} für diesen Monat ist erreicht. Du kannst es in den Einstellungen unter «Kosten» anpassen.` });
+      send('chat:error', { id, code: 'budget', message: t('Dein Ausgabenlimit von ${limit} für diesen Monat ist erreicht. Du kannst es in den Einstellungen unter «Kosten» anpassen.', { limit: limit.toFixed(2) }) });
       return;
     }
 
     const tools = getTools();
     const computer = getComputer();
     const files = getFiles();
+    const providerId = getProvider();
+    const client = clientFor(providerId);
     let withComputer = Boolean(isComputerAvailable());
     const conversation = messages.map((m) => ({ role: m.role, content: m.content }));
     const userText = lastUserText(conversation);
-    const tiers = models.resolveTiers(await getAvailableModels().catch(() => []));
+    const tiers = models.resolveTiers(await getAvailableModels(providerId).catch(() => []), providerId);
 
     const st = {
       round: 0,
@@ -266,7 +294,7 @@ function createAgent(deps) {
       if (active && active.difficulty) {
         tier = tierForStep(active.difficulty, { decision, budget, tiers });
         if (!(settings.effort && settings.effort !== 'auto')) effort = STEP_EFFORT[active.difficulty] || effort;
-        why = `Schritt «${active.title}»`;
+        why = t('Schritt «{title}»', { title: active.title });
       }
       // Nach einer Eskalation nicht mehr darunter, ausser für einen leichten Abschluss-Schritt
       const others = (st.plan || []).filter((s) => s !== active);
@@ -381,6 +409,9 @@ function createAgent(deps) {
         }
       }
 
+      if (isComputer && (call.name === 'screenshot' || call.name === 'zoom') && !models.capabilities(st.model).vision) {
+        return fail(t('Dieses Modell kann keine Bildschirmfotos ansehen. Sag dem Nutzer, dass er für die PC-Steuerung ein Modell mit Bildverarbeitung (z. B. Claude) wählen muss.'), { counts: false });
+      }
       if (isComputer && getGame().active) {
         return fail(`Gerade läuft ein Spiel (${getGame().name}). Im Spielmodus steuert Buddy den PC nicht. Sag dem Nutzer, dass du das nach dem Spiel machen kannst.`, { counts: false });
       }
@@ -411,7 +442,7 @@ function createAgent(deps) {
         st.grants.recent = null;
       }
       if (verdict === 'ask-control') {
-        send('agent:action', { id, label: 'fragt um Erlaubnis' });
+        send('agent:action', { id, label: t('fragt um Erlaubnis') });
         const allowed = await withTimeout(askControl(id, send), TIMEOUTS.permission, 'Die Frage nach der Erlaubnis').catch(() => false);
         if (signal.aborted) throw abortError();
         st.grants.control = Boolean(allowed);
@@ -448,7 +479,7 @@ function createAgent(deps) {
           summary: risk.summary || (call.name === 'request_permission' ? String(call.input.action || '') : permissionLabel(call)),
           details: risk.details || '',
         };
-        send('agent:action', { id, label: 'fragt um Erlaubnis' });
+        send('agent:action', { id, label: t('fragt um Erlaubnis') });
         const allowed = await withTimeout(askPermission(id, request, send), TIMEOUTS.permission, 'Die Frage nach der Erlaubnis').catch(() => false);
         if (signal.aborted) throw abortError();
         task?.step('permission', `${request.label}: ${request.summary}`, allowed ? 'ok' : 'denied', { risk: risk.level });
@@ -527,7 +558,7 @@ function createAgent(deps) {
         output = { error: true, text: err.message || String(err) };
       }
       const label = isFile ? files.describe(call.name, call.input) : tools.describe(call.name, call.input);
-      send('chat:tool', { id, name: call.name, label: output.error ? `${label} · Fehler` : label, error: Boolean(output.error) });
+      send('chat:tool', { id, name: call.name, label: output.error ? `${label} · ${t('Fehler')}` : label, error: Boolean(output.error) });
       task?.step(isFile ? 'file' : 'tool', output.error ? `${label}: ${String(output.text).slice(0, 100)}` : label, output.error ? 'error' : 'ok');
       if (output.error) st.consecutiveErrors += 1;
       else {
@@ -556,11 +587,11 @@ function createAgent(deps) {
       };
       for (;;) {
         try {
-          const result = await claude.streamMessage({
+          const result = await client.streamMessage({
             apiKey, workspaceId: settings.workspaceId, model, system, messages: conversation, tools: toolList, maxTokens, effort, signal, onText,
             onRetry: (n, err) => {
               log(`API-Wiederholung ${n} (${err.status || ''} ${err.type || err.message})`);
-              send('agent:action', { id, label: `Verbindung, Versuch ${n + 1}` });
+              send('agent:action', { id, label: t('Verbindung, Versuch {n}', { n: n + 1 }) });
               task?.step('retry', `API-Wiederholung ${n}: ${err.message}`, 'warn');
             },
           });
@@ -586,10 +617,19 @@ function createAgent(deps) {
     // ---------- Ablauf ----------
 
     try {
-      send('agent:action', { id, label: 'wählt Modell' });
+      send('agent:action', { id, label: t('wählt Modell') });
       decision = await router.route({
-        text: userText, messages: conversation, withComputer, tiers, budget, settings, meta, apiKey, signal, task: id,
+        text: userText, messages: conversation, withComputer, tiers, budget, settings, meta, apiKey, signal, task: id, client, providerId,
       });
+      // Fähigkeiten des gewählten Modells: ohne Computer Use keine Bildschirmsteuerung,
+      // ohne Function Calling ein reiner Chat
+      const caps = models.capabilities(decision.model);
+      if (withComputer && !caps.computerUse) withComputer = false;
+      const toolsAllowed = caps.tools;
+      if (!caps.computerUse && SCREEN_REQUEST.test(userText) && isComputerAvailable()) {
+        const why = caps.vision ? t('Die PC-Steuerung mit Maus und Tastatur gibt es nur mit Claude.') : t('Dieses Modell kann keine Bildschirmfotos ansehen.');
+        send('chat:notice', { id, text: t('{why} Wechsle in den Einstellungen zu Anthropic Claude, damit Buddy deinen Bildschirm sehen und bedienen kann.', { why }) });
+      }
       task = history.start({ id, title: userText, route: { model: decision.model, effort: decision.effort, reason: decision.reason, source: decision.source } });
       if (decision.routerCost) {
         st.cost += decision.routerCost;
@@ -604,8 +644,9 @@ function createAgent(deps) {
         last.content = typeof last.content === 'string' ? [{ type: 'text', text: last.content }, hint] : [...last.content, hint];
       }
 
-      const system = systemPrompt(withComputer) + AGENT_RULES;
+      const system = systemPrompt(withComputer, { tools: toolsAllowed, provider: providerId, model: decision.model }) + (toolsAllowed ? AGENT_RULES_TEXT() : '');
       const baseTools = () => {
+        if (!toolsAllowed) return [];
         const list = [...tools.definitions, ...(files?.definitions || []), ...AGENT_TOOLS];
         if (withComputer) list.push({ type: 'computer_toolset_20260801' });
         return list;
@@ -619,7 +660,7 @@ function createAgent(deps) {
           endControl();
           task.step('budget', 'Ausgabenlimit erreicht', 'error');
           task.finish('stopped', { error: 'Ausgabenlimit erreicht' });
-          send('chat:notice', { id, text: `Ausgabenlimit von $${limit.toFixed(2)} erreicht. Buddy hat die Aufgabe angehalten.` });
+          send('chat:notice', { id, text: t('Ausgabenlimit von ${limit} erreicht. Buddy hat die Aufgabe angehalten.', { limit: limit.toFixed(2) }) });
           send('chat:done', { id, stopReason: 'budget', usage: summaryUsage() });
           return;
         }
@@ -667,13 +708,13 @@ function createAgent(deps) {
           // Überlastet trotz Wiederholungen: einmal auf ein anderes Modell ausweichen
           if (auto && (err?.status === 529 || err?.type === 'overloaded_error') && !st.overloadFallback) {
             st.overloadFallback = true;
-            const alt = ['sonnet', 'haiku', 'opus'].find((t) => tiers[t] && tiers[t] !== st.model && models.tierRank(t) <= models.tierRank(budgetCap(usage.budget(limit))));
+            const alt = ['sonnet', 'haiku', 'opus'].find((k) => tiers[k] && tiers[k] !== st.model && models.tierRank(k) <= models.tierRank(budgetCap(usage.budget(limit))));
             if (alt) {
               task.step('model', `${models.info(st.model).short} überlastet, weiter mit ${models.info(tiers[alt]).short}`, 'warn');
               st.model = tiers[alt];
               st.tier = alt;
               st.effort = models.supportedEffort(st.model, st.effort);
-              send('agent:route', routeInfo({ switched: true, why: 'Ausweichmodell wegen Überlastung' }));
+              send('agent:route', routeInfo({ switched: true, why: t('Ausweichmodell wegen Überlastung') }));
               call = await callModel({ model: st.model, effort: st.effort, system, toolList, maxTokens, holdText });
             } else throw err;
           } else throw err;
@@ -701,7 +742,7 @@ function createAgent(deps) {
               conversation.push({ role: 'assistant', content: result.content });
               conversation.push({ role: 'user', content: [{ type: 'text', text: '[Buddy-Prüfung: Nach deiner letzten Aktion hast du das Ergebnis noch nicht geprüft. Mach ein Bildschirmfoto und prüfe, ob es geklappt hat, bevor du dem Nutzer etwas als erledigt meldest. Hat es nicht geklappt, sag das ehrlich.]' }] });
               task.step('verify', 'Ergebnis noch nicht geprüft, Buddy prüft nach', 'warn');
-              send('agent:action', { id, label: 'prüft das Ergebnis' });
+              send('agent:action', { id, label: t('prüft das Ergebnis') });
               st.round += 1;
               continue;
             }
@@ -740,13 +781,13 @@ function createAgent(deps) {
           if (!st.unverified || !withComputer) call.flush();
           else if (call.pending) {
             // Unbestätigte Erfolgsmeldung nicht als Tatsache zeigen
-            send('chat:delta', { id, text: `${st.wroteText ? '\n\n' : ''}_(Nicht geprüft)_ ${call.pending.trim()}` });
+            send('chat:delta', { id, text: `${st.wroteText ? '\n\n' : ''}_(${t('Nicht geprüft')})_ ${call.pending.trim()}` });
           }
           endControl();
           const verified = !(st.unverified && withComputer);
           const failedSteps = (st.plan || []).filter((s) => s.status === 'failed').length;
           task.finish(lastRound && wantsTools ? 'limit' : failedSteps ? 'partial' : 'done', { verified });
-          if (lastRound && wantsTools) send('chat:notice', { id, text: 'Buddy hat das Rundenlimit erreicht und angehalten.' });
+          if (lastRound && wantsTools) send('chat:notice', { id, text: t('Buddy hat das Rundenlimit erreicht und angehalten.') });
           send('chat:done', { id, stopReason: result.stopReason, usage: summaryUsage(), verified });
           return;
         }

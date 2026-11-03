@@ -11,6 +11,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { t } = require('./i18n');
 
 const SHOT_LONG_EDGE = 1366; // gute Balance aus Lesbarkeit, Tempo und Kosten
 const HELPER_IDLE_MS = 2 * 60 * 1000;
@@ -169,7 +170,7 @@ class InputHelper {
   start() {
     if (this.fake) return Promise.resolve();
     if (this.ready) return this.ready;
-    if (process.platform !== 'win32') return Promise.reject(new Error('PC-Steuerung gibt es nur unter Windows.'));
+    if (process.platform !== 'win32') return Promise.reject(new Error(t('PC-Steuerung gibt es nur unter Windows.')));
 
     const file = path.join(this.scriptDir, 'buddy-input.ps1');
     fs.mkdirSync(this.scriptDir, { recursive: true });
@@ -216,7 +217,7 @@ class InputHelper {
       let errText = '';
       proc.stderr.setEncoding('utf8');
       proc.stderr.on('data', (d) => { errText += d; });
-      setTimeout(() => { if (!started) fail(new Error('Der Steuerungs-Helfer startet nicht. ' + errText.slice(0, 200))); }, 20000);
+      setTimeout(() => { if (!started) fail(new Error(t('Der Steuerungs-Helfer startet nicht.') + ' ' + errText.slice(0, 200))); }, 20000);
     });
     return this.ready;
   }
@@ -231,7 +232,7 @@ class InputHelper {
     return new Promise((resolve, reject) => {
       // Hängt der Helfer, nicht ewig warten: neu starten, sobald er wieder gebraucht wird
       const timer = setTimeout(() => {
-        const err = new Error('Der Steuerungs-Helfer reagiert nicht. Er wird neu gestartet.');
+        const err = new Error(t('Der Steuerungs-Helfer reagiert nicht. Er wird neu gestartet.'));
         err.timeout = true;
         this.stop();
         reject(err);
@@ -245,7 +246,7 @@ class InputHelper {
       } catch (err) {
         clearTimeout(timer);
         this.stop();
-        reject(new Error('Der Steuerungs-Helfer ist nicht erreichbar.'));
+        reject(new Error(t('Der Steuerungs-Helfer ist nicht erreichbar.')));
       }
     });
   }
@@ -381,7 +382,7 @@ function createComputer({ scriptDir, getDisplay, onPointer, beforeInput, afterIn
       const { d } = display();
       const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
       const source = sources.find((s) => s.display_id === String(d.id)) || sources[0];
-      if (!source || source.thumbnail.isEmpty()) throw new Error('Bildschirmfoto fehlgeschlagen.');
+      if (!source || source.thumbnail.isEmpty()) throw new Error(t('Bildschirmfoto fehlgeschlagen.'));
       return source.thumbnail;
     } finally {
       await afterCapture?.();
@@ -562,19 +563,19 @@ function createComputer({ scriptDir, getDisplay, onPointer, beforeInput, afterIn
 
   function describe(name, args = {}) {
     switch (name) {
-      case 'screenshot': return 'schaut hin';
-      case 'zoom': return 'schaut genauer hin';
-      case 'type': return 'tippt';
-      case 'key': return `drückt ${String(args.text || '').replace(/\+/g, ' + ')}`;
-      case 'hold_key': return 'hält eine Taste';
-      case 'scroll': return 'scrollt';
-      case 'wait': return 'wartet';
-      case 'mouse_move': return 'bewegt die Maus';
-      case 'left_click_drag': return 'zieht';
-      case 'cursor_position': return 'sucht die Maus';
-      case 'right_click': return 'Rechtsklick';
-      case 'double_click': return 'Doppelklick';
-      default: return 'klickt';
+      case 'screenshot': return t('schaut hin');
+      case 'zoom': return t('schaut genauer hin');
+      case 'type': return t('tippt');
+      case 'key': return t('drückt {keys}', { keys: String(args.text || '').replace(/\+/g, ' + ') });
+      case 'hold_key': return t('hält eine Taste');
+      case 'scroll': return t('scrollt');
+      case 'wait': return t('wartet');
+      case 'mouse_move': return t('bewegt die Maus');
+      case 'left_click_drag': return t('zieht');
+      case 'cursor_position': return t('sucht die Maus');
+      case 'right_click': return t('Rechtsklick');
+      case 'double_click': return t('Doppelklick');
+      default: return t('klickt');
     }
   }
 

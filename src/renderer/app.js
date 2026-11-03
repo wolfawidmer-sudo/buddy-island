@@ -1,5 +1,33 @@
 (function () {
   const api = window.buddy;
+
+  // ---------- Sprache (Wörterbuch kommt beim Start synchron aus dem Hauptprozess) ----------
+  const I18N = api.i18n || { lang: 'de', dict: {}, locale: 'de-CH' };
+  function t(text, vars) {
+    let out = (I18N.lang !== 'de' && I18N.dict[text]) || text;
+    if (vars) out = String(out).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
+    return out;
+  }
+  // Feste Texte im HTML übersetzen (Textknoten und Attribute)
+  function translateDom(root) {
+    if (I18N.lang === 'de') return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const n of nodes) {
+      const raw = n.nodeValue;
+      const key = raw.replace(/\s+/g, ' ').trim();
+      if (key && I18N.dict[key]) n.nodeValue = raw.replace(raw.trim(), I18N.dict[key]);
+    }
+    for (const node of root.querySelectorAll('[placeholder],[title],[aria-label]')) {
+      for (const a of ['placeholder', 'title', 'aria-label']) {
+        const v = node.getAttribute(a);
+        if (v && I18N.dict[v]) node.setAttribute(a, I18N.dict[v]);
+      }
+    }
+  }
+  document.documentElement.lang = I18N.lang;
+  translateDom(document.body);
   const $ = (id) => document.getElementById(id);
 
   const el = {
@@ -105,6 +133,34 @@
     historyClear: $('historyClear'),
     rollbackBtn: $('rollbackBtn'),
     pillProgress: $('pillProgress'),
+    localBtn: $('localBtn'),
+    emptyProgress: $('emptyProgress'),
+    emptyBar: $('emptyBar'),
+    keyBlock: $('keyBlock'),
+    localBlock: $('localBlock'),
+    workspaceRow: $('workspaceRow'),
+    keyFoot: $('keyFoot'),
+    hfStatus: $('hfStatus'),
+    hfModelInput: $('hfModelInput'),
+    hfTokenInput: $('hfTokenInput'),
+    hfSave: $('hfSave'),
+    hfTest: $('hfTest'),
+    setupBox: $('setupBox'),
+    setupText: $('setupText'),
+    setupProgress: $('setupProgress'),
+    setupBar: $('setupBar'),
+    setupLog: $('setupLog'),
+    setupBtn: $('setupBtn'),
+    specsBox: $('specsBox'),
+    specsLine: $('specsLine'),
+    specsSummary: $('specsSummary'),
+    recoList: $('recoList'),
+    toolsList: $('toolsList'),
+    usageLocalRow: $('usageLocalRow'),
+    usageLocalSettingsToggle: $('usageLocalSettingsToggle'),
+    toolsRescan: $('toolsRescan'),
+    langSelect: $('langSelect'),
+    visualizerToggle: $('visualizerToggle'),
     bannerHint: $('bannerHint'),
     bannerOpen: $('bannerOpen'),
     bannerDismiss: $('bannerDismiss'),
@@ -142,6 +198,9 @@
     settings: null,
     models: [],
     stats: null, // { usage, history }
+    local: null, // Status des lokalen Modells { state, model, device, error, percent }
+    setup: null, // Einrichtung der lokalen KI { state, text, percent, log, error }
+    specs: null, // Hardware und Empfehlungen
     history: loadHistory(), // [{ role, content, tools? }]
     stream: null, // { id, text, node, raf, tools }
     status: 'idle', // idle | busy | done | error
@@ -192,7 +251,7 @@
       .replace(/^\w/, (c) => c.toUpperCase());
   }
 
-  const EFFORT_LABEL = { low: 'Schnell', medium: 'Normal', high: 'Gründlich', xhigh: 'Sehr gründlich', max: 'Maximal' };
+  const EFFORT_LABEL = { low: t('Schnell'), medium: t('Normal'), high: t('Gründlich'), xhigh: t('Sehr gründlich'), max: t('Maximal') };
 
   function usd(v) {
     const n = Number(v) || 0;
@@ -206,25 +265,25 @@
     const v = Number(n) || 0;
     if (v < 1000) return String(v);
     if (v < 1e6) return `${(v / 1000).toFixed(1)}k`;
-    return `${(v / 1e6).toFixed(2)} Mio.`;
+    return t('{n} Mio.', { n: (v / 1e6).toFixed(2) });
   }
 
   function prettyHotkey(acc) {
     return (acc || '')
-      .replace(/CommandOrControl|Control/g, 'Strg')
-      .replace(/Shift/g, 'Umschalt')
-      .replace(/Space/g, 'Leertaste')
+      .replace(/CommandOrControl|Control/g, t('Strg'))
+      .replace(/Shift/g, t('Umschalt'))
+      .replace(/Space/g, t('Leertaste'))
       .replace(/Super/g, 'Win')
-      .replace(/Delete/g, 'Entf')
-      .replace(/Backspace/g, 'Rücktaste')
+      .replace(/Delete/g, t('Entf'))
+      .replace(/Backspace/g, t('Rücktaste'))
       .replace(/\bUp\b/g, '↑').replace(/\bDown\b/g, '↓').replace(/\bLeft\b/g, '←').replace(/\bRight\b/g, '→')
       .replace(/num(\d)/g, 'Num $1')
       .replace(/\+/g, ' + ');
   }
 
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  const clock = (ts) => new Date(ts).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
-  const capitalize = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+  const clock = (ts) => new Date(ts).toLocaleTimeString(I18N.locale, { hour: '2-digit', minute: '2-digit' });
+  const capitalize = (x) => (x ? x.charAt(0).toUpperCase() + x.slice(1) : x);
 
   function countdown(ms) {
     const total = Math.max(0, Math.ceil(ms / 1000));
@@ -256,25 +315,25 @@
   }
 
   function labelFor(shown) {
-    const name = state.settings?.name || 'Buddy';
+    const name = state.settings?.name || t('Buddy');
     const next = state.timers[0];
     switch (shown) {
       case 'busy':
-        if (state.stream?.text) return 'schreibt …';
-        if (state.stream?.tools.length) return 'macht …';
-        return 'denkt …';
-      case 'done': return 'Fertig';
-      case 'error': return 'Fehler';
+        if (state.stream?.text) return t('schreibt …');
+        if (state.stream?.tools.length) return t('macht …');
+        return t('denkt …');
+      case 'done': return t('Fertig');
+      case 'error': return t('Fehler');
       case 'timer': return next ? `${next.label}  ${countdown(next.endsAt - Date.now())}` : name;
-      case 'alarm': return state.alarm ? `${state.alarm.label} ist um` : name;
-      case 'control': return `${capitalize(state.actionLabel || 'steuert')} …`;
-      case 'listen': return state.voiceNote || (state.listening === 'listening' ? 'Hört zu …' : 'Mikrofon startet …');
+      case 'alarm': return state.alarm ? t('{label} ist um', { label: state.alarm.label }) : name;
+      case 'control': return `${capitalize(state.actionLabel || t('steuert'))} …`;
+      case 'listen': return state.voiceNote || (state.listening === 'listening' ? t('Hört zu …') : t('Mikrofon startet …'));
       case 'music': return [state.media?.title, state.media?.artist].filter(Boolean).join(' · ');
       default: return name;
     }
   }
 
-  const VIEW_TITLE = { settings: 'Einstellungen', usage: 'KI-Nutzung' };
+  const VIEW_TITLE = { settings: t('Einstellungen'), usage: t('KI-Nutzung') };
 
   function render() {
     const shown = visibleState();
@@ -283,12 +342,57 @@
     el.island.classList.toggle('listening', Boolean(state.listening));
     // Sichtbarer Text nur im offenen Island; geschlossen nur für Screenreader
     const title = state.open
-      ? (shown === 'alarm' || shown === 'control' ? labelFor(shown) : VIEW_TITLE[state.view] || state.settings?.name || 'Buddy')
+      ? (shown === 'alarm' || shown === 'control' ? labelFor(shown) : VIEW_TITLE[state.view] || state.settings?.name || t('Buddy'))
       : null;
     if (title !== null && el.label.textContent !== title) el.label.textContent = title;
-    el.faceBtn.setAttribute('aria-label', state.open ? 'Buddy' : labelFor(shown));
+    el.faceBtn.setAttribute('aria-label', state.open ? t('Buddy') : labelFor(shown));
     el.peek.hidden = shown !== 'peek';
     syncLayout();
+    syncVisualizer();
+  }
+
+  // ---------- Musik-Visualizer (echter Pegel der Windows-Tonausgabe) ----------
+  const bars = [...el.island.querySelectorAll('.eq i')];
+  const viz = { on: false, levels: [0, 0, 0, 0], target: null, raf: 0, lastAt: 0 };
+
+  function syncVisualizer() {
+    const run = Boolean(state.settings?.visualizer !== false && state.media?.playing && visibleState() === 'music' && !state.game.active);
+    if (run === viz.on) return;
+    viz.on = run;
+    api.setAudioMeter(run && Boolean(state.settings?.meterAvailable));
+    el.island.classList.toggle('viz-fallback', run && !state.settings?.meterAvailable);
+    if (!run) {
+      cancelAnimationFrame(viz.raf);
+      viz.raf = 0;
+      el.island.classList.remove('viz-live');
+      bars.forEach((b) => { b.style.transform = ''; });
+    }
+  }
+
+  api.onAudioLevel((lvl) => {
+    if (!viz.on) return;
+    viz.target = lvl;
+    viz.lastAt = performance.now();
+    el.island.classList.add('viz-live');
+    if (!viz.raf) viz.raf = requestAnimationFrame(paintViz);
+  });
+
+  // Jeder Balken reagiert anders schnell auf den Pegel (links, Mitte, rechts),
+  // so wirkt es wie eine Welle und folgt trotzdem genau der Musik.
+  const ATTACK = [0.55, 0.8, 0.9, 0.6];
+  const DECAY = [0.06, 0.12, 0.2, 0.09];
+  function paintViz() {
+    viz.raf = 0;
+    const tgt = viz.target || { p: 0, l: 0, r: 0 };
+    const shape = [Math.sqrt(tgt.l), Math.sqrt(tgt.p), Math.sqrt(Math.min(1, tgt.p * 1.25)), Math.sqrt(tgt.r)];
+    for (let i = 0; i < bars.length; i += 1) {
+      const cur = viz.levels[i];
+      const want = shape[i] || 0;
+      viz.levels[i] = want > cur ? cur + (want - cur) * ATTACK[i] : Math.max(want, cur - DECAY[i]);
+      bars[i].style.transform = `scaleY(${(0.16 + 0.84 * Math.min(1, viz.levels[i] * 1.1)).toFixed(3)})`;
+    }
+    if (viz.on && performance.now() - viz.lastAt < 600) viz.raf = requestAnimationFrame(paintViz);
+    else el.island.classList.remove('viz-live');
   }
 
   // ---------- Fenstergrösse (spart CPU: geschlossen = nur so gross wie das Island) ----------
@@ -359,6 +463,9 @@
     openTimer = requestAnimationFrame(check);
   }
 
+  const isAnimating = () => state.phase === 'opening' || state.phase === 'closing';
+  let lastToggle = 0;
+
   function setPhase(phase, ms) {
     state.phase = phase;
     el.island.dataset.phase = phase;
@@ -403,7 +510,9 @@
     stopHotkeyRecording();
     setPhase('closing', CLOSE_MS);
     el.island.classList.remove('open');
+    captured = el.island.matches(':hover');
     api.releaseWindow();
+    if (captured) api.setMouseCapture(true);
     render();
     // Ansicht erst zurücksetzen, wenn der Inhalt ausgeblendet ist (kein Umschalten während der Animation)
     setTimeout(() => {
@@ -429,9 +538,16 @@
     render();
   }
 
-  // Offen: Mausklicks nur abfangen, wenn die Maus über dem Island ist.
-  el.island.addEventListener('mouseenter', () => { if (state.open) api.setMouseCapture(true); });
-  el.island.addEventListener('mouseleave', () => { if (state.open) api.setMouseCapture(false); });
+  // Das Fenster ist immer gleich gross. Klicks fängt es nur ab, solange die Maus über
+  // dem Island ist (oder gerade gezogen wird); sonst gehen sie an die Fenster darunter.
+  let captured = false;
+  function setCapture(on) {
+    if (captured === on) return;
+    captured = on;
+    api.setMouseCapture(on);
+  }
+  el.island.addEventListener('mouseenter', () => setCapture(true));
+  el.island.addEventListener('mouseleave', () => { if (!drag.active) setCapture(false); });
 
   // ---------- Blinzeln (nur ein kurzer Timer, keine Dauer-Animation) ----------
 
@@ -469,17 +585,17 @@
     return node;
   }
 
-  function toolChip(t) {
+  function toolChip(tool) {
     const chip = document.createElement('span');
-    chip.className = 'tool-chip' + (t.error ? ' err' : '');
-    chip.textContent = t.label;
+    chip.className = 'tool-chip' + (tool.error ? ' err' : '');
+    chip.textContent = tool.label;
     return chip;
   }
 
   function toolRow(list) {
     const row = document.createElement('div');
     row.className = 'tool-row';
-    for (const t of list || []) row.appendChild(toolChip(t));
+    for (const item of list || []) row.appendChild(toolChip(item));
     return row;
   }
 
@@ -511,10 +627,10 @@
       span.textContent = text;
       parts.push(sep, span);
     };
-    add(EFFORT_LABEL[route.effort] || 'Standard');
+    add(EFFORT_LABEL[route.effort] || t('Standard'));
     const cost = extra.final ? usd(extra.cost) : extra.cost ? usd(extra.cost) : route.estimate ? `≈ ${usd(route.estimate)}` : '';
     if (cost) add(cost, 'cost');
-    if (extra.final && extra.tokens) add(`${tokens(extra.tokens)} Tokens`);
+    if (extra.final && extra.tokens) add(t('{n} Tokens', { n: tokens(extra.tokens) }));
     if (route.reason) {
       const reason = document.createElement('span');
       reason.className = 'reason';
@@ -563,7 +679,7 @@
     tools.className = 'msg-tools';
     const copy = document.createElement('button');
     copy.type = 'button';
-    copy.textContent = 'Kopieren';
+    copy.textContent = t('Kopieren');
     copy.addEventListener('click', () => copyText(text, copy));
     tools.appendChild(copy);
     placePart(node, tools);
@@ -596,18 +712,35 @@
   }
 
   function renderEmpty() {
-    const hasKey = state.settings?.hasKey;
+    const s = state.settings;
+    const hasKey = s?.hasKey;
     const isEmpty = state.history.length === 0 && !state.stream;
+    const setup = state.setup;
+    el.emptyProgress.hidden = true;
+    el.localBtn.hidden = true;
     if (!hasKey) {
       el.empty.hidden = false;
-      el.emptyTitle.textContent = `Hoi, ich bin ${state.settings?.name || 'Buddy'}.`;
-      el.emptyText.textContent = 'Damit ich antworten kann, verbinde zuerst deinen Claude-API-Key.';
+      el.emptyTitle.textContent = t('Hoi, ich bin {name}.', { name: s?.name || t('Buddy') });
       el.chips.hidden = true;
       el.connectBtn.hidden = false;
+      if (setup && setup.state === 'running') {
+        el.emptyText.textContent = setup.text || t('Richte die lokale KI ein …');
+        el.emptyProgress.hidden = false;
+        el.emptyProgress.classList.toggle('indeterminate', !setup.percent);
+        el.emptyBar.style.width = setup.percent ? `${setup.percent}%` : '';
+        el.connectBtn.hidden = true;
+      } else if (!s?.discovery) {
+        el.emptyText.textContent = t('Ich schaue kurz, ob auf deinem PC eine lokale KI laufen kann …');
+      } else {
+        el.emptyText.textContent = setup?.state === 'error'
+          ? setup.error
+          : t('Ich kann direkt auf deinem PC laufen, ohne Kosten und ohne Internet. Dafür richte ich einmalig eine lokale KI ein. Oder du fügst einen API-Key hinzu.');
+        el.localBtn.hidden = false;
+      }
     } else {
       el.empty.hidden = !isEmpty;
-      el.emptyTitle.textContent = 'Was kann ich für dich tun?';
-      el.emptyText.textContent = '';
+      el.emptyTitle.textContent = t('Was kann ich für dich tun?');
+      el.emptyText.textContent = localLine() || '';
       el.chips.hidden = false;
       el.connectBtn.hidden = true;
     }
@@ -616,14 +749,27 @@
     updateFootnote();
   }
 
+  // Kurzer Status des lokalen Modells, z. B. «Lokal: Qwen2.5 1.5B · lädt 40 %»
+  function localLine(short) {
+    const s = state.settings;
+    if (!s || s.provider !== 'huggingface' || !s.hfModel) return '';
+    const name = s.hfModel.split(/[\\/]/).filter(Boolean).pop();
+    const st = state.local || s.hfStatus || {};
+    let what = '';
+    if (st.state === 'loading') what = st.percent ? t('lädt {p} %', { p: st.percent }) : t('lädt …');
+    else if (st.state === 'ready') what = st.device === 'cuda' ? t('bereit (Grafikkarte)') : t('bereit');
+    else if (st.state === 'error') what = t('Fehler');
+    return short ? `${t('Lokal')}: ${name}${what ? ` · ${what}` : ''}` : (st.state === 'loading' ? t('Ich lade gerade {name} auf deinem PC ({what}). Du kannst schon schreiben.', { name, what }) : '');
+  }
+
   function updateFootnote() {
     const s = state.settings;
     if (!s) return;
     el.footnote.textContent = '';
     const left = document.createElement('span');
-    left.textContent = s.autoModel !== false ? 'Modell: automatisch' : modelLabel(s.model);
+    left.textContent = s.provider === 'huggingface' ? localLine(true) : s.autoModel !== false ? t('Modell: automatisch') : modelLabel(s.model);
     const right = document.createElement('span');
-    right.textContent = `${prettyHotkey(s.hotkey)} öffnet`;
+    right.textContent = t('{keys} öffnet', { keys: prettyHotkey(s.hotkey) });
     el.footnote.append(left, right);
   }
 
@@ -631,7 +777,7 @@
     try {
       await navigator.clipboard.writeText(text);
       const old = button.textContent;
-      button.textContent = 'Kopiert';
+      button.textContent = t('Kopiert');
       button.classList.add('ok');
       setTimeout(() => { button.textContent = old; button.classList.remove('ok'); }, 1400);
     } catch {
@@ -659,7 +805,7 @@
       .slice(-MAX_HISTORY)
       .map(({ role, content, tools }) => ({
         role,
-        content: tools && tools.length ? `[Erledigt: ${tools.map((t) => t.label).join(', ')}]\n\n${content || ''}`.trim() : content,
+        content: tools && tools.length ? `[${t('Erledigt')}: ${tools.map((x) => x.label).join(', ')}]\n\n${content || ''}`.trim() : content,
       }))
       .filter((m) => m.content);
     while (msgs.length && msgs[0].role !== 'user') msgs.shift();
@@ -739,9 +885,9 @@
       s.node.remove();
     }
     if (state.view === 'settings') loadAiStats();
-    if (stopReason === 'max_tokens') el.messages.appendChild(noticeNode('Die Antwort wurde gekürzt (Längenlimit).', true));
+    if (stopReason === 'max_tokens') el.messages.appendChild(noticeNode(t('Die Antwort wurde gekürzt (Längenlimit).'), true));
     if (stopReason === 'aborted') el.messages.appendChild(noticeNode('Gestoppt.', true));
-    if (stopReason === 'refusal' && !text) el.messages.appendChild(noticeNode('Dabei kann ich leider nicht helfen.', true));
+    if (stopReason === 'refusal' && !text) el.messages.appendChild(noticeNode(t('Dabei kann ich leider nicht helfen.'), true));
 
     if (error) {
       el.messages.appendChild(noticeNode(error));
@@ -793,7 +939,7 @@
     const s = state.stream;
     if (!s || s.id !== route.id) return;
     if (route.switched && s.route && s.route.modelName !== route.modelName) {
-      s.switchNote = route.why ? `Wechsel auf ${route.modelName}: ${route.why}` : `Wechsel auf ${route.modelName}`;
+      s.switchNote = route.why ? t('Wechsel auf {model}: {why}', { model: route.modelName, why: route.why }) : t('Wechsel auf {model}', { model: route.modelName });
     }
     s.route = route;
     paintRoute();
@@ -803,8 +949,8 @@
   api.onEscalate(({ id, to, reason }) => {
     const s = state.stream;
     if (!s || s.id !== id) return;
-    s.switchNote = `Stärkeres Modell: ${to} · ${reason}`;
-    addStreamTool({ label: `Wechsel auf ${to}` });
+    s.switchNote = t('Stärkeres Modell: {model} · {reason}', { model: to, reason });
+    addStreamTool({ label: t('Wechsel auf {model}', { model: to }) });
     paintRoute();
   });
 
@@ -873,9 +1019,9 @@
       '<p class="confirm-title"></p><p class="confirm-text"></p>' +
       '<div class="confirm-actions"><button type="button" class="button" data-allow="0">Nicht erlauben</button>' +
       '<button type="button" class="button primary" data-allow="1">Erlauben</button></div>';
-    card.querySelector('.confirm-title').textContent = `Darf ${state.settings?.name || 'Buddy'} deinen PC steuern?`;
+    card.querySelector('.confirm-title').textContent = `Darf ${state.settings?.name || t('Buddy')} deinen PC steuern?`;
     card.querySelector('.confirm-text').textContent =
-      `Ich sehe dann deinen Bildschirm und benutze Maus und Tastatur, bis die Aufgabe fertig ist. Stoppen kannst du jederzeit mit ${prettyHotkey(state.settings?.hotkey)} oder dem Stopp-Knopf.`;
+      t('Ich sehe dann deinen Bildschirm und benutze Maus und Tastatur, bis die Aufgabe fertig ist. Stoppen kannst du jederzeit mit {keys} oder dem Stopp-Knopf.', { keys: prettyHotkey(state.settings?.hotkey) });
     card.addEventListener('click', (event) => {
       const btn = event.target.closest('button[data-allow]');
       if (!btn) return;
@@ -905,8 +1051,8 @@
       '<span class="risk"></span><p class="confirm-title"></p><p class="confirm-text"></p>' +
       '<div class="confirm-actions"><button type="button" class="button" data-allow="0">Ablehnen</button>' +
       '<button type="button" class="button primary" data-allow="1"></button></div>';
-    card.querySelector('.risk').textContent = `${high ? 'Hohes' : 'Mittleres'} Risiko · ${label}`;
-    card.querySelector('.confirm-title').textContent = high ? `${state.settings?.name || 'Buddy'} möchte etwas Riskantes tun` : `Darf ${state.settings?.name || 'Buddy'} das?`;
+    card.querySelector('.risk').textContent = `${high ? t('Hohes') : t('Mittleres')} Risiko · ${label}`;
+    card.querySelector('.confirm-title').textContent = high ? `${state.settings?.name || t('Buddy')} möchte etwas Riskantes tun` : `Darf ${state.settings?.name || t('Buddy')} das?`;
     card.querySelector('.confirm-text').textContent = summary || label;
     if (details) {
       const pre = document.createElement('div');
@@ -914,7 +1060,7 @@
       pre.textContent = details;
       card.insertBefore(pre, card.querySelector('.confirm-actions'));
     }
-    card.querySelector('.primary').textContent = high ? 'Ja, ausführen' : 'Für diese Aufgabe erlauben';
+    card.querySelector('.primary').textContent = high ? t('Ja, ausführen') : t('Für diese Aufgabe erlauben');
     card.addEventListener('click', (event) => {
       const btn = event.target.closest('button[data-allow]');
       if (!btn) return;
@@ -932,7 +1078,7 @@
   api.onControl(({ id, active, actions }) => {
     if (state.stream?.id !== id) return;
     state.control = active;
-    if (!active && actions) addStreamTool({ label: `PC gesteuert · ${actions} ${actions === 1 ? 'Schritt' : 'Schritte'}` });
+    if (!active && actions) addStreamTool({ label: `${t('PC gesteuert')} · ${actions} ${actions === 1 ? t('Schritt') : t('Schritte')}` });
     render();
   });
 
@@ -951,7 +1097,7 @@
 
   function updateSendButton() {
     el.sendBtn.disabled = !state.stream && !el.input.value.trim();
-    el.sendBtn.setAttribute('aria-label', state.stream ? 'Stoppen' : 'Senden');
+    el.sendBtn.setAttribute('aria-label', state.stream ? t('Stoppen') : t('Senden'));
   }
 
   function autoGrow() {
@@ -996,25 +1142,25 @@
   function renderTimers() {
     el.timers.textContent = '';
     el.timers.hidden = state.timers.length === 0;
-    for (const t of state.timers) {
+    for (const timer of state.timers) {
       const row = document.createElement('div');
       row.className = 'timer';
       const label = document.createElement('span');
       label.className = 'timer-label';
-      label.textContent = t.label;
+      label.textContent = timer.label;
       const time = document.createElement('span');
       time.className = 'timer-time';
-      time.dataset.endsAt = t.endsAt;
+      time.dataset.endsAt = timer.endsAt;
       const stop = document.createElement('button');
       stop.type = 'button';
-      stop.title = 'Timer stoppen';
-      stop.setAttribute('aria-label', 'Timer stoppen');
+      stop.title = t('Timer stoppen');
+      stop.setAttribute('aria-label', t('Timer stoppen'));
       stop.innerHTML = '<svg viewBox="0 0 20 20"><path d="M6 6l8 8M14 6l-8 8"/></svg>';
-      stop.addEventListener('click', () => api.cancelTimer(t.id));
+      stop.addEventListener('click', () => api.cancelTimer(timer.id));
       const bar = document.createElement('i');
       bar.className = 'timer-bar';
-      bar.dataset.endsAt = t.endsAt;
-      bar.dataset.total = t.durationMs;
+      bar.dataset.endsAt = timer.endsAt;
+      bar.dataset.total = timer.durationMs;
       row.append(label, time, stop, bar);
       el.timers.appendChild(row);
     }
@@ -1058,7 +1204,7 @@
       // Im Spiel nur ein kurzer Ton, nichts Sichtbares
       if (state.settings?.sound !== false) chime();
       state.missed += 1;
-      state.inbox.unshift({ id: `timer-${Date.now()}`, app: 'Timer', title: timer.label, body: 'ist abgelaufen', time: Date.now() });
+      state.inbox.unshift({ id: `timer-${Date.now()}`, app: t('Timer'), title: timer.label, body: t('ist abgelaufen'), time: Date.now() });
       return;
     }
     state.alarm = timer;
@@ -1066,7 +1212,7 @@
     render();
     pop();
     if (state.open) {
-      el.messages.appendChild(noticeNode(`Timer «${timer.label}» ist abgelaufen.`, true));
+      el.messages.appendChild(noticeNode(t('Timer «{label}» ist abgelaufen.', { label: timer.label }), true));
       scrollToBottom(true);
     }
     let rings = 0;
@@ -1091,7 +1237,7 @@
   let peekTimer = 0;
 
   function noteText(n) {
-    return [n.title, n.body].filter(Boolean).join(': ') || 'Neue Mitteilung';
+    return [n.title, n.body].filter(Boolean).join(': ') || t('Neue Mitteilung');
   }
 
   api.onNotify((item) => {
@@ -1201,7 +1347,7 @@
       const when = document.createElement('span');
       when.className = 'note-app';
       const sameDay = new Date(e.start).toDateString() === new Date().toDateString();
-      when.textContent = e.allDay ? 'Ganztägig' : `${sameDay ? 'Heute' : 'Morgen'} ${clock(e.start)}`;
+      when.textContent = e.allDay ? t('Ganztägig') : `${sameDay ? t('Heute') : t('Morgen')} ${clock(e.start)}`;
       const where = document.createElement('span');
       where.textContent = e.location || '';
       meta.append(when, where);
@@ -1251,21 +1397,21 @@
       case 'text':
         state.listening = '';
         if (msg.text && msg.text.trim()) {
-          if (state.stream) { voiceNote('Buddy arbeitet noch …'); break; }
+          if (state.stream) { voiceNote(t('Buddy arbeitet noch …')); break; }
           send(msg.text, true);
         }
         break;
       case 'nothing':
         state.listening = '';
-        voiceNote('Nichts gehört');
+        voiceNote(t('Nichts gehört'));
         return;
       case 'unavailable':
         state.listening = '';
-        voiceNote('Sprache geht nur unter Windows');
+        voiceNote(t('Sprache geht nur unter Windows'));
         return;
       case 'ready':
         if (state.settings) state.settings.voiceInfo = { ...msg, ready: true };
-        if (!msg.offline && !msg.online) { state.listening = ''; voiceNote('Keine Spracherkennung gefunden'); }
+        if (!msg.offline && !msg.online) { state.listening = ''; voiceNote(t('Keine Spracherkennung gefunden')); }
         if (state.view === 'settings') fillSettings();
         return;
       default:
@@ -1280,7 +1426,7 @@
       .replace(/```[\s\S]*?```/g, ' Code-Block. ')
       .replace(/`([^`]+)`/g, '$1')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      .replace(/https?:\/\/\S+/g, 'Link')
+      .replace(/https?:\/\/\S+/g, t('Link'))
       .replace(/[*_#>~|]/g, '')
       .replace(/\s+/g, ' ')
       .trim();
@@ -1317,7 +1463,7 @@
       const count = state.missed;
       state.missed = 0;
       setTimeout(() => {
-        state.peek = { app: 'Während du gespielt hast', title: `${count} ${count === 1 ? 'Mitteilung' : 'Mitteilungen'}`, body: 'Klick zum Anschauen' };
+        state.peek = { app: t('Während du gespielt hast'), title: `${count} ${count === 1 ? t('Mitteilung') : t('Mitteilungen')}`, body: t('Klick zum Anschauen') };
         el.peekApp.textContent = state.peek.app;
         el.peekText.textContent = `${state.peek.title} · ${state.peek.body}`;
         render();
@@ -1333,15 +1479,15 @@
 
   function updateText(u) {
     switch (u?.state) {
-      case 'checking': return 'Prüfe …';
-      case 'latest': return 'Aktuell';
-      case 'downloading': return u.percent ? `Lädt Version ${u.version} (${u.percent} %)` : `Lädt Version ${u.version} …`;
-      case 'verifying': return `Prüfe Signatur von ${u.version} …`;
-      case 'ready': return `Version ${u.version} bereit (geprüft)`;
-      case 'skipped': return u.error || `Version ${u.version} übersprungen`;
-      case 'rollback': return `Stellt Version ${u.version} wieder her …`;
-      case 'error': return u.error || 'Fehler';
-      default: return state.settings?.canUpdate ? 'Noch nicht geprüft' : 'Nur mit dem Installer';
+      case 'checking': return t('Prüfe …');
+      case 'latest': return t('Aktuell');
+      case 'downloading': return u.percent ? t('Lädt Version {v} ({p} %)', { v: u.version, p: u.percent }) : t('Lädt Version {v} …', { v: u.version });
+      case 'verifying': return t('Prüfe Signatur von {v} …', { v: u.version });
+      case 'ready': return t('Version {v} bereit (geprüft)', { v: u.version });
+      case 'skipped': return u.error || t('Version {v} übersprungen', { v: u.version });
+      case 'rollback': return t('Stellt Version {v} wieder her …', { v: u.version });
+      case 'error': return u.error || t('Fehler');
+      default: return state.settings?.canUpdate ? t('Noch nicht geprüft') : t('Nur mit dem Installer');
     }
   }
 
@@ -1350,9 +1496,9 @@
     state.update = u || { state: 'idle' };
     if (state.view === 'settings') fillSettings();
     if (becameReady && !state.game.active) {
-      state.peek = { app: 'Buddy Island', title: `Update ${u.version} ist bereit`, body: 'Neustart in den Einstellungen' };
-      el.peekApp.textContent = 'Buddy Island';
-      el.peekText.textContent = `Update ${u.version} ist bereit`;
+      state.peek = { app: t('Buddy Island'), title: `Update ${u.version} ist bereit`, body: t('Neustart in den Einstellungen') };
+      el.peekApp.textContent = t('Buddy Island');
+      el.peekText.textContent = t('Update {v} ist bereit', { v: u.version });
       render();
       clearTimeout(peekTimer);
       peekTimer = setTimeout(() => { state.peek = null; render(); }, PEEK_MS);
@@ -1366,12 +1512,12 @@
 
   el.diagBtn.addEventListener('click', async () => {
     el.diagBtn.disabled = true;
-    el.diagBtn.textContent = 'Test läuft …';
+    el.diagBtn.textContent = t('Test läuft …');
     el.diagList.hidden = false;
     el.diagList.textContent = '';
     const results = await api.runDiagnostics();
     el.diagBtn.disabled = false;
-    el.diagBtn.textContent = 'Selbsttest erneut starten';
+    el.diagBtn.textContent = t('Selbsttest erneut starten');
     for (const r of results) {
       const row = document.createElement('div');
       row.className = 'diag-row' + (r.ok === true ? ' ok' : r.ok === false ? ' bad' : '');
@@ -1414,13 +1560,13 @@
   // ---------- Einstellungen ----------
 
   const NOTIFY_STATUS = {
-    Allowed: 'Aktiv',
-    Starting: 'Startet …',
-    Denied: 'Zugriff verweigert',
-    Unspecified: 'Wartet auf Erlaubnis',
-    Off: 'Aus',
-    Unsupported: 'Nur unter Windows',
-    Error: 'Nicht verfügbar',
+    Allowed: t('Aktiv'),
+    Starting: t('Startet …'),
+    Denied: t('Zugriff verweigert'),
+    Unspecified: t('Wartet auf Erlaubnis'),
+    Off: t('Aus'),
+    Unsupported: t('Nur unter Windows'),
+    Error: t('Nicht verfügbar'),
   };
 
   // Text auf der Akzentfarbe: Schwarz bei hellen Farben, sonst Weiss
@@ -1432,32 +1578,184 @@
     document.documentElement.style.setProperty('--on-accent', lum > 0.6 ? '#000' : '#fff');
   }
 
+  const PROVIDER_FOOT = {
+    anthropic: 'Den Key erstellst du in der <a href="https://platform.claude.com/settings/keys">Claude Console</a>.',
+    openai: 'Den Key erstellst du auf <a href="https://platform.openai.com/api-keys">platform.openai.com</a>.',
+    xai: 'Den Key erstellst du in der <a href="https://console.x.ai">xAI Console</a>.',
+    gemini: 'Den Key erstellst du im <a href="https://aistudio.google.com/apikey">Google AI Studio</a>.',
+  };
+
+  function fillProvider() {
+    const s = state.settings;
+    const pid = s.provider || 'anthropic';
+    const p = (s.providers || []).find((x) => x.id === pid) || {};
+    el.providerSelect.textContent = '';
+    for (const prov of s.providers || []) {
+      const opt = document.createElement('option');
+      opt.value = prov.id;
+      opt.textContent = prov.name + (prov.hasKey && !prov.local ? ' ✓' : '');
+      el.providerSelect.appendChild(opt);
+    }
+    el.providerSelect.value = pid;
+    const local = pid === 'huggingface';
+    el.keyBlock.hidden = local;
+    el.localBlock.hidden = !local;
+    el.workspaceRow.hidden = pid !== 'anthropic';
+    if (!local) {
+      const invalid = p.hasKey && p.status === 'invalid';
+      el.keyStatus.textContent = !p.hasKey ? t('Nicht verbunden') : invalid ? t('Abgelehnt, bitte ersetzen') : `${t('Verbunden')} · …${p.hint || ''}${s.keyProtected ? ` · ${t('verschlüsselt')}` : ''}`;
+      el.keyStatus.classList.toggle('ok', Boolean(p.hasKey) && !invalid);
+      el.keyStatus.classList.toggle('bad', Boolean(invalid));
+      el.keyRemove.hidden = !p.hasKey;
+      el.keyRevoke.hidden = !p.hasKey;
+      el.keySave.textContent = p.hasKey ? t('Ersetzen') : t('Verbinden');
+      el.keyInput.placeholder = `${p.keyPrefix || ''}…`;
+      el.keyFoot.innerHTML = `${t(PROVIDER_FOOT[pid] || '')} ${t('Buddy speichert ihn mit der Windows-Verschlüsselung (DPAPI), schreibt ihn nie ins Protokoll und schickt ihn nur an diesen Anbieter. «Widerrufen» löscht ihn hier und öffnet die Console, wo du ihn endgültig sperrst.')}`;
+      el.setupBox.hidden = true;
+      el.specsBox.hidden = true;
+    } else {
+      el.keyFoot.textContent = t('Lokale Modelle laufen über Hugging Face Transformers direkt auf deinem PC: ohne API-Key, ohne Kosten, ohne Internet (ausser beim ersten Herunterladen). Bildschirmfotos und Werkzeuge gibt es damit nicht, nur Chat.');
+      if (document.activeElement !== el.hfModelInput) el.hfModelInput.value = s.hfModel || '';
+      el.hfTokenInput.placeholder = s.hasHfToken ? t('Token gespeichert (zum Ersetzen neu eingeben)') : t('hf_…');
+      const hasRuntime = Boolean(s.discovery?.python);
+      const st = state.local || s.hfStatus || {};
+      el.hfStatus.textContent = !hasRuntime ? t('Nicht eingerichtet')
+        : !s.hfModel ? t('Kein Modell gewählt')
+          : st.state === 'ready' ? `${t('Geladen')} · ${st.device === 'cuda' ? t('Grafikkarte') : st.device === 'mps' ? t('Apple GPU') : t('Prozessor')}`
+            : st.state === 'loading' ? (st.percent ? t('Lädt {p} %', { p: st.percent }) : t('Lädt …'))
+              : st.state === 'error' ? t('Fehler') : t('Bereit zum Laden');
+      el.hfStatus.classList.toggle('ok', st.state === 'ready');
+      el.hfStatus.classList.toggle('bad', st.state === 'error');
+      el.setupBox.hidden = hasRuntime && state.setup?.state !== 'running';
+      el.specsBox.hidden = false;
+      fillSetup();
+      if (!state.specs) loadSpecs();
+      else renderSpecs();
+    }
+  }
+
+  function fillSetup() {
+    const st = state.setup;
+    el.setupProgress.hidden = !st || st.state !== 'running';
+    el.setupProgress.classList.toggle('indeterminate', Boolean(st && st.state === 'running' && !st.percent));
+    el.setupBar.style.width = st?.percent ? `${st.percent}%` : '';
+    el.setupLog.textContent = st?.state === 'running' ? (st.log || '') : st?.state === 'error' ? st.error : '';
+    el.setupText.textContent = st?.state === 'running' ? st.text
+      : st?.state === 'done' ? st.text
+        : t('Für lokale Modelle braucht Buddy Python mit den Hugging-Face-Paketen «transformers» und «torch». Buddy installiert sie nur für deinen Benutzer, ohne Administratorrechte.');
+    el.setupBtn.disabled = st?.state === 'running';
+    el.setupBtn.textContent = st?.state === 'error' ? t('Nochmals versuchen') : t('Lokale KI einrichten');
+  }
+
+  async function loadSpecs() {
+    el.specsLine.textContent = t('Prüfe die Hardware …');
+    try {
+      state.specs = await api.getSpecs();
+    } catch {
+      state.specs = null;
+      el.specsLine.textContent = t('Hardware konnte nicht geprüft werden.');
+      return;
+    }
+    renderSpecs();
+  }
+
+  const SPEED = { 'sehr schnell': t('sehr schnell'), schnell: 'schnell', 'flüssig': t('flüssig'), langsam: 'langsam', 'sehr langsam': t('sehr langsam'), 'passt nicht': t('passt nicht') };
+
+  function renderSpecs() {
+    const r = state.specs;
+    if (!r) return;
+    const sp = r.specs;
+    const gpu = sp.gpus.length ? sp.gpus.map((g) => `${g.name}${g.vramGB ? ` (${g.vramGB} GB)` : ''}`).join(', ') : t('keine eigene Grafikkarte');
+    el.specsLine.textContent = `${sp.ramGB} GB RAM · ${sp.threads} ${t('Threads')} · ${gpu}`;
+    el.specsSummary.textContent = t(r.summary);
+    el.recoList.textContent = '';
+    const current = state.settings?.hfModel;
+    const rows = [
+      { label: t('Am schnellsten'), m: r.fastest },
+      ...(r.best.id !== r.fastest.id ? [{ label: t('Beste Antworten'), m: r.best }] : []),
+    ];
+    for (const { label, m } of rows) {
+      const row = document.createElement('div');
+      row.className = `reco${current === m.id ? ' active' : ''}`;
+      const text = document.createElement('div');
+      text.className = 'reco-text';
+      const b = document.createElement('b');
+      b.textContent = `${label}: ${m.name}`;
+      const small = document.createElement('small');
+      small.textContent = [t(SPEED[m.speed] || m.speed), t('auf dem {device}', { device: t(m.device) }), t('ca. {gb} GB', { gb: m.needGB }), m.cached ? t('schon heruntergeladen') : null, t(m.note)].filter(Boolean).join(' · ');
+      text.append(b, small);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'button small';
+      btn.textContent = current === m.id ? t('Aktiv') : t('Übernehmen');
+      btn.addEventListener('click', () => chooseLocalModel(m.id));
+      row.append(text, btn);
+      el.recoList.appendChild(row);
+    }
+  }
+
+  async function chooseLocalModel(id) {
+    footer(el.keyMsg, t('Speichere …'));
+    const result = await api.setLocalModel(id);
+    if (!result.ok) { footer(el.keyMsg, result.error, 'err'); return; }
+    state.settings = result.settings;
+    footer(el.keyMsg, t('Modell gewählt. Buddy lädt es im Hintergrund.'), 'ok');
+    fillSettings();
+    renderEmpty();
+  }
+
+  function fillTools() {
+    const d = state.settings?.discovery;
+    el.toolsList.textContent = '';
+    el.toolsList.dataset.empty = d ? t('Keine KI-Tools auf diesem PC gefunden.') : t('Suche läuft …');
+    for (const tool of d?.tools || []) {
+      const row = document.createElement('div');
+      row.className = 'tool-item';
+      const dot = document.createElement('i');
+      const name = document.createElement('span');
+      name.textContent = tool.name;
+      const detail = document.createElement('small');
+      detail.textContent = t(tool.detail || '') || tool.version || (tool.kind === 'app' ? t('App') : tool.kind === 'runtime' ? t('Laufzeit') : t('Kommandozeile'));
+      row.append(dot, name, detail);
+      el.toolsList.appendChild(row);
+    }
+    // Einstellungen für nicht installierte Tools gibt es gar nicht
+    el.usageLocalRow.hidden = !(d?.has?.claude_code || d?.has?.codex);
+    el.usageLocalSettingsToggle.checked = state.settings?.usageLocal !== false;
+  }
+
+  function fillLanguage() {
+    const s = state.settings;
+    el.langSelect.textContent = '';
+    const auto = document.createElement('option');
+    auto.value = 'auto';
+    const sysName = (s.languages || []).find((l) => l.id === s.lang)?.name || '';
+    auto.textContent = `${t('Automatisch')} (${sysName})`;
+    el.langSelect.appendChild(auto);
+    for (const l of s.languages || []) {
+      const opt = document.createElement('option');
+      opt.value = l.id;
+      opt.textContent = l.name;
+      el.langSelect.appendChild(opt);
+    }
+    el.langSelect.value = s.language || 'auto';
+    el.visualizerToggle.checked = s.visualizer !== false;
+  }
+
   function fillSettings() {
     const s = state.settings;
     if (!s) return;
-    el.providerSelect.textContent = '';
-    for (const p of s.providers || []) {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.name;
-      el.providerSelect.appendChild(opt);
-    }
-    el.providerSelect.value = s.provider || 'anthropic';
-    el.providerSelect.disabled = (s.providers || []).length < 2;
-    const invalid = s.hasKey && s.keyStatus === 'invalid';
-    el.keyStatus.textContent = !s.hasKey ? 'Nicht verbunden' : invalid ? 'Abgelehnt, bitte ersetzen' : `Verbunden · …${s.keyHint || ''}${s.keyProtected ? ' · verschlüsselt' : ''}`;
-    el.keyStatus.classList.toggle('ok', Boolean(s.hasKey) && !invalid);
-    el.keyStatus.classList.toggle('bad', invalid);
-    el.keyRemove.hidden = !s.hasKey;
-    el.keyRevoke.hidden = !s.hasKey;
+    fillProvider();
+    fillTools();
+    fillLanguage();
     const auto = s.autoModel !== false;
     el.autoToggle.checked = auto;
     el.modelSelect.disabled = auto;
-    el.modelLabel.textContent = auto ? 'Modell (wird gewählt)' : 'Modell';
+    el.modelLabel.textContent = auto ? t('Modell (wird gewählt)') : t('Modell');
     el.routeToggle.checked = s.showRouting !== false;
     el.routeHint.textContent = auto
-      ? 'Haiku prüft jede Anfrage und nimmt das günstigste Modell, das reicht: Haiku für Einfaches, Sonnet für mehrstufige Aufgaben, Opus nur für sehr Schwieriges. Einzelne Schritte einer Aufgabe können verschiedene Modelle übernehmen. Hakt es, wechselt Buddy selbst auf ein stärkeres Modell.'
-      : 'Buddy nimmt immer das gewählte Modell und wechselt nicht selbst. «Auto» bei der Denktiefe lässt das Modell selbst entscheiden.';
+      ? t('Haiku prüft jede Anfrage und nimmt das günstigste Modell, das reicht: Haiku für Einfaches, Sonnet für mehrstufige Aufgaben, Opus nur für sehr Schwieriges. Einzelne Schritte einer Aufgabe können verschiedene Modelle übernehmen. Hakt es, wechselt Buddy selbst auf ein stärkeres Modell.')
+      : t('Buddy nimmt immer das gewählte Modell und wechselt nicht selbst. «Auto» bei der Denktiefe lässt das Modell selbst entscheiden.');
     el.limitSelect.value = [...el.limitSelect.options].some((o) => Number(o.value) === Number(s.monthlyLimit)) ? String(Number(s.monthlyLimit)) : '5';
     if (![...el.limitSelect.options].some((o) => Number(o.value) === Number(s.monthlyLimit))) {
       const opt = document.createElement('option');
@@ -1470,9 +1768,8 @@
     el.permHigh.value = s.permissions?.high || 'ask';
     el.historyToggle.checked = s.historyEnabled !== false;
     el.rollbackBtn.hidden = !s.rollbackVersion;
-    if (s.rollbackVersion) el.rollbackBtn.textContent = `Vorherige Version ${s.rollbackVersion} wiederherstellen`;
+    if (s.rollbackVersion) el.rollbackBtn.textContent = t('Vorherige Version {v} wiederherstellen', { v: s.rollbackVersion });
     renderStats();
-    el.keySave.textContent = s.hasKey ? 'Ersetzen' : 'Verbinden';
     el.workspaceInput.value = s.workspaceId || '';
     el.nameInput.value = s.name || '';
     el.promptInput.value = s.systemPrompt || '';
@@ -1486,24 +1783,24 @@
     el.notifyToggle.checked = Boolean(s.notifications);
     const status = s.notifications ? s.notifyStatus : 'Off';
     el.notifyStatus.textContent = NOTIFY_STATUS[status] || status || '–';
-    el.dndBtn.textContent = status === 'Denied' ? 'Zugriff in Windows erlauben' : 'Windows-Banner unten rechts ausschalten';
+    el.dndBtn.textContent = status === 'Denied' ? t('Zugriff in Windows erlauben') : t('Windows-Banner unten rechts ausschalten');
     fillShortcuts();
     el.wakeToggle.checked = Boolean(s.voiceWake);
     el.wakeToggle.disabled = !s.canControl;
     el.speakToggle.checked = s.speak !== false;
     const v = s.voiceInfo;
-    el.voiceStatus.textContent = !s.canControl ? 'Nur unter Windows'
-      : !v || !v.ready ? 'Startet beim ersten Sprechen'
-        : [v.online ? 'Online-Diktat' : null, v.offline ? `Offline · ${v.language}` : null].filter(Boolean).join(' + ') || 'Nicht installiert';
+    el.voiceStatus.textContent = !s.canControl ? t('Nur unter Windows')
+      : !v || !v.ready ? t('Startet beim ersten Sprechen')
+        : [v.online ? 'Online-Diktat' : null, v.offline ? `Offline · ${v.language}` : null].filter(Boolean).join(' + ') || t('Nicht installiert');
     el.mediaToggle.checked = s.media !== false;
     el.gameToggle.checked = s.gameMode !== false;
     const cal = s.calendarStatus;
-    el.calStatus.textContent = !s.hasCalendar ? 'Nicht verbunden'
-      : cal?.error ? 'Fehler beim Laden'
-        : `Verbunden · ${cal?.events ?? 0} Termine`;
+    el.calStatus.textContent = !s.hasCalendar ? t('Nicht verbunden')
+      : cal?.error ? t('Fehler beim Laden')
+        : t('Verbunden · {n} Termine', { n: cal?.events ?? 0 });
     el.calStatus.classList.toggle('ok', Boolean(s.hasCalendar && !cal?.error));
     el.calRemove.hidden = !s.hasCalendar;
-    el.calSave.textContent = s.hasCalendar ? 'Ersetzen' : 'Verbinden';
+    el.calSave.textContent = s.hasCalendar ? t('Ersetzen') : t('Verbinden');
     el.calLead.value = String(s.calendarLead ?? 10);
     el.displaySelect.textContent = '';
     for (const d of s.displays || []) {
@@ -1517,7 +1814,7 @@
     el.versionValue.textContent = s.version || '–';
     const u = state.update.state !== 'idle' ? state.update : s.updateState || state.update;
     el.updateStatus.textContent = updateText(u);
-    el.updateBtn.textContent = u.state === 'ready' ? 'Neu starten' : 'Prüfen';
+    el.updateBtn.textContent = u.state === 'ready' ? t('Neu starten') : t('Prüfen');
     el.updateBtn.hidden = !s.canUpdate;
     for (const b of el.effortSeg.querySelectorAll('button')) {
       b.classList.toggle('on', b.dataset.value === s.effort);
@@ -1550,18 +1847,18 @@
 
   // ---------- KI-Nutzung (Dashboard) ----------
 
-  const USAGE_STATUS = { ok: 'Daten', empty: 'Keine Daten', unavailable: 'Nicht verfügbar', setup: 'Einrichten', error: 'Fehler', off: 'Aus' };
+  const USAGE_STATUS = { ok: t('Daten'), empty: t('Keine Daten'), unavailable: t('Nicht verfügbar'), setup: t('Einrichten'), error: t('Fehler'), off: t('Aus') };
   let usageLoading = false;
 
   async function loadUsage(force) {
     if (usageLoading) return;
     usageLoading = true;
     el.usageRefresh.disabled = true;
-    el.usageUpdated.textContent = 'Lädt …';
+    el.usageUpdated.textContent = t('Lädt …');
     try {
       renderUsage(await api.getAiUsage(force));
     } catch {
-      el.usageUpdated.textContent = 'Konnte nicht geladen werden';
+      el.usageUpdated.textContent = t('Konnte nicht geladen werden');
     } finally {
       usageLoading = false;
       el.usageRefresh.disabled = false;
@@ -1571,22 +1868,28 @@
 
   function fillUsageConnections() {
     const s = state.settings || {};
-    el.adminAnthStatus.textContent = s.hasAnthropicAdmin ? 'Verbunden' : 'Nicht verbunden';
+    el.adminAnthStatus.textContent = s.hasAnthropicAdmin ? t('Verbunden') : t('Nicht verbunden');
     el.adminAnthStatus.classList.toggle('ok', Boolean(s.hasAnthropicAdmin));
-    el.adminOaiStatus.textContent = s.hasOpenaiAdmin ? 'Verbunden' : 'Nicht verbunden';
+    el.adminOaiStatus.textContent = s.hasOpenaiAdmin ? t('Verbunden') : t('Nicht verbunden');
     el.adminOaiStatus.classList.toggle('ok', Boolean(s.hasOpenaiAdmin));
     el.usageLocalToggle.checked = s.usageLocal !== false;
+    // Nur zeigen, was es auf diesem PC gibt (nicht installierte Tools komplett ausblenden)
+    const has = s.discovery?.has || {};
+    const keyOf = (id) => Boolean((s.providers || []).find((p) => p.id === id)?.hasKey);
+    $('adminAnthRows').hidden = !(keyOf('anthropic') || s.hasAnthropicAdmin);
+    $('adminOaiRows').hidden = !(keyOf('openai') || s.hasOpenaiAdmin || has.chatgpt_app || has.codex);
+    $('usageLocalUsageRow').hidden = !(has.claude_code || has.codex);
   }
 
-  const ago = (t) => {
-    const s = Math.round((Date.now() - t) / 1000);
-    if (s < 60) return 'gerade eben';
-    if (s < 3600) return `vor ${Math.round(s / 60)} min`;
-    if (s < 86400) return `vor ${Math.round(s / 3600)} h`;
-    return new Date(t).toLocaleDateString('de-CH');
+  const ago = (ts) => {
+    const secs = Math.round((Date.now() - ts) / 1000);
+    if (secs < 60) return t('gerade eben');
+    if (secs < 3600) return t('vor {n} min', { n: Math.round(secs / 60) });
+    if (secs < 86400) return t('vor {n} h', { n: Math.round(secs / 3600) });
+    return new Date(ts).toLocaleDateString(I18N.locale);
   };
   const dur = (ms) => (ms < 60000 ? `${Math.max(1, Math.round(ms / 1000))} s` : ms < 3600e3 ? `${Math.round(ms / 60000)} min` : `${(ms / 3600e3).toFixed(1)} h`);
-  const when = (t) => new Date(t).toLocaleString('de-CH', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  const when = (ts) => new Date(ts).toLocaleString(I18N.locale, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
   function node(tag, cls, text) {
     const n = document.createElement(tag);
@@ -1596,18 +1899,18 @@
   }
 
   function renderUsage(report) {
-    el.usageUpdated.textContent = `Zuletzt aktualisiert: ${clock(report.updatedAt)}`;
+    el.usageUpdated.textContent = t('Zuletzt aktualisiert: {time}', { time: clock(report.updatedAt) });
     el.usageCards.textContent = '';
 
     // Laufende KI-Programme zuerst
     const live = node('div', 'ucard');
     const lh = node('div', 'ucard-head');
-    lh.append(node('b', '', 'Läuft gerade'), node('span', `tag ${report.programsError ? 'error' : 'ok'}`, report.programsError ? 'Fehler' : 'Live'));
+    lh.append(node('b', '', t('Läuft gerade')), node('span', `tag ${report.programsError ? 'error' : 'ok'}`, report.programsError ? t('Fehler') : t('Live')));
     live.appendChild(lh);
-    const items = [...report.programs.map((p) => ({ title: p.name, sub: 'Programm läuft' })), ...report.running.map((r) => ({ title: r.name, sub: r.detail, running: true }))];
+    const items = [...report.programs.map((p) => ({ title: p.name, sub: t('Programm läuft') })), ...report.running.map((r) => ({ title: r.name, sub: r.detail, running: true }))];
     const box = node('div', 'uact');
-    if (report.programsError) box.appendChild(node('div', 'unote', `Nicht prüfbar: ${report.programsError}`));
-    else if (!items.length) box.appendChild(node('div', 'uact-item', 'Keine bekannten KI-Programme oder Agents aktiv.'));
+    if (report.programsError) box.appendChild(node('div', 'unote', t('Nicht prüfbar: {e}', { e: report.programsError })));
+    else if (!items.length) box.appendChild(node('div', 'uact-item', t('Keine bekannten KI-Programme oder Agents aktiv.')));
     for (const it of items) {
       const i = node('div', `uact-item${it.running ? ' running' : ''}`);
       i.append(node('b', '', it.title), node('div', '', it.sub));
@@ -1619,31 +1922,31 @@
     for (const p of report.providers) {
       const card = node('div', 'ucard');
       const head = node('div', 'ucard-head');
-      head.append(node('b', '', p.name), node('span', `tag ${p.status}`, USAGE_STATUS[p.status] || p.status));
+      head.append(node('b', '', p.name), node('span', `tag ${p.status}`, t(USAGE_STATUS[p.status] || p.status)));
       card.appendChild(head);
-      if (p.source) card.appendChild(node('div', 'ucard-src', `Quelle: ${p.source}`));
-      if (p.status === 'error') card.appendChild(node('div', 'unote', p.error || 'Fehler beim Abrufen'));
+      if (p.source) card.appendChild(node('div', 'ucard-src', t('Quelle: {s}', { s: t(p.source) })));
+      if (p.status === 'error') card.appendChild(node('div', 'unote', p.error || t('Fehler beim Abrufen')));
       for (const m of p.metrics || []) {
         const row = node('div', `urow ${m.kind}`);
-        row.title = m.hint || (m.kind === 'estimate' ? 'Schätzung' : m.kind === 'measured' ? 'Gemessen' : '');
-        row.append(node('span', '', m.label), node('span', '', m.value));
+        row.title = m.hint || (m.kind === 'estimate' ? t('Schätzung') : m.kind === 'measured' ? t('Gemessen') : '');
+        row.append(node('span', '', t(m.label)), node('span', '', t(m.value)));
         card.appendChild(row);
       }
       for (const l of p.limits || []) {
         const lim = node('div', 'ulimit');
         const top = node('div', 'ulimit-top');
-        top.append(node('span', '', l.label), node('span', '', l.usedPercent === null ? 'zurückgesetzt' : `${l.usedPercent} % genutzt · ${100 - l.usedPercent} % übrig`));
+        top.append(node('span', '', t(l.label)), node('span', '', l.usedPercent === null ? t('zurückgesetzt') : t('{a} % genutzt · {b} % übrig', { a: l.usedPercent, b: 100 - l.usedPercent })));
         const bar = node('div', 'budget-bar');
         const fill = node('i');
         fill.style.width = `${Math.min(100, l.usedPercent || 0)}%`;
         if ((l.usedPercent || 0) >= 90) fill.style.background = 'var(--red)';
         else if ((l.usedPercent || 0) >= 70) fill.style.background = '#ffd60a';
         bar.appendChild(fill);
-        const meta = [l.detail, l.resetsAt ? `setzt zurück ${when(l.resetsAt)}` : null, l.asOf ? `Stand ${ago(l.asOf)}` : null, l.note].filter(Boolean).join(' · ');
+        const meta = [l.detail, l.resetsAt ? t('setzt zurück {time}', { time: when(l.resetsAt) }) : null, l.asOf ? t('Stand {time}', { time: ago(l.asOf) }) : null, l.note].filter(Boolean).join(' · ');
         lim.append(top, bar, node('small', '', meta));
         card.appendChild(lim);
       }
-      const notes = [p.note, p.limitsNote ? `Limits: ${p.limitsNote}` : null].filter(Boolean);
+      const notes = [p.note ? t(p.note) : null, p.limitsNote ? `${t('Limits')}: ${t(p.limitsNote)}` : null].filter(Boolean);
       for (const n of notes) card.appendChild(node('div', 'unote', n));
       const acts = (p.activity || []).slice(0, 5);
       if (acts.length) {
@@ -1651,19 +1954,19 @@
         for (const a of acts) {
           const i = node('div', `uact-item${a.running ? ' running' : ''}`);
           i.appendChild(node('b', '', a.title));
-          const meta = [a.project, when(a.end), a.durationMs ? dur(a.durationMs) : null, a.tools?.length ? a.tools.join(', ') : null, a.errors ? `${a.errors} Fehler` : null].filter(Boolean).join(' · ');
+          const meta = [a.project, when(a.end), a.durationMs ? dur(a.durationMs) : null, a.tools?.length ? a.tools.join(', ') : null, a.errors ? t('{n} Fehler', { n: a.errors }) : null].filter(Boolean).join(' · ');
           i.appendChild(node('div', '', meta));
           list.appendChild(i);
         }
         card.appendChild(list);
       }
-      card.appendChild(node('div', 'ucard-foot', `Aktualisiert ${clock(p.updatedAt)}`));
+      card.appendChild(node('div', 'ucard-foot', t('Aktualisiert {time}', { time: clock(p.updatedAt) })));
       el.usageCards.appendChild(card);
     }
   }
 
   async function saveUsageKey(provider, input) {
-    footer(el.adminMsg, 'Prüfe …');
+    footer(el.adminMsg, t('Prüfe …'));
     const result = await api.setUsageKey(provider, input.value);
     if (!result.ok) { footer(el.adminMsg, result.error, 'err'); return; }
     input.value = '';
@@ -1699,11 +2002,11 @@
     box.classList.add(b.level);
     el.costBar.style.width = b.limit ? `${Math.min(100, Math.round(b.ratio * 100))}%` : '0%';
     el.costNote.textContent = b.limit
-      ? (b.level === 'blocked' ? `Limit von $${b.limit.toFixed(2)} erreicht` : `${Math.round(b.ratio * 100)} % von $${b.limit.toFixed(2)} · noch ${usd(b.left)}`)
-      : 'Kein Limit gesetzt';
+      ? (b.level === 'blocked' ? t('Limit von ${l} erreicht', { l: b.limit.toFixed(2) }) : t('{p} % von ${l} · noch {left}', { p: Math.round(b.ratio * 100), l: b.limit.toFixed(2), left: usd(b.left) }))
+      : t('Kein Limit gesetzt');
     el.costEstimate.textContent = u.estimate ? `≈ ${usd(u.estimate)}` : '–';
-    el.costSession.textContent = `${usd(u.session.cost)} · ${u.session.requests} ${u.session.requests === 1 ? 'Anfrage' : 'Anfragen'}`;
-    el.costTokens.textContent = `${tokens(u.totals.input + u.totals.cacheWrite + u.totals.cacheRead)} ein · ${tokens(u.totals.output)} aus`;
+    el.costSession.textContent = `${usd(u.session.cost)} · ${u.session.requests} ${u.session.requests === 1 ? t('Anfrage') : t('Anfragen')}`;
+    el.costTokens.textContent = t('{a} ein · {b} aus', { a: tokens(u.totals.input + u.totals.cacheWrite + u.totals.cacheRead), b: tokens(u.totals.output) });
     el.modelUsage.textContent = '';
     for (const m of u.models) {
       const row = document.createElement('div');
@@ -1731,42 +2034,42 @@
     renderHistoryList(st.history || []);
   }
 
-  const TASK_STATUS = { done: 'Erledigt', partial: 'Teilweise', error: 'Fehler', aborted: 'Gestoppt', stopped: 'Angehalten', limit: 'Limit erreicht', running: 'Läuft', interrupted: 'Unterbrochen' };
+  const TASK_STATUS = { done: t('Erledigt'), partial: t('Teilweise'), error: t('Fehler'), aborted: t('Gestoppt'), stopped: t('Angehalten'), limit: t('Limit erreicht'), running: t('Läuft'), interrupted: t('Unterbrochen') };
 
   function renderHistoryList(list) {
     el.historyList.textContent = '';
-    for (const t of list.slice(0, 25)) {
+    for (const task of list.slice(0, 25)) {
       const item = document.createElement('details');
       item.className = 'hist';
       const sum = document.createElement('summary');
       const dot = document.createElement('i');
-      dot.className = `hist-dot ${t.status}`;
-      dot.title = TASK_STATUS[t.status] || t.status;
+      dot.className = `hist-dot ${task.status}`;
+      dot.title = TASK_STATUS[task.status] || task.status;
       const title = document.createElement('span');
       title.className = 'hist-title';
-      title.textContent = t.title || 'Aufgabe';
+      title.textContent = task.title || t('Aufgabe');
       const meta = document.createElement('span');
       meta.className = 'hist-meta';
-      meta.textContent = `${clock(t.started)} · ${usd(t.cost)}`;
+      meta.textContent = `${clock(task.started)} · ${usd(task.cost)}`;
       sum.append(dot, title, meta);
       const body = document.createElement('div');
       body.className = 'hist-body';
       const head = document.createElement('div');
       head.className = 'hist-models';
-      const modelNames = (t.models || []).map((m) => modelLabel(m)).join(' → ') || '–';
-      head.textContent = `${TASK_STATUS[t.status] || t.status}${t.verified === false ? ' (nicht geprüft)' : ''} · ${modelNames} · ${tokens((t.tokens?.input || 0) + (t.tokens?.output || 0))} Tokens${t.escalations?.length ? ` · ${t.escalations.length}× gewechselt` : ''}`;
+      const modelNames = (task.models || []).map((m) => modelLabel(m)).join(' → ') || '–';
+      head.textContent = `${TASK_STATUS[task.status] || task.status}${task.verified === false ? t(' (nicht geprüft)') : ''} · ${modelNames} · ${tokens((task.tokens?.input || 0) + (task.tokens?.output || 0))} Tokens${task.escalations?.length ? ` · ${task.escalations.length}× gewechselt` : ''}`;
       body.appendChild(head);
-      if (t.error) {
+      if (task.error) {
         const err = document.createElement('div');
         err.className = 'hist-step error';
-        err.textContent = t.error;
+        err.textContent = task.error;
         body.appendChild(err);
       }
-      for (const step of (t.steps || []).slice(-40)) {
+      for (const step of (task.steps || []).slice(-40)) {
         const row = document.createElement('div');
         row.className = `hist-step ${step.status}`;
         const time = document.createElement('time');
-        time.textContent = new Date(step.time).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        time.textContent = new Date(step.time).toLocaleTimeString(I18N.locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         const label = document.createElement('span');
         label.textContent = step.label;
         row.append(time, label);
@@ -1817,9 +2120,9 @@
   }
 
   el.keySave.addEventListener('click', async () => {
-    footer(el.keyMsg, 'Prüfe Key …');
+    footer(el.keyMsg, t('Prüfe Key …'));
     el.keySave.disabled = true;
-    const result = await api.setKey(el.keyInput.value, el.workspaceInput.value);
+    const result = await api.setProviderKey(el.providerSelect.value, el.keyInput.value, el.workspaceInput.value);
     el.keySave.disabled = false;
     if (!result.ok) {
       footer(el.keyMsg, result.error, 'err');
@@ -1828,48 +2131,140 @@
     el.keyInput.value = '';
     state.settings = result.settings;
     if (result.models?.length) state.models = result.models;
-    footer(el.keyMsg, 'Verbunden. Buddy ist bereit.', 'ok');
-    if (state.models.length && !state.models.some((m) => m.id === state.settings.model)) {
-      const preferred = state.models.find((m) => /sonnet/i.test(m.id)) || state.models[0];
-      await save({ model: preferred.id });
-    }
+    footer(el.keyMsg, t('Verbunden. Buddy nutzt jetzt {name}.', { name: (state.settings.providers || []).find((x) => x.id === state.settings.provider)?.name || '' }), 'ok');
     fillSettings();
+    loadModels();
     renderEmpty();
   });
   el.keyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') el.keySave.click(); });
   el.keyRemove.addEventListener('click', async () => {
-    state.settings = await api.clearKey();
+    state.settings = await api.clearProviderKey(el.providerSelect.value);
     footer(el.keyMsg, '');
     fillSettings();
     renderEmpty();
   });
 
-  el.keyRevoke.addEventListener('click', () => confirmTwice(el.keyRevoke, 'Wirklich? Key wird hier gelöscht', async () => {
-    state.settings = await api.revokeKey();
-    footer(el.keyMsg, 'Key gelöscht. Sperre ihn jetzt in der Claude Console (dort auf «Delete» beim Key).', 'ok');
+  el.keyRevoke.addEventListener('click', () => confirmTwice(el.keyRevoke, t('Wirklich? Key wird hier gelöscht'), async () => {
+    state.settings = await api.revokeProviderKey(el.providerSelect.value);
+    footer(el.keyMsg, t('Key gelöscht. Sperre ihn jetzt in der Console des Anbieters (dort beim Key auf «Delete»).'), 'ok');
     fillSettings();
     renderEmpty();
   }));
-  el.providerSelect.addEventListener('change', () => save({ provider: el.providerSelect.value }));
+  el.providerSelect.addEventListener('change', async () => {
+    footer(el.keyMsg, '');
+    await save({ provider: el.providerSelect.value });
+    state.models = [];
+    fillSettings();
+    loadModels();
+    renderEmpty();
+  });
+
+  // Lokales Modell
+  el.hfSave.addEventListener('click', async () => {
+    footer(el.keyMsg, t('Speichere …'));
+    const token = el.hfTokenInput.value.trim();
+    const result = await api.setLocalModel(el.hfModelInput.value, token ? token : undefined);
+    if (!result.ok) { footer(el.keyMsg, result.error, 'err'); return; }
+    el.hfTokenInput.value = '';
+    state.settings = result.settings;
+    footer(el.keyMsg, t('Gespeichert. Buddy lädt das Modell im Hintergrund.'), 'ok');
+    fillSettings();
+    renderEmpty();
+  });
+  el.hfModelInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') el.hfSave.click(); });
+  el.hfTest.addEventListener('click', async () => {
+    el.hfTest.disabled = true;
+    footer(el.keyMsg, t('Lade und teste das Modell … (beim ersten Mal mit Download, das kann dauern)'));
+    const r = await api.testLocalModel();
+    el.hfTest.disabled = false;
+    if (!r.ok) { footer(el.keyMsg, r.error, 'err'); return; }
+    footer(el.keyMsg, t('Antwort in {s} s ({n} Tokens): «{text}»', { s: r.seconds, n: r.tokens, text: r.text }), 'ok');
+  });
+  async function startSetup() {
+    state.setup = { state: 'running', text: t('Richte die lokale KI ein …') };
+    fillSetup();
+    renderEmpty();
+    const r = await api.setupLocal();
+    if (r && r.ok) state.settings = await api.getSettings();
+    fillSettings();
+    renderEmpty();
+  }
+  el.setupBtn.addEventListener('click', startSetup);
+  el.localBtn.addEventListener('click', startSetup);
+  api.onLocalSetup((st) => {
+    state.setup = st;
+    if (state.view === 'settings') fillSetup();
+    renderEmpty();
+  });
+  api.onLocalStatus((st) => {
+    state.local = st;
+    if (state.settings) state.settings.hfStatus = st;
+    if (state.view === 'settings' && el.localBlock && !el.localBlock.hidden) fillProvider();
+    updateFootnote();
+    if (state.open && !state.history.length) renderEmpty();
+  });
+  api.onSettingsChanged((s) => {
+    state.settings = s;
+    if (state.view === 'settings') fillSettings();
+    renderEmpty();
+    updateFootnote();
+  });
+  api.onDiscovery((d) => {
+    if (!state.settings) return;
+    state.settings.discovery = d;
+    if (state.view === 'settings') fillSettings();
+    if (state.view === 'usage') loadUsage(false);
+    renderEmpty();
+  });
+  el.toolsRescan.addEventListener('click', async () => {
+    el.toolsRescan.disabled = true;
+    const d = await api.getDiscovery(true);
+    el.toolsRescan.disabled = false;
+    state.settings.discovery = d;
+    state.specs = null;
+    fillSettings();
+  });
+  el.usageLocalSettingsToggle.addEventListener('change', () => save({ usageLocal: el.usageLocalSettingsToggle.checked }));
+  el.langSelect.addEventListener('change', async () => {
+    await save({ language: el.langSelect.value });
+    // Neu aufbauen, damit alle Texte in der neuen Sprache erscheinen (Chat bleibt erhalten)
+    location.reload();
+  });
+  el.visualizerToggle.addEventListener('change', async () => { await save({ visualizer: el.visualizerToggle.checked }); syncVisualizer(); });
+
+  // Bereichs-Navigation in den Einstellungen
+  const catNav = document.querySelector('.cat-nav');
+  catNav?.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-cat]');
+    if (!b) return;
+    document.getElementById(b.dataset.cat)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  const catObserver = new IntersectionObserver((entries) => {
+    for (const en of entries) {
+      if (!en.isIntersecting) continue;
+      for (const b of catNav.querySelectorAll('button')) b.classList.toggle('on', b.dataset.cat === en.target.id);
+    }
+  }, { root: el.settingsView.querySelector('.settings-scroll'), rootMargin: '0px 0px -75% 0px' });
+  for (const h of el.settingsView.querySelectorAll('.category')) catObserver.observe(h);
   el.autoToggle.addEventListener('change', async () => { await save({ autoModel: el.autoToggle.checked }); fillSettings(); });
   el.routeToggle.addEventListener('change', async () => { await save({ showRouting: el.routeToggle.checked }); renderHistory(); });
   el.limitSelect.addEventListener('change', async () => { await save({ monthlyLimit: Number(el.limitSelect.value) }); loadAiStats(); });
   el.permMedium.addEventListener('change', () => save({ permissions: { medium: el.permMedium.value } }));
   el.permHigh.addEventListener('change', () => save({ permissions: { high: el.permHigh.value } }));
   el.historyToggle.addEventListener('change', () => save({ historyEnabled: el.historyToggle.checked }));
-  el.historyClear.addEventListener('click', () => confirmTwice(el.historyClear, 'Wirklich löschen?', async () => {
+  el.historyClear.addEventListener('click', () => confirmTwice(el.historyClear, t('Wirklich löschen?'), async () => {
     await api.clearHistory();
     loadAiStats();
   }));
-  el.usageReset.addEventListener('click', () => confirmTwice(el.usageReset, 'Wirklich zurücksetzen?', async () => {
+  el.usageReset.addEventListener('click', () => confirmTwice(el.usageReset, t('Wirklich zurücksetzen?'), async () => {
     await api.resetUsage();
     loadAiStats();
   }));
-  el.rollbackBtn.addEventListener('click', () => confirmTwice(el.rollbackBtn, 'Buddy startet danach neu. Nochmals klicken', async () => {
+  el.rollbackBtn.addEventListener('click', () => confirmTwice(el.rollbackBtn, t('Buddy startet danach neu. Nochmals klicken'), async () => {
     el.rollbackBtn.disabled = true;
     const result = await api.rollbackUpdate();
     el.rollbackBtn.disabled = false;
-    if (result && !result.ok) el.updateStatus.textContent = result.error || 'Ging nicht';
+    if (result && !result.ok) el.updateStatus.textContent = result.error || t('Ging nicht');
   }));
   el.workspaceInput.addEventListener('change', () => save({ workspaceId: el.workspaceInput.value.trim() }));
   el.modelSelect.addEventListener('change', () => save({ model: el.modelSelect.value }));
@@ -1879,7 +2274,7 @@
     await save({ effort: b.dataset.value });
     fillSettings();
   });
-  el.nameInput.addEventListener('change', () => save({ name: el.nameInput.value.trim() || 'Buddy' }));
+  el.nameInput.addEventListener('change', () => save({ name: el.nameInput.value.trim() || t('Buddy') }));
   el.promptInput.addEventListener('change', () => save({ systemPrompt: el.promptInput.value }));
   el.swatches.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
@@ -1923,14 +2318,14 @@
   el.displaySelect.addEventListener('change', () => save({ displayId: el.displaySelect.value }));
   el.calLead.addEventListener('change', () => save({ calendarLead: Number(el.calLead.value) }));
   el.calSave.addEventListener('click', async () => {
-    footer(el.calMsg, 'Lade Kalender …');
+    footer(el.calMsg, t('Lade Kalender …'));
     el.calSave.disabled = true;
     const result = await api.setCalendar(el.calInput.value);
     el.calSave.disabled = false;
     if (!result.ok) { footer(el.calMsg, result.error, 'err'); return; }
     el.calInput.value = '';
     state.settings = result.settings;
-    footer(el.calMsg, 'Kalender verbunden.', 'ok');
+    footer(el.calMsg, t('Kalender verbunden.'), 'ok');
     fillSettings();
   });
   el.calInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') el.calSave.click(); });
@@ -1985,12 +2380,12 @@
     // Bestehende Kürzel kurz pausieren, sonst lösen sie statt der Aufnahme aus
     api.suspendShortcuts(true);
     button.classList.add('recording');
-    button.textContent = 'Tasten drücken …';
+    button.textContent = t('Tasten drücken …');
     button.focus();
   }
 
   function shortcutLabel(keys) {
-    return keys ? prettyHotkey(keys) : 'Nicht festgelegt';
+    return keys ? prettyHotkey(keys) : t('Nicht festgelegt');
   }
 
   document.addEventListener('keydown', async (event) => {
@@ -2002,7 +2397,7 @@
     if (event.key === 'Escape' && plain) { stopHotkeyRecording(); return; }
     if ((event.key === 'Delete' || event.key === 'Backspace') && plain) {
       if (!current.allowClear) {
-        footer(el.hotkeyMsg, 'Zum Öffnen braucht Buddy immer ein Kürzel.', 'err');
+        footer(el.hotkeyMsg, t('Zum Öffnen braucht Buddy immer ein Kürzel.'), 'err');
         return;
       }
       stopHotkeyRecording();
@@ -2017,7 +2412,7 @@
     if (event.shiftKey) mods.push('Shift');
     if (event.metaKey) mods.push('Super');
     if (!mods.length && !/^F\d{1,2}$/.test(key)) {
-      footer(el.hotkeyMsg, 'Bitte mit Strg, Alt oder Umschalt kombinieren (F-Tasten gehen auch allein).', 'err');
+      footer(el.hotkeyMsg, t('Bitte mit Strg, Alt oder Umschalt kombinieren (F-Tasten gehen auch allein).'), 'err');
       return;
     }
     stopHotkeyRecording();
@@ -2071,7 +2466,7 @@
       const keyBtn = document.createElement('button');
       keyBtn.type = 'button';
       keyBtn.className = 'hotkey' + (item.keys ? '' : ' empty');
-      keyBtn.textContent = item.keys ? prettyHotkey(item.keys) : 'Kürzel wählen';
+      keyBtn.textContent = item.keys ? prettyHotkey(item.keys) : t('Kürzel wählen');
       keyBtn.addEventListener('click', () => {
         if (recording?.button === keyBtn) { stopHotkeyRecording(); return; }
         startRecording(keyBtn, (keys) => {
@@ -2084,16 +2479,16 @@
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'link danger';
-      remove.textContent = 'Entfernen';
+      remove.textContent = t('Entfernen');
       remove.addEventListener('click', () => saveShortcuts({ customShortcuts: customList().filter((c) => c.id !== item.id) }));
       top.append(keyBtn, remove);
 
       const prompt = document.createElement('input');
       prompt.type = 'text';
       prompt.maxLength = 500;
-      prompt.placeholder = 'Was soll Buddy tun? z. B. Pausier die Musik';
+      prompt.placeholder = t('Was soll Buddy tun? z. B. Pausier die Musik');
       prompt.value = item.prompt || '';
-      prompt.setAttribute('aria-label', 'Auftrag für Buddy');
+      prompt.setAttribute('aria-label', t('Auftrag für Buddy'));
       prompt.addEventListener('change', () => {
         const list = customList();
         const target = list.find((c) => c.id === item.id);
@@ -2150,16 +2545,19 @@
   el.island.addEventListener('click', (event) => {
     // Nach einem Ziehen kein Klick
     if (drag.suppressClick) { drag.suppressClick = false; return; }
-    // Nur ein Klick aufs geschlossene Island öffnet es (nicht Klicks im Inhalt)
+    // Doppelklicks während einer Animation nicht als zweiten Befehl werten
+    if (Date.now() - lastToggle < 180) return;
     if (event.target.closest('.actions, .stop, .body')) return;
-    if (!state.open) open();
+    // Im Notch holt ein Klick das Island zurück
+    if (!state.open && state.notch && visibleState() === 'notch') { lastToggle = Date.now(); setNotch(false); return; }
+    if (!state.open) { lastToggle = Date.now(); open(); }
   });
 
   // ---------- Notch-Modus: Island nach oben ziehen ----------
-  // Hochziehen (mind. 14 px, überwiegend senkrecht) macht einen kleinen Notch,
-  // Herunterziehen holt das Island zurück. Ein normaler Klick öffnet weiter.
-  const DRAG_UP = 14;
-  const DRAG_DOWN = 12;
+  // Einfach: kurz nach oben ziehen (oder nach oben scrollen) macht den Notch,
+  // nach unten ziehen, nach unten scrollen oder ein Klick holt das Island zurück.
+  const DRAG_UP = 6;
+  const DRAG_DOWN = 6;
   const drag = { active: false, id: null, x: 0, y: 0, moved: false, suppressClick: false, started: 0 };
 
   function setNotch(on) {
@@ -2177,6 +2575,7 @@
     drag.y = event.screenY;
     drag.moved = false;
     drag.started = Date.now();
+    setCapture(true);
     try { el.island.setPointerCapture(event.pointerId); } catch { /* egal */ }
   });
 
@@ -2204,13 +2603,22 @@
     setTimeout(() => { drag.suppressClick = false; }, 300);
     const dx = event.screenX - drag.x;
     const dy = event.screenY - drag.y;
-    const vertical = Math.abs(dy) > Math.abs(dx) * 1.5;
-    const quick = Date.now() - drag.started < 2500;
-    // Am oberen Rand kommt die Maus nicht weiter: dort zählt auch ein kürzerer Zug
+    const vertical = Math.abs(dy) >= Math.abs(dx);
+    // Am oberen Rand kommt die Maus nicht weiter: dort reicht jede Bewegung nach oben
     const atEdge = event.screenY <= window.screenY + 2;
-    if (!state.notch && vertical && quick && (dy <= -DRAG_UP || (atEdge && dy <= -6))) setNotch(true);
-    else if (state.notch && vertical && quick && dy >= DRAG_DOWN) setNotch(false);
+    if (!state.notch && vertical && (dy <= -DRAG_UP || (atEdge && dy < 0))) setNotch(true);
+    else if (state.notch && vertical && dy >= DRAG_DOWN) setNotch(false);
+    if (!el.island.matches(':hover') && !state.open) setCapture(false);
   }
+
+  // Mausrad über dem geschlossenen Island: hoch = Notch, runter = zurück
+  let wheelAt = 0;
+  el.island.addEventListener('wheel', (event) => {
+    if (state.open || Math.abs(event.deltaY) < 4 || Date.now() - wheelAt < 400) return;
+    wheelAt = Date.now();
+    if (event.deltaY < 0 && !state.notch) setNotch(true);
+    else if (event.deltaY > 0 && state.notch) setNotch(false);
+  }, { passive: true });
   el.island.addEventListener('pointerup', endDrag);
   el.island.addEventListener('pointercancel', () => endDrag(null));
   el.island.addEventListener('lostpointercapture', () => { if (drag.active) endDrag(null); });
@@ -2239,7 +2647,7 @@
   api.onBlur(() => {
     // Klick ausserhalb schliesst, ausser während der Hotkey aufgenommen oder gefragt wird.
     // Direkt nach dem Öffnen nicht: Windows meldet beim Vergrössern manchmal kurz «blur».
-    if (Date.now() - state.openedAt < 350) return;
+    if (Date.now() - state.openedAt < 350 || isAnimating()) return;
     if (!state.recordingHotkey && !el.messages.querySelector('.confirm')) close();
   });
 

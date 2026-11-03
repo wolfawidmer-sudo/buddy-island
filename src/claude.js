@@ -12,8 +12,9 @@ function apiBase() {
 const API_BASE = apiBase();
 const API_VERSION = '2023-06-01';
 
+const { ProviderError, friendlyMessage, RETRY_STATUS } = require('./llm/errors');
+
 // Zuverlässigkeit: Wiederholungen bei vorübergehenden Fehlern, Zeitlimits
-const RETRY_STATUS = new Set([408, 429, 500, 502, 503, 504, 529]);
 const RETRY_DELAYS = [1500, 4000, 10000];
 const CONNECT_TIMEOUT_MS = 45000; // bis die Antwort beginnt
 const IDLE_TIMEOUT_MS = 90000; // längste Pause im Stream
@@ -25,29 +26,11 @@ const FALLBACK_MODELS = [
   { id: 'claude-opus-5-5', name: 'Claude Opus 5.5' },
 ];
 
-class ClaudeError extends Error {
+// Gemeinsamer Fehlertyp aller Anbieter (Name bleibt für ältere Stellen erhalten)
+class ClaudeError extends ProviderError {
   constructor(status, raw, type) {
-    super(friendlyMessage(status, raw, type));
-    this.status = status;
-    this.raw = raw || '';
-    this.type = type || '';
+    super(status, raw, type, 'Claude');
   }
-}
-
-function friendlyMessage(status, raw = '', type = '') {
-  const text = `${raw} ${type}`.toLowerCase();
-  if (text.includes('workspace')) return 'Dein Key braucht eine Workspace-ID. Trag sie in den Einstellungen ein oder erstelle einen Key für einen bestimmten Workspace.';
-  if (text.includes('credit balance')) return 'Dein API-Guthaben ist aufgebraucht. Lade es in der Claude Console auf.';
-  if (status === 401 || type === 'authentication_error') return 'Der API-Key ist ungültig. Prüfe ihn in den Einstellungen.';
-  if (status === 403 || type === 'permission_error') return 'Dieser Key hat keinen Zugriff darauf (z. B. auf dieses Modell).';
-  if (status === 404 || type === 'not_found_error') return 'Das Modell wurde nicht gefunden. Wähle in den Einstellungen ein anderes.';
-  if (status === 413) return 'Die Unterhaltung ist zu lang. Starte einen neuen Chat.';
-  if (status === 429 || type === 'rate_limit_error') return 'Zu viele Anfragen. Warte kurz und versuch es nochmals.';
-  if (status === 529 || type === 'overloaded_error') return 'Claude ist gerade überlastet. Versuch es gleich nochmals.';
-  if (status >= 500) return 'Bei Claude ist ein Fehler aufgetreten. Versuch es nochmals.';
-  if (type === 'timeout_error') return 'Claude antwortet gerade nicht (Zeitüberschreitung). Versuch es gleich nochmals.';
-  if (status === 0 && !raw) return 'Keine Verbindung zu Claude. Bist du online?';
-  return raw || `Unbekannter Fehler (${status})`;
 }
 
 function headers(apiKey, workspaceId) {
@@ -76,7 +59,7 @@ async function toError(response) {
   return err;
 }
 
-const isRetryable = (err) => err instanceof ClaudeError && (err.status === 0 || RETRY_STATUS.has(err.status) || err.type === 'overloaded_error' || err.type === 'api_error');
+const isRetryable = (err) => err instanceof ProviderError && (err.status === 0 || RETRY_STATUS.has(err.status) || err.type === 'overloaded_error' || err.type === 'api_error');
 
 function abortError() {
   return Object.assign(new Error('abgebrochen'), { name: 'AbortError' });
@@ -324,7 +307,7 @@ function createClient(fetchImpl = globalThis.fetch) {
     } catch (err) {
       if (idleHit) throw new ClaudeError(0, '', 'timeout_error');
       if (signal?.aborted || err?.name === 'AbortError') throw abortError();
-      if (err instanceof ClaudeError) throw err;
+      if (err instanceof ProviderError) throw err;
       throw new ClaudeError(0, '');
     } finally {
       clearTimeout(idle);
@@ -358,7 +341,7 @@ function createClient(fetchImpl = globalThis.fetch) {
     return { data, usage: result.usage, raw: text, stopReason: result.stopReason };
   }
 
-  return { listModels, streamMessage, json };
+  return { provider: 'anthropic', listModels, streamMessage, json };
 }
 
 module.exports = { createClient, parseSSE, ClaudeError, FALLBACK_MODELS, friendlyMessage, isRetryable, API_BASE };

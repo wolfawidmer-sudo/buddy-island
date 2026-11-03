@@ -6,7 +6,12 @@ function on(channel, callback) {
   return () => ipcRenderer.removeListener(channel, handler);
 }
 
+// Wörterbuch einmal synchron holen, damit schon die ersten Texte stimmen
+let i18nData = { lang: 'de', dict: {}, locale: 'de-CH' };
+try { i18nData = ipcRenderer.sendSync('i18n:sync') || i18nData; } catch { /* Deutsch */ }
+
 contextBridge.exposeInMainWorld('buddy', {
+  i18n: i18nData,
   setLayout: (layout) => ipcRenderer.send('layout', layout),
   setMouseCapture: (capture) => ipcRenderer.send('mouse:capture', Boolean(capture)),
   releaseWindow: () => ipcRenderer.send('window:release'),
@@ -23,6 +28,17 @@ contextBridge.exposeInMainWorld('buddy', {
   getAiStats: () => ipcRenderer.invoke('ai:stats'),
   resetUsage: () => ipcRenderer.invoke('usage:reset'),
   clearHistory: () => ipcRenderer.invoke('history:clear'),
+  setProviderKey: (provider, key, workspaceId) => ipcRenderer.invoke('key:set', { key, workspaceId, provider }),
+  clearProviderKey: (provider) => ipcRenderer.invoke('key:clear', provider),
+  revokeProviderKey: (provider) => ipcRenderer.invoke('key:revoke', provider),
+  setLocalModel: (model, token) => ipcRenderer.invoke('hf:set', { model, token }),
+  testLocalModel: () => ipcRenderer.invoke('hf:test'),
+  setupLocal: () => ipcRenderer.invoke('hf:setup'),
+  warmLocal: () => ipcRenderer.send('hf:warm'),
+  getSpecs: () => ipcRenderer.invoke('specs:get'),
+  getDiscovery: (force) => ipcRenderer.invoke('discovery:get', { force: Boolean(force) }),
+  getI18n: () => ipcRenderer.invoke('i18n:get'),
+  setAudioMeter: (on) => ipcRenderer.send('audio:meter', Boolean(on)),
   getAiUsage: (force) => ipcRenderer.invoke('aiusage:get', { force: Boolean(force) }),
   setUsageKey: (provider, key) => ipcRenderer.invoke('aiusage:key', { provider, key }),
 
@@ -66,6 +82,12 @@ contextBridge.exposeInMainWorld('buddy', {
   onRewind: (cb) => on('chat:rewind', cb),
   onNotice: (cb) => on('chat:notice', cb),
   onKeyStatus: (cb) => on('key:status', cb),
+  onLocalStatus: (cb) => on('hf:status', cb),
+  onLocalSetup: (cb) => on('hf:setup', cb),
+  onDiscovery: (cb) => on('discovery', cb),
+  onSettingsChanged: (cb) => on('settings:changed', cb),
+  onAudioLevel: (cb) => on('audio:level', cb),
+  onI18n: (cb) => on('i18n', cb),
   onTimers: (cb) => on('timers:update', cb),
   onTimerDone: (cb) => on('timer:done', cb),
   onNotify: (cb) => on('notify', cb),

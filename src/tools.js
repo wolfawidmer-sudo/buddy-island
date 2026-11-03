@@ -5,6 +5,7 @@
 const { shell } = require('electron');
 const { spawn } = require('child_process');
 const os = require('os');
+const { t, localeOf } = require('./i18n');
 
 // App-Name -> wie sie unter Windows geöffnet wird
 const APPS = {
@@ -173,23 +174,23 @@ const TOOL_DEFINITIONS = [
   },
 ];
 
-// Kurze, deutsche Beschriftung für die Anzeige im Island
+// Kurze Beschriftung für die Anzeige im Island (in der Sprache der Oberfläche)
 function describe(name, input = {}) {
   switch (name) {
-    case 'set_timer': return `Timer ${formatDuration(durationMs(input))}${input.label ? ` · ${input.label}` : ''}`;
-    case 'list_timers': return 'Timer angeschaut';
-    case 'recent_notifications': return 'Mitteilungen gelesen';
-    case 'now_playing': return 'Musik angeschaut';
-    case 'calendar_events': return 'Kalender angeschaut';
-    case 'cancel_timer': return 'Timer gestoppt';
-    case 'open_website': return `Website geöffnet`;
-    case 'open_app': return `${capitalize(input.app || 'App')} geöffnet`;
-    case 'system_info': return 'Systeminfos gelesen';
-    case 'open_settings': return `Einstellungen: ${capitalize(String(input.page || '').replace(/_/g, ' '))}`;
-    case 'media_control': return {
+    case 'set_timer': return `${t('Timer')} ${formatDuration(durationMs(input))}${input.label ? ` · ${input.label}` : ''}`;
+    case 'list_timers': return t('Timer angeschaut');
+    case 'recent_notifications': return t('Mitteilungen gelesen');
+    case 'now_playing': return t('Musik angeschaut');
+    case 'calendar_events': return t('Kalender angeschaut');
+    case 'cancel_timer': return t('Timer gestoppt');
+    case 'open_website': return t('Website geöffnet');
+    case 'open_app': return t('{app} geöffnet', { app: capitalize(input.app || 'App') });
+    case 'system_info': return t('Systeminfos gelesen');
+    case 'open_settings': return t('Einstellungen: {page}', { page: capitalize(String(input.page || '').replace(/_/g, ' ')) });
+    case 'media_control': return t({
       play_pause: 'Wiedergabe umgeschaltet', next: 'Nächster Titel', previous: 'Vorheriger Titel',
       volume_up: 'Lauter', volume_down: 'Leiser', mute: 'Stumm umgeschaltet',
-    }[input.action] || 'Medien gesteuert';
+    }[input.action] || 'Medien gesteuert');
     default: return name;
   }
 }
@@ -207,14 +208,14 @@ function formatDuration(ms) {
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  if (h) return `${h} Std. ${m} Min.`;
-  if (m && s) return `${m} Min. ${s} Sek.`;
-  if (m) return `${m} Min.`;
-  return `${s} Sek.`;
+  if (h) return t('{h} Std. {m} Min.', { h, m });
+  if (m && s) return t('{m} Min. {s} Sek.', { m, s });
+  if (m) return t('{m} Min.', { m });
+  return t('{s} Sek.', { s });
 }
 
 function clock(ts) {
-  return new Date(ts).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+  return new Date(ts).toLocaleTimeString(localeOf(), { hour: '2-digit', minute: '2-digit' });
 }
 
 function pressMediaKey(code, times) {
@@ -285,7 +286,7 @@ function createTools({
         removed.push(timer);
       }
     }
-    removed.forEach((t) => timers.delete(t.id));
+    removed.forEach((x) => timers.delete(x.id));
     if (removed.length) changed();
     return removed;
   }
@@ -304,13 +305,13 @@ function createTools({
         const list = snapshot();
         if (!list.length) return { text: 'Es läuft kein Timer.' };
         return {
-          text: list.map((t) => `${t.id}: «${t.label}», noch ${formatDuration(t.endsAt - Date.now())} (bis ${clock(t.endsAt)} Uhr)`).join('\n'),
+          text: list.map((x) => `${x.id}: «${x.label}», noch ${formatDuration(x.endsAt - Date.now())} (bis ${clock(x.endsAt)} Uhr)`).join('\n'),
         };
       }
       case 'cancel_timer': {
         const removed = cancel(input);
         if (!removed.length) return { error: true, text: 'Kein passender Timer gefunden.' };
-        return { text: `Gestoppt: ${removed.map((t) => `«${t.label}»`).join(', ')}` };
+        return { text: `Gestoppt: ${removed.map((x) => `«${x.label}»`).join(', ')}` };
       }
       case 'now_playing': {
         const np = getNowPlaying();
@@ -326,7 +327,7 @@ function createTools({
         const q = String(input.query || '').toLowerCase();
         const list = getCalendar(Math.max(Date.now() - 3600e3, start.getTime()), end).filter((e) => !q || e.title.toLowerCase().includes(q));
         if (!list.length) return { text: `Keine Termine in den nächsten ${days === 1 ? 'Stunden (heute)' : `${days} Tagen`}.` };
-        const day = (ts) => new Date(ts).toLocaleDateString('de-CH', { weekday: 'short', day: 'numeric', month: 'numeric' });
+        const day = (ts) => new Date(ts).toLocaleDateString(localeOf(), { weekday: 'short', day: 'numeric', month: 'numeric' });
         return {
           text: list.slice(0, 40).map((e) => `${day(e.start)} ${e.allDay ? 'ganztägig' : `${clock(e.start)}–${clock(e.end)}`} · ${e.title}${e.location ? ` (${e.location})` : ''}`).join('\n'),
         };

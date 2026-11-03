@@ -3,6 +3,7 @@
 // ohne API-Aufruf, alles andere Claude Haiku als Dispatcher.
 
 const models = require('./models');
+const { t, language, LANGS } = require('./i18n');
 
 const CACHE_MS = 10 * 60 * 1000;
 const CACHE_MAX = 60;
@@ -41,6 +42,14 @@ Modelle:
 Wähle immer das günstigste Modell, das die Aufgabe zuverlässig schafft. aufwand: low für einfache, medium für normale, high für komplexe Aufgaben.
 schritte = ungefähre Anzahl Arbeitsschritte (1 bei einer reinen Antwort). tokens = geschätzte Länge der Antwort in Tokens.
 risiken: kurze Stichworte (z. B. «Dateien löschen»), leer wenn keine. begruendung: höchstens 8 Wörter auf Deutsch.`;
+
+// Die Begründung erscheint in der Oberfläche, darum in deren Sprache
+function dispatchSystem() {
+  const lang = language();
+  if (lang === 'de') return DISPATCH_SYSTEM;
+  const name = { en: 'English', fr: 'French' }[lang] || LANGS[lang]?.name || 'English';
+  return DISPATCH_SYSTEM.replace('höchstens 8 Wörter auf Deutsch.', `höchstens 8 Wörter auf ${name} (in English: at most 8 words in ${name}).`);
+}
 
 // Eindeutig einfache Anfragen ohne API-Aufruf erkennen
 const SIMPLE_RULES = [
@@ -147,13 +156,13 @@ function createRouter({ claude, usage, log = () => {} }) {
   }
 
   function quickRule(text) {
-    const t = String(text || '').trim();
-    if (!t || t.length > 140 || COMPLEX_HINT.test(t)) return null;
-    const rule = SIMPLE_RULES.find((r) => r.test.test(t));
+    const q = String(text || '').trim();
+    if (!q || q.length > 140 || COMPLEX_HINT.test(q)) return null;
+    const rule = SIMPLE_RULES.find((r) => r.test.test(q));
     if (!rule) return null;
     return {
       komplexitaet: 'einfach', reasoning: 'niedrig', schritte: rule.caps.includes('werkzeuge') ? 2 : 1,
-      faehigkeiten: rule.caps, risiko: 'niedrig', risiken: [], tokens: 150, modell: 'haiku', aufwand: 'low', begruendung: rule.reason,
+      faehigkeiten: rule.caps, risiko: 'niedrig', risiken: [], tokens: 150, modell: 'haiku', aufwand: 'low', begruendung: t(rule.reason),
     };
   }
 
@@ -165,9 +174,9 @@ function createRouter({ claude, usage, log = () => {} }) {
     return recent.length ? `Bisheriger Verlauf (gekürzt):\n${recent.join('\n')}\n\n` : '';
   }
 
-  async function askDispatcher({ text, messages, withComputer, apiKey, workspaceId, haiku, signal, task }) {
+  async function askDispatcher({ text, messages, withComputer, apiKey, workspaceId, haiku, signal, task, client }) {
     const prompt = `${contextFor(messages)}PC-Steuerung ist ${withComputer ? 'erlaubt' : 'ausgeschaltet'}.\n\nNeue Anfrage: «${String(text).slice(0, 3000)}»`;
-    const result = await claude.json({ apiKey, workspaceId, model: haiku, system: DISPATCH_SYSTEM, prompt, schema: SCHEMA, maxTokens: 700, effort: 'low', signal });
+    const result = await (client || claude).json({ apiKey, workspaceId, model: haiku, system: dispatchSystem(), prompt, schema: SCHEMA, maxTokens: 700, effort: 'low', signal });
     const cost = usage ? usage.record({ model: haiku, usage: result.usage, purpose: 'Router', task }) : 0;
     const a = result.data;
     if (!a || typeof a !== 'object' || !a.komplexitaet) throw new Error('Router-Antwort unlesbar');
@@ -175,18 +184,27 @@ function createRouter({ claude, usage, log = () => {} }) {
   }
 
   // Hauptfunktion. Gibt eine Entscheidung zurück, die der Agent ausführt.
-  async function route({ text, messages = [], withComputer = false, tiers, budget, settings = {}, meta = {}, apiKey, signal, task }) {
-    const auto = settings.autoModel !== false;
+  async function route({ text, messages = [], withComputer = false, tiers, budget, settings = {}, meta = {}, apiKey, signal, task, client, providerId = 'anthropic' }) {
     const manualEffort = settings.effort && settings.effort !== 'auto' ? settings.effort : null;
     const contextTokens = approxTokens(messages);
 
-    // Manuell: genau das gewählte Modell
+    // Lokales Hugging-Face-Modell: es gibt nur dieses eine, kein Router-Aufruf
+    if (providerId === 'huggingface') {
+      const model = tiers.sonnet || settings.model;
+      return decision({
+        source: 'lokal', tier: 'sonnet', model, effort: null, reason: t('Lokales Modell (Hugging Face)'), analysis: null,
+        allowOpus: false, needsPlan: false, estimate: 0, routerCost: 0,
+      });
+    }
+    const auto = settings.autoModel !== false;
+
+    // Manuell: genau das gewählte Modell (falls es zum Anbieter passt)
     if (!auto) {
-      const model = settings.model || tiers.sonnet || models.CATALOG[1].id;
+      const model = (settings.model && models.providerOf(settings.model) === providerId ? settings.model : null) || tiers.sonnet || models.CATALOG[1].id;
       const effort = models.supportedEffort(model, manualEffort) || null;
       return decision({
         source: 'manuell', tier: models.tierOf(model), model, effort,
-        reason: 'Manuell gewählt', analysis: null, allowOpus: true, needsPlan: false,
+        reason: t('Manuell gewählt'), analysis: null, allowOpus: true, needsPlan: false,
         estimate: estimateCost(model, { steps: 2, withComputer, contextTokens }), routerCost: 0,
       });
     }
@@ -201,7 +219,7 @@ function createRouter({ claude, usage, log = () => {} }) {
     if (meta.lastTier && FOLLOW_UP.test(String(text || '').trim()) && models.TIERS.includes(meta.lastTier)) {
       analysis = {
         komplexitaet: meta.lastTier === 'haiku' ? 'einfach' : 'mittel', reasoning: 'mittel', schritte: 3, faehigkeiten: ['werkzeuge'],
-        risiko: 'niedrig', risiken: [], tokens: 400, modell: meta.lastTier, aufwand: meta.lastTier === 'haiku' ? 'low' : 'medium', begruendung: 'Fortsetzung der letzten Aufgabe',
+        risiko: 'niedrig', risiken: [], tokens: 400, modell: meta.lastTier, aufwand: meta.lastTier === 'haiku' ? 'low' : 'medium', begruendung: t('Fortsetzung der letzten Aufgabe'),
       };
       source = 'regel';
     }
@@ -214,7 +232,7 @@ function createRouter({ claude, usage, log = () => {} }) {
       const haiku = tiers.haiku;
       if (haiku && budget?.level !== 'blocked') {
         try {
-          const r = await askDispatcher({ text, messages, withComputer, apiKey, workspaceId: settings.workspaceId, haiku, signal, task });
+          const r = await askDispatcher({ text, messages, withComputer, apiKey, workspaceId: settings.workspaceId, haiku, signal, task, client });
           analysis = r.analysis;
           routerCost = r.cost;
           routerUsage = r.usage;
@@ -232,7 +250,7 @@ function createRouter({ claude, usage, log = () => {} }) {
       const complex = COMPLEX_HINT.test(String(text || ''));
       analysis = {
         komplexitaet: complex ? 'mittel' : 'einfach', reasoning: 'mittel', schritte: complex ? 3 : 1, faehigkeiten: complex ? ['werkzeuge'] : ['gespraech'],
-        risiko: 'niedrig', risiken: [], tokens: 500, modell: complex ? 'sonnet' : 'haiku', aufwand: complex ? 'medium' : 'low', begruendung: 'Standardwahl (Router nicht erreichbar)',
+        risiko: 'niedrig', risiken: [], tokens: 500, modell: complex ? 'sonnet' : 'haiku', aufwand: complex ? 'medium' : 'low', begruendung: t('Standardwahl (Router nicht erreichbar)'),
       };
       source = 'standard';
     }
@@ -250,7 +268,7 @@ function createRouter({ claude, usage, log = () => {} }) {
       capped = 'budget';
     }
     tier = availableTier(tier, tiers) || 'sonnet';
-    const model = tiers[tier] || settings.model;
+    const model = tiers[tier] || tiers.sonnet || settings.model;
 
     let effort = manualEffort || analysis.aufwand || EFFORT_BY_COMPLEXITY[analysis.komplexitaet] || 'medium';
     if (!manualEffort) {
@@ -261,8 +279,8 @@ function createRouter({ claude, usage, log = () => {} }) {
 
     const caps = new Set(analysis.faehigkeiten);
     const needsPlan = analysis.schritte >= 3 && (caps.has('pc_steuerung') || caps.has('dateien') || caps.has('planung') || caps.has('werkzeuge') || caps.has('programmieren'));
-    let reason = String(analysis.begruendung || '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Automatisch gewählt';
-    if (capped) reason += ' · Budget fast aufgebraucht';
+    let reason = String(analysis.begruendung || '').replace(/\s+/g, ' ').trim().slice(0, 80) || t('Automatisch gewählt');
+    if (capped) reason += ' · ' + t('Budget fast aufgebraucht');
 
     return decision({
       source, tier, model, effort, reason, analysis, allowOpus, needsPlan, capped,

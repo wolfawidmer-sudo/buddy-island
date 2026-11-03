@@ -7,6 +7,7 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
+const { t } = require('./i18n');
 
 const ALIASES = {
   desktop: 'desktop', schreibtisch: 'desktop',
@@ -379,11 +380,11 @@ function createFiles({ roots, trash, home = '' }) {
   function describe(name, input = {}) {
     const n = Array.isArray(input.moves) ? input.moves.length : Array.isArray(input.paths) ? input.paths.length : 0;
     switch (name) {
-      case 'list_files': return `${input.folder || 'Ordner'} angeschaut`;
-      case 'find_duplicates': return 'Duplikate gesucht';
-      case 'create_folder': return `Ordner ${String(input.path || '').split(/[\\/]/).pop()} angelegt`;
-      case 'move_files': return `${n} ${n === 1 ? 'Datei' : 'Dateien'} verschoben`;
-      case 'delete_files': return `${n} in den Papierkorb`;
+      case 'list_files': return t('{folder} angeschaut', { folder: input.folder || t('Ordner') });
+      case 'find_duplicates': return t('Duplikate gesucht');
+      case 'create_folder': return t('Ordner {name} angelegt', { name: String(input.path || '').split(/[\\/]/).pop() });
+      case 'move_files': return n === 1 ? t('1 Datei verschoben') : t('{n} Dateien verschoben', { n });
+      case 'delete_files': return t('{n} in den Papierkorb', { n });
       default: return name;
     }
   }
@@ -392,17 +393,19 @@ function createFiles({ roots, trash, home = '' }) {
   function summarize(name, input = {}) {
     if (name === 'move_files' && Array.isArray(input.moves)) {
       const targets = [...new Set(input.moves.map((m) => String(m.to || '').replace(/[\\/][^\\/]*\.[^\\/]+$/, '').replace(/[\\/]$/, '')))];
-      return `${input.moves.length} ${input.moves.length === 1 ? 'Datei' : 'Dateien'} verschieben nach ${targets.slice(0, 3).join(', ')}${targets.length > 3 ? ` und ${targets.length - 3} weitere Ordner` : ''}`;
+      const n = input.moves.length;
+      const more = targets.length > 3 ? t(' und {n} weitere Ordner', { n: targets.length - 3 }) : '';
+      return (n === 1 ? t('1 Datei verschieben nach {to}', { to: targets.slice(0, 3).join(', ') }) : t('{n} Dateien verschieben nach {to}', { n, to: targets.slice(0, 3).join(', ') })) + more;
     }
     if (name === 'delete_files' && Array.isArray(input.paths)) {
-      const list = input.paths.slice(0, 4).map((p) => String(p).split(/[\\/]/).pop()).join(', ');
-      return `${input.paths.length} ${input.paths.length === 1 ? 'Datei' : 'Dateien'} in den Papierkorb legen: ${list}${input.paths.length > 4 ? ' …' : ''}`;
+      const list = input.paths.slice(0, 4).map((p) => String(p).split(/[\\/]/).pop()).join(', ') + (input.paths.length > 4 ? ' …' : '');
+      return input.paths.length === 1 ? t('1 Datei in den Papierkorb legen: {list}', { list }) : t('{n} Dateien in den Papierkorb legen: {list}', { n: input.paths.length, list });
     }
-    if (name === 'create_folder') return `Ordner «${input.path}» anlegen`;
+    if (name === 'create_folder') return t('Ordner «{path}» anlegen', { path: input.path });
     return describe(name, input);
   }
 
-  return { definitions: TOOL_DEFINITIONS, run, describe, summarize, resolve, display, names: new Set(TOOL_DEFINITIONS.map((t) => t.name)) };
+  return { definitions: TOOL_DEFINITIONS, run, describe, summarize, resolve, display, names: new Set(TOOL_DEFINITIONS.map((d) => d.name)) };
 }
 
 module.exports = { createFiles, TOOL_DEFINITIONS, formatSize };

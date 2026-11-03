@@ -1,10 +1,10 @@
 # Buddy Island
 
-Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windows-Bildschirms wohnt. Buddy läuft mit deinem eigenen Claude-API-Key: Er beantwortet Fragen, stellt Timer, zeigt Musik, Termine und Windows-Mitteilungen, hört auf «Hey Buddy» und kann auf Wunsch den ganzen PC mit Maus und Tastatur bedienen.
+Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windows-Bildschirms wohnt. Buddy läuft gratis mit einer lokalen KI auf deinem PC oder mit deinem eigenen API-Key von Claude, OpenAI, Grok oder Gemini: Er beantwortet Fragen, stellt Timer, zeigt Musik, Termine und Windows-Mitteilungen, hört auf «Hey Buddy» und kann auf Wunsch den ganzen PC mit Maus und Tastatur bedienen.
 
 **Website:** https://wolfawidmer-sudo.github.io/buddy-island-website/ ([Quellcode der Website](https://github.com/wolfawidmer-sudo/buddy-island-website))
 
-> **Status:** Testversion (0.3). Getestet mit einer simulierten Claude-API unter Linux. Auf echten Windows-PCs bitte den Selbsttest in den Einstellungen laufen lassen.
+> **Status:** Testversion (0.4). Getestet mit einer simulierten Claude-API unter Linux. Auf echten Windows-PCs bitte den Selbsttest in den Einstellungen laufen lassen.
 
 <p align="center"><img src="docs/island-states.png" alt="Buddy Island geschlossen: Ruhe, Timer, Musik und Notch" width="600"></p>
 
@@ -16,13 +16,18 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 
 - **Ruhiges Island**: Geschlossen zeigt Buddy nur seine Augen, genau in der Mitte. Kein Text, keine Symbole. Öffnen und Schliessen laufen ohne springende Texte.
 - **Notch-Modus**: Island mit der Maus nach oben ziehen, und es wird zu einem winzigen Notch am Bildschirmrand. Nach unten ziehen holt es zurück.
+- **Mehrere KI-Anbieter**: Anthropic Claude, OpenAI, xAI Grok, Google Gemini oder ein lokales Modell über Hugging Face Transformers. Alle hängen an einer gemeinsamen Schnittstelle (`LlmClient`), jeder Anbieter hat eine Fähigkeitsmatrix (Bilder, Werkzeuge, PC-Steuerung, strukturierte Ausgabe). Kann ein Modell etwas nicht, sagt Buddy das im Island, statt abzustürzen.
+- **Lokal zuerst**: Ohne API-Key wählt Buddy automatisch ein lokales Modell. Er misst Arbeitsspeicher, Prozessor und Grafikkarte, empfiehlt das schnellste und das beste Modell und richtet Python, PyTorch, Transformers und das Modell mit einem Klick ein (nur für deinen Benutzer, ohne Administratorrechte). Einen API-Key kannst du jederzeit in den Einstellungen ergänzen.
+- **Spricht deine Sprache**: Oberfläche, Meldungen und Anweisungen an die KI folgen beim Start der Windows-Sprache (Deutsch, Englisch, Französisch; sonst englische Oberfläche, Antworten trotzdem in deiner Sprache).
+- **Erkennt deine Tools**: Claude Code, Codex, Gemini CLI, Grok CLI, ChatGPT, Hugging Face und mehr werden im Hintergrund erkannt. Was nicht installiert ist, erscheint nirgends.
+- **Musik-Visualizer**: Die Balken im Island folgen dem echten Pegel der Windows-Tonausgabe (WASAPI-Pegelanzeige, nichts wird aufgenommen).
 - **Automatische Modellwahl**: Claude Haiku prüft jede Anfrage und wählt das günstigste passende Modell (Haiku, Sonnet oder Opus) und die Denktiefe. Einzelne Schritte einer Aufgabe können verschiedene Modelle übernehmen. Hakt es, wechselt Buddy selbst auf ein stärkeres Modell.
 - **Agent mit Plan**: Mehrstufige Aufgaben plant Buddy in Schritten, prüft jedes Ergebnis und meldet nichts als erledigt, was er nicht geprüft hat.
 - **Dateien ordnen**: Dateien auflisten, Duplikate finden (per SHA-256), Ordner anlegen, verschieben, in den Papierkorb legen. Nur in deinen Benutzerordnern.
 - **Berechtigungen**: Niedriges Risiko läuft direkt, mittleres fragt einmal pro Aufgabe, hohes (Löschen, Admin, System, Sicherheit) jedes Mal.
 - **Kosten im Griff**: Tokens, Kosten pro Anfrage, Monatshochrechnung und ein Ausgabenlimit.
 - **KI-Nutzung**: Ein Dashboard für Buddy, die Claude API, Claude Code, Codex, ChatGPT und Grok, mit allem, was die Anbieter wirklich herausgeben. Frag einfach «Wie viel Codex habe ich noch?».
-- **Chat mit Claude**: Antworten erscheinen live, mit Code-Blöcken und Kopieren-Knopf.
+- **Chat**: Antworten erscheinen live, mit Code-Blöcken und Kopieren-Knopf.
 - **Timer**: «Stell einen Timer auf 10 Minuten». Der Countdown läuft im Island, am Ende wackelt Buddy und macht einen Ton.
 - **Apps, Websites, Musik**: Rechner, Editor, Spotify öffnen; Musik pausieren, lauter oder leiser machen.
 - **PC-Steuerung**: «Öffne den Editor und schreib eine Einkaufsliste». Buddy macht Bildschirmfotos und bedient Maus und Tastatur, bis die Aufgabe erledigt ist. Vorher fragt er um Erlaubnis.
@@ -42,10 +47,9 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 
 1. **Installer herunterladen**: Lade unter [Releases](../../releases) die Datei `BuddyIsland-Setup-….exe` herunter.
 2. **Installieren**: Doppelklick auf die Datei. Falls Windows «Der Computer wurde durch Windows geschützt» anzeigt: «Weitere Informationen» → «Trotzdem ausführen». Das erscheint, weil die App (noch) nicht mit einem kostenpflichtigen Zertifikat signiert ist. Buddy installiert sich nur für deinen Benutzer, ohne Administratorrechte, und legt Verknüpfungen im Startmenü und auf dem Desktop an.
-3. **API-Key verbinden**:
-   - Öffne die [Claude Console](https://platform.claude.com/settings/keys), melde dich an und klicke auf «Create key».
-   - Kopiere den Key (er beginnt mit `sk-ant-`).
-   - Klicke oben auf das Island → «API-Key verbinden» → Key einfügen → «Verbinden».
+3. **KI einrichten**:
+   - Ohne Key: Klicke oben auf das Island → «Lokale KI einrichten». Buddy wählt das passende Modell für deinen PC und lädt es einmalig (etwa 1 bis 3 GB).
+   - Mit Key (optional, klügere Antworten, PC-Steuerung nur mit Claude): Einstellungen → «Provider & API-Keys» → Anbieter wählen → Key einfügen → «Verbinden». Keys gibt es in der [Claude Console](https://platform.claude.com/settings/keys), bei [OpenAI](https://platform.openai.com/api-keys), in der [xAI Console](https://console.x.ai) oder im [Google AI Studio](https://aistudio.google.com/apikey).
 4. **Fertig**: Mit <kbd>Strg</kbd> + <kbd>Umschalt</kbd> + <kbd>Leertaste</kbd> öffnest du Buddy von überall.
 5. **Selbsttest**: Einstellungen → «Über Buddy» → «Selbsttest starten» zeigt dir, ob alles funktioniert.
 
@@ -123,7 +127,12 @@ Im Leerlauf läuft keine einzige Endlos-Animation: Das Fenster ist dann nur so g
 | Datei | Aufgabe |
 | --- | --- |
 | `src/main.js` | Fenster, Tastenkürzel, Updates, Verbindung der Teile |
+| `src/llm/` | Anbieter-Schnittstelle (`types.d.ts`), OpenAI-kompatibler Adapter (OpenAI, xAI, Gemini), lokaler Hugging-Face-Adapter, gemeinsame Fehler |
 | `src/claude.js` | Claude Messages API (Streaming, Prompt-Caching, Wiederholungen, Zeitlimits) |
+| `src/discovery.js` | Erkennt installierte KI-Tools und Laufzeiten |
+| `src/system-specs.js` | Liest die Hardware und empfiehlt lokale Modelle |
+| `src/audio-meter.js` | Pegel der Tonausgabe für den Visualizer |
+| `src/i18n/` | Sprachen (Deutsch als Quelle, Englisch, Französisch) |
 | `src/models.js` | Anbieter, Modelle, Preise, Denktiefe |
 | `src/router.js` | Modellwahl: Regeln für Einfaches, sonst Haiku als Dispatcher, Budget |
 | `src/agent.js` | Ausführung: Plan, Modell pro Schritt, Eskalation, Prüfung, Freigaben |
@@ -150,7 +159,9 @@ Im Leerlauf läuft keine einzige Endlos-Animation: Das Fenster ist dann nur so g
 - Die PC-Steuerung kostet mehr API-Guthaben als ein normaler Chat, weil Bildschirmfotos mitgeschickt werden. Buddy entfernt ältere Bildschirmfotos aus dem Verlauf, um zu sparen.
 - Abo-Limits von Claude (Pro/Max), ChatGPT und Grok geben die Anbieter über keine offizielle Schnittstelle heraus. Buddy zeigt sie darum als «nicht verfügbar». Codex schreibt seine Limits in die eigenen Protokolle, die zeigt Buddy (Stand der letzten Codex-Nutzung).
 - Claude Code und Codex in WSL legen ihre Protokolle im Linux-Teil ab, dort liest Buddy nicht.
-- Kosten sind Schätzungen aus Token-Zahlen und Listenpreisen. Massgebend ist die Abrechnung in der Claude Console.
+- Kosten sind Schätzungen aus Token-Zahlen und Listenpreisen. Massgebend ist die Abrechnung beim Anbieter. Die Preise von OpenAI, xAI und Google sind Schätzungen (Stand Oktober 2026).
+- PC-Steuerung gibt es nur mit Claude. Lokale Modelle können nur chatten (keine Werkzeuge, keine Bilder).
+- Lokale Modelle auf dem Prozessor sind langsam; mit einer NVIDIA-Grafikkarte und CUDA-PyTorch geht es viel schneller.
 
 ## Lizenz
 

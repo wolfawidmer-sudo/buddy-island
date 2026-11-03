@@ -2,6 +2,8 @@
 // Kein Login nötig: Buddy lädt den Link alle 15 Minuten, rechnet
 // Wiederholungen aus und erinnert kurz vor Terminen im Island.
 
+const { t } = require('./i18n');
+
 const REFRESH_MS = 15 * 60 * 1000;
 const WINDOW_DAYS = 31;
 const MAX_ITER = 5000;
@@ -324,7 +326,7 @@ function createCalendar({ fetchText, getUrl, onReminder, onUpdate, log }) {
     }
     try {
       const text = await fetchText(url);
-      if (!/BEGIN:VCALENDAR/.test(text)) throw new Error('Das ist kein Kalender-Link (iCal/ICS).');
+      if (!/BEGIN:VCALENDAR/.test(text)) throw new Error(t('Das ist kein Kalender-Link (iCal/ICS).'));
       events = parseICS(text);
       lastSync = Date.now();
       lastError = null;
