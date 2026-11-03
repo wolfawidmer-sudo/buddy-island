@@ -323,7 +323,7 @@ async function autoSelectLocal() {
     const rec = systemSpecs.recommend(specs);
     // Schon heruntergeladene Modelle bevorzugen, sonst die Empfehlung
     const cached = rec.all.filter((r) => r.usable && found.hfModels.some((m) => m.id === r.id));
-    const pick = cached.length ? cached[cached.length - 1] : rec.best;
+    const pick = cached.length ? cached[cached.length - 1] : rec.quick;
     setSecret('hfModel', pick.id);
     log(`Lokales Modell automatisch gewählt: ${pick.id} (${pick.device})`);
     changed = true;
@@ -487,7 +487,7 @@ async function runLocalSetup() {
     }
     if (!have.transformers) {
       step(t('Installiere Hugging Face Transformers …'), { percent: 45 });
-      r = await stream(py.exe, [...py.args, '-m', 'pip', 'install', '--user', ...bar, 'transformers', 'huggingface_hub'], t('Installiere Hugging Face Transformers …'), [45, 53]);
+      r = await stream(py.exe, [...py.args, '-m', 'pip', 'install', '--user', ...bar, 'transformers', 'huggingface_hub[hf_xet]'], t('Installiere Hugging Face Transformers …'), [45, 53]);
       if (!r.ok) return fail(t('Transformers konnte nicht installiert werden: {e}', { e: r.last }));
     }
 
@@ -505,7 +505,10 @@ async function runLocalSetup() {
 
     // Empfohlenes Modell wählen und herunterladen (über huggingface_hub)
     const specs = await systemSpecs.detectSpecs({ python: found.python, cudaVramGB: found.python.vramGB });
-    const pick = systemSpecs.recommend(specs).best;
+    // Schon heruntergeladenes, brauchbares Modell nehmen (kein Download), sonst das schnelle
+    const rec = systemSpecs.recommend(specs);
+    const cachedOk = rec.all.filter((x) => x.usable && found.hfModels.some((m) => m.id === x.id));
+    const pick = cachedOk.length ? cachedOk[cachedOk.length - 1] : rec.quick;
     setSecret('hfModel', pick.id);
     settings.provider = 'huggingface';
     saveSettings();
@@ -518,7 +521,7 @@ async function runLocalSetup() {
         ? { percent: 55 + Math.round(Math.min(1, have / expected) * 40), text: `${t('Lade {name} herunter …', { name: pick.name })} (${Math.round(have / 1e6)} / ${Math.round(expected / 1e6)} MB)` }
         : {};
     };
-    const dl = `from huggingface_hub import snapshot_download\nsnapshot_download(${JSON.stringify(pick.id)}, allow_patterns=["*.json","*.safetensors","*.model","*.txt","*.jinja","tokenizer*"])\nprint("ok")`;
+    const dl = `from huggingface_hub import snapshot_download\nsnapshot_download(${JSON.stringify(pick.id)}, max_workers=16, allow_patterns=["*.json","*.safetensors","*.model","*.txt","*.jinja","tokenizer*"])\nprint("ok")`;
     const env = getSecret('hfToken');
     if (env) process.env.HF_TOKEN = env;
     r = await stream(found.python.exe, [...found.python.args, '-c', dl], t('Lade das Modell herunter …'), modelProgress);
@@ -1994,6 +1997,8 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       await autoSelectLocal().catch((err) => log(`Lokale Auswahl: ${err.message}`));
       // Oberfläche weiss jetzt, ob die lokale KI wirklich bereit ist
       win?.webContents.send('settings:changed', publicSettings());
+      // Lokales Modell schon jetzt im Hintergrund laden, damit es beim ersten Öffnen bereit ist
+      warmLocal();
     }), 1500);
 
     computer = createComputer({

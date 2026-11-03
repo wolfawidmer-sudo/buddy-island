@@ -154,7 +154,12 @@ function recommend(specs) {
   else if (specs.gpus.some((g) => g.vendor === 'nvidia') && !specs.cuda) summary = t('NVIDIA-Grafikkarte gefunden, aber PyTorch nutzt sie noch nicht (CUDA fehlt). Mit «pip install torch --index-url https://download.pytorch.org/whl/cu128» wird es viel schneller.');
   else summary = t('Ohne passende Grafikkarte rechnet der Prozessor ({threads} Threads, {ram} GB RAM). Kleine Modelle sind hier am besten.', { threads: specs.threads, ram: specs.ramGB });
 
-  return { fastest, best, all: rated, summary };
+  // Für die automatische Einrichtung: schnell geladen und schnell in der Antwort.
+  // Mit Grafikkarte das beste Modell, sonst das grösste mehrsprachige, das noch «flüssig» läuft.
+  const quickPool = onGpu.length ? bestPool : usable.filter((r) => r.langs === 'mehrsprachig' && ['schnell', 'flüssig'].includes(r.speed));
+  const quick = (onGpu.length ? best : quickPool[quickPool.length - 1]) || fastest;
+
+  return { fastest, best, quick, all: rated, summary };
 }
 
 module.exports = { detectSpecs, detectGpus, recommend, memoryFor, CANDIDATES };

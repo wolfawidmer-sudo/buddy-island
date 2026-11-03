@@ -17,7 +17,7 @@ const { t } = require('../i18n');
 /** @typedef {import('./types').Message} Message */
 /** @typedef {{ exe: string, args: string[] }} PythonRuntime */
 
-const IDLE_STOP_MS = 10 * 60 * 1000;
+const IDLE_STOP_MS = 45 * 60 * 1000; // Neu laden dauert, darum lange im Speicher halten
 const LOAD_TIMEOUT_MS = 30 * 60 * 1000; // erster Start lädt das Modell evtl. herunter
 const NAME = 'Hugging Face';
 
@@ -38,14 +38,21 @@ except Exception as e:
 model_id = sys.argv[1]
 token = os.environ.get("HF_TOKEN") or None
 try:
-    tok = AutoTokenizer.from_pretrained(model_id, token=token)
+    # Liegt das Modell schon auf dem PC, ohne Netzabfrage laden (spart oft viele Sekunden)
+    def load(local_only):
+        t = AutoTokenizer.from_pretrained(model_id, token=token, local_files_only=local_only)
+        m = AutoModelForCausalLM.from_pretrained(model_id, token=token, torch_dtype="auto", low_cpu_mem_usage=True, local_files_only=local_only)
+        return t, m
+    try:
+        tok, model = load(True)
+    except Exception:
+        tok, model = load(False)
     if torch.cuda.is_available():
         device = "cuda"
     elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
         device = "mps"
     else:
         device = "cpu"
-    model = AutoModelForCausalLM.from_pretrained(model_id, token=token, torch_dtype="auto")
     model.to(device)
     model.eval()
 except Exception as e:
