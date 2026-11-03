@@ -27,6 +27,10 @@
     }
   }
   document.documentElement.lang = I18N.lang;
+  // Verfügbare Höhe (Fenster = höchstens 75 % des Bildschirms): die Listen scrollen darin
+  const syncWindowHeight = () => document.documentElement.style.setProperty('--win-h', `${window.innerHeight}px`);
+  syncWindowHeight();
+  window.addEventListener('resize', syncWindowHeight);
   translateDom(document.body);
   const $ = (id) => document.getElementById(id);
 
@@ -2663,65 +2667,61 @@
     if (Date.now() - lastToggle < 180) return;
     if (event.target.closest('.actions, .stop, .body')) return;
     // Im Notch holt ein Klick das Island zurück
-    if (!state.open && state.notch && visibleState() === 'notch') { lastToggle = Date.now(); setNotch(false); return; }
+    if (!state.open && state.notch && visibleState() === 'notch') { lastToggle = Date.now(); setNotch(false, { force: true }); return; }
     if (!state.open) { lastToggle = Date.now(); open(); }
   });
 
   // ---------- Notch-Modus: Island nach oben ziehen ----------
-  // Einfach: kurz nach oben ziehen (oder nach oben scrollen) macht den Notch,
-  // nach unten ziehen, nach unten scrollen oder ein Klick holt das Island zurück.
-  const DRAG_UP = 6;
-  const DRAG_DOWN = 6;
-  const drag = { active: false, id: null, x: 0, y: 0, moved: false, suppressClick: false, started: 0 };
+  // Gedrückt halten und die kleinste Bewegung nach oben (1 px) macht sofort den Notch,
+  // nach unten (1 px) holt das Island zurück. Ausgelöst wird während der Bewegung, nicht
+  // erst beim Loslassen; danach ist die Geste gesperrt (kein Flackern, kein Zurückspringen).
+  // Das Island liegt nur wenige Pixel unter dem Bildschirmrand: mehr Weg nach oben gibt es nicht.
+  const NOTCH_THRESHOLD = 1;      // CSS-Pixel senkrecht
+  const SIDEWAYS_TOLERANCE = 8;   // so viel seitliches Zittern ist erlaubt
+  const NOTCH_LOCK_MS = 480;      // etwas länger als die Animation
+  const drag = { active: false, id: null, x: 0, y: 0, done: false, suppressClick: false };
+  let notchLockUntil = 0;
 
-  function setNotch(on) {
-    if (state.notch === on) return;
+  function setNotch(on, { force = false } = {}) {
+    if (state.notch === on) return false;
+    if (!force && Date.now() < notchLockUntil) return false;
+    notchLockUntil = Date.now() + NOTCH_LOCK_MS;
     state.notch = on;
     try { localStorage.setItem(NOTCH_KEY, on ? '1' : '0'); } catch { /* egal */ }
     render();
+    return true;
   }
 
   el.island.addEventListener('pointerdown', (event) => {
-    if (state.open || event.button !== 0 || event.target.closest('.stop')) return;
+    if (state.open || (event.pointerType === 'mouse' && event.button !== 0) || event.target.closest('.stop')) return;
     drag.active = true;
     drag.id = event.pointerId;
-    drag.x = event.screenX;
-    drag.y = event.screenY;
-    drag.moved = false;
-    drag.started = Date.now();
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    drag.done = false;
     setCapture(true);
+    // Zeiger festhalten: die Geste geht nicht verloren, wenn die Maus das Island kurz verlässt
     try { el.island.setPointerCapture(event.pointerId); } catch { /* egal */ }
   });
 
   el.island.addEventListener('pointermove', (event) => {
-    if (!drag.active || event.pointerId !== drag.id) return;
-    const dx = event.screenX - drag.x;
-    const dy = event.screenY - drag.y;
-    if (!drag.moved && Math.hypot(dx, dy) > 4) {
-      drag.moved = true;
-      el.island.classList.add('dragging');
+    if (!drag.active || drag.done || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (Math.abs(dx) > SIDEWAYS_TOLERANCE && Math.abs(dx) > Math.abs(dy) * 2) return; // seitliche Bewegung, keine Notch-Geste
+    let changed = false;
+    if (!state.notch && dy <= -NOTCH_THRESHOLD) changed = setNotch(true);
+    else if (state.notch && dy >= NOTCH_THRESHOLD) changed = setNotch(false);
+    if (changed) {
+      drag.done = true; // pro Druck nur ein Wechsel
+      drag.suppressClick = true;
     }
-    if (!drag.moved) return;
-    // Gummiband-Gefühl: folgt leicht der Maus, aber nur senkrecht und gedämpft
-    const pull = Math.max(-10, Math.min(10, dy * 0.35));
-    el.island.style.translate = `0 ${pull}px`;
   });
 
   function endDrag(event) {
     if (!drag.active || (event && event.pointerId !== drag.id)) return;
     drag.active = false;
-    el.island.classList.remove('dragging');
-    el.island.style.translate = '';
-    if (!drag.moved || !event) return;
-    drag.suppressClick = true;
-    setTimeout(() => { drag.suppressClick = false; }, 300);
-    const dx = event.screenX - drag.x;
-    const dy = event.screenY - drag.y;
-    const vertical = Math.abs(dy) >= Math.abs(dx);
-    // Am oberen Rand kommt die Maus nicht weiter: dort reicht jede Bewegung nach oben
-    const atEdge = event.screenY <= window.screenY + 2;
-    if (!state.notch && vertical && (dy <= -DRAG_UP || (atEdge && dy < 0))) setNotch(true);
-    else if (state.notch && vertical && dy >= DRAG_DOWN) setNotch(false);
+    if (drag.done) setTimeout(() => { drag.suppressClick = false; }, 300);
     if (!el.island.matches(':hover') && !state.open) setCapture(false);
   }
 

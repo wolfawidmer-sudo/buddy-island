@@ -1319,3 +1319,56 @@ body { padding-top: var(--gap); }
 .health-step small { color: var(--label-3); font-size: 11.5px; overflow-wrap: anywhere; }
 .health-step small.health-detail { font-variant-numeric: tabular-nums; opacity: 0.85; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
+
+/* ======================================================================
+   Stabile Auf-/Zu-Animation (0.6)
+   Gemessen: Inhalt sprang im ersten Bild um 69 px (Prozent-Rand am wachsenden
+   Island), Titel/Knöpfe/Augen hingen an den Rändern statt an der Mitte und
+   rutschten mit, und die Schliess-Kurve war am Anfang am schnellsten.
+   Jetzt hängt alles an der Mitte: Wächst das Island symmetrisch, bleibt jeder
+   Inhalt an seinem Platz auf dem Bildschirm und wird nur auf- bzw. zugedeckt.
+   ====================================================================== */
+:root { --close-ease: cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* Inhalt: feste Spalte von 500 px, mittig im Raster (darf beidseitig überstehen) */
+.body { grid-template-columns: 500px; justify-content: center; }
+.body-inner { width: 500px; margin-left: 0; }
+
+/* Kopfzeile an der Mitte verankert (offene Breite 500 px → halbe Breite 250 px; Randabstände wie bisher) */
+.label { left: calc(50% - 196px); right: calc(50% - 80px); }
+.actions { right: calc(50% - 238px); }
+.island.open .face-btn { left: calc(50% - 220px); }
+.island.open .side-r { right: calc(50% - 88px); }
+
+/* Schliessen: sanfter Anfang, Text und Knöpfe sind weg, bevor sich etwas bewegt */
+.island:not(.open) {
+  transition:
+    width var(--close-ms) var(--close-ease),
+    border-radius var(--close-ms) var(--close-ease),
+    box-shadow var(--close-ms) var(--close-ease),
+    transform var(--close-ms) var(--close-ease);
+}
+.island:not(.open) .top { transition: height var(--close-ms) var(--close-ease); }
+.island:not(.open) .face-btn { transition: left var(--close-ms) var(--close-ease), opacity 0.2s var(--ease); }
+.island:not(.open) .body { transition: grid-template-rows var(--close-ms) var(--close-ease); }
+.island:not(.open) .label,
+.island:not(.open) .actions { transition: opacity 0.06s linear, visibility 0s linear 0.06s; }
+.island:not(.open) .body-inner { transition: opacity 0.08s linear; }
+
+@media (prefers-reduced-motion: reduce) {
+  .island, .island *, .island *::before, .island *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* Touch und Stift: Ziehen am Island ist eine Geste, kein Scrollen */
+.island:not(.open) { touch-action: none; }
+
+/* ---------- Fensterhöhe: höchstens 75 % des Bildschirms ----------
+   Typografie und Abstände bleiben gleich; nur die Listen werden kürzer und scrollen. */
+:root { --win-h: 666px; }
+.messages { max-height: min(380px, max(140px, calc(var(--win-h) - 286px))); }
+.settings-scroll { max-height: min(520px, max(180px, calc(var(--win-h) - 146px))); }
+.island.open { max-height: calc(var(--win-h) - var(--gap)); }
+/* Chat als Spalte: nur die Nachrichten scrollen, Eingabefeld bleibt immer sichtbar */
+#chatView:not([hidden]) { display: flex; flex-direction: column; max-height: calc(var(--win-h) - var(--gap) - 58px); }
+#chatView > * { flex: none; }
+#chatView > .messages { flex: 0 1 auto; min-height: 48px; max-height: 380px; }

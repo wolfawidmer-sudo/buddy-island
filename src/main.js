@@ -713,10 +713,24 @@ Rules for PC control:
 // Das Fenster hat immer dieselbe Grösse und Lage (oben in der Mitte). Beim Öffnen und
 // Schliessen ändert sich nur der Inhalt, nie die Fenstergrösse: So gibt es keinen Frame,
 // in dem Windows das Island an der falschen Stelle oder gar nicht zeigt.
+// Höchstens 75 % der Bildschirmhöhe. Gerechnet wird in echten (physischen) Pixeln des
+// Bildschirms, auf dem Buddy wohnt, und dann in Electrons logische Pixel (DIP) umgerechnet,
+// die setBounds erwartet (DIP = physisch / Skalierung). Dazu nie über die Arbeitsfläche hinaus.
+function islandSize(display) {
+  const scale = display.scaleFactor || 1;
+  const physicalMax = Math.floor(display.size.height * scale * 0.75);
+  const dipMax = Math.floor(physicalMax / scale);
+  const height = Math.max(320, Math.min(OPEN_H, dipMax, display.workArea.height));
+  const width = Math.min(OPEN_W, display.workArea.width);
+  return { width, height, physicalMax, scale };
+}
+
 function placeWindow() {
   if (!win) return;
-  const { bounds, workArea } = targetDisplay();
-  const next = { x: bounds.x + Math.round((bounds.width - OPEN_W) / 2), y: workArea.y, width: OPEN_W, height: OPEN_H };
+  const display = targetDisplay();
+  const { bounds, workArea } = display;
+  const size = islandSize(display);
+  const next = { x: bounds.x + Math.round((bounds.width - size.width) / 2), y: workArea.y, width: size.width, height: size.height };
   const cur = win.getBounds();
   if (cur.x !== next.x || cur.y !== next.y || cur.width !== next.width || cur.height !== next.height) win.setBounds(next);
 }
