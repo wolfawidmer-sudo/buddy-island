@@ -373,21 +373,78 @@ async function runLocalSetup() {
   const step = (text, extra = {}) => { send({ state: 'running', text, ...extra }); log(`Lokale KI: ${text}`); };
   const fail = (error) => { send({ state: 'error', error }); return { ok: false, error }; };
 
-  // Python ausführen und die Ausgabe zeilenweise melden
-  const stream = (exe, args, label) => new Promise((resolve) => {
+  // Prozess ausführen, Ausgabe zeilenweise melden. pip zeigt mit «--progress-bar raw»
+  // echte Bytes («Progress 123 of 456»), daraus wird der Balken. Kommt länger nichts,
+  // zeigt Buddy die verstrichene Zeit; bleibt es zu lange still, wird abgebrochen.
+  const STALL_MS = 10 * 60 * 1000;
+  const stream = (exe, args, label, range = null) => new Promise((resolve) => {
     const { spawn } = require('child_process');
-    const proc = spawn(exe, args, { windowsHide: true, env: { ...process.env, PYTHONIOENCODING: 'utf-8', PIP_DISABLE_PIP_VERSION_CHECK: '1' } });
+    const started = Date.now();
+    let lastOut = Date.now();
     let last = '';
+    let percent = Array.isArray(range) ? range[0] : undefined;
+    let mb = '';
+    let stalled = false;
+    const clock = () => { const sec = Math.round((Date.now() - started) / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
+    const emit = () => send({ state: 'running', text: mb ? `${label} ${mb}` : label, ...(typeof range === 'function' ? range() : {}), log: `${last ? last.slice(0, 140) + ' · ' : ''}${clock()}`, ...(percent !== undefined ? { percent } : {}) });
+    let proc;
+    try {
+      proc = spawn(exe, args, { windowsHide: true, env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1', PIP_DISABLE_PIP_VERSION_CHECK: '1', PIP_NO_INPUT: '1' } });
+    } catch {
+      resolve({ ok: false, last: t('Start fehlgeschlagen') });
+      return;
+    }
     const onData = (d) => {
-      const line = String(d).split(/\r?\n|\r/).map((x) => x.trim()).filter(Boolean).pop();
-      if (line) { last = line; send({ state: 'running', text: label, log: line.slice(0, 160) }); }
+      lastOut = Date.now();
+      for (const raw of String(d).split(/\r?\n|\r/)) {
+        const line = raw.trim();
+        if (!line) continue;
+        const m = /^Progress (\d+) of (\d+)/.exec(line);
+        if (m) {
+          const done = Number(m[1]); const total = Number(m[2]);
+          if (total > 0) {
+            if (Array.isArray(range)) percent = Math.round(range[0] + (range[1] - range[0]) * Math.min(1, done / total));
+            mb = `(${Math.round(done / 1e6)} / ${Math.round(total / 1e6)} MB)`;
+          }
+          continue;
+        }
+        last = line;
+        if (/^(Downloading|Collecting|Installing|Successfully)/.test(line)) mb = '';
+      }
+      emit();
     };
     proc.stdout.on('data', onData);
     proc.stderr.on('data', onData);
-    const timer = setTimeout(() => { try { proc.kill(); } catch { /* egal */ } }, 60 * 60 * 1000);
-    proc.on('error', () => { clearTimeout(timer); resolve({ ok: false, last: 'Start fehlgeschlagen' }); });
-    proc.on('exit', (code) => { clearTimeout(timer); resolve({ ok: code === 0, last }); });
+    let lastPct = null;
+    const beat = setInterval(() => {
+      // Wachsender Download zählt als Lebenszeichen
+      if (typeof range === 'function') {
+        const p = range().percent;
+        if (p !== undefined && p !== lastPct) { lastPct = p; lastOut = Date.now(); }
+      }
+      if (Date.now() - lastOut > STALL_MS) {
+        stalled = true;
+        try { proc.kill(); } catch { /* egal */ }
+        return;
+      }
+      emit();
+    }, 2000);
+    const done = (res) => { clearInterval(beat); resolve(res); };
+    proc.on('error', () => done({ ok: false, last: t('Start fehlgeschlagen') }));
+    proc.on('exit', (code) => done({ ok: code === 0 && !stalled, last: stalled ? t('Seit 10 Minuten keine Antwort von pip (Internet unterbrochen?).') : last }));
   });
+
+  // Ab pip 24.1 gibt es «--progress-bar raw» (maschinenlesbarer Fortschritt)
+  const progressArgs = async (py) => {
+    const v = await run(py.exe, [...py.args, '-m', 'pip', '--version'], 20000);
+    const m = /pip (\d+)\.(\d+)/.exec(v || '');
+    const ok = (x) => x && (Number(x[1]) > 24 || (Number(x[1]) === 24 && Number(x[2]) >= 1));
+    if (ok(m)) return ['--progress-bar', 'raw'];
+    step(t('Aktualisiere pip …'), { percent: 8 });
+    await stream(py.exe, [...py.args, '-m', 'pip', 'install', '--user', '--upgrade', 'pip'], t('Aktualisiere pip …'));
+    const v2 = await run(py.exe, [...py.args, '-m', 'pip', '--version'], 20000);
+    return ok(/pip (\d+)\.(\d+)/.exec(v2 || '')) ? ['--progress-bar', 'raw'] : ['--progress-bar', 'on'];
+  };
 
   try {
     let py = await findPythonExe();
@@ -405,16 +462,18 @@ async function runLocalSetup() {
 
     // PyTorch passend zur Hardware: mit NVIDIA-Grafikkarte die CUDA-Version, sonst die kleinere CPU-Version
     const nvidia = Boolean(await run('nvidia-smi', ['-L'], 6000));
-    step(nvidia ? t('Installiere PyTorch für deine NVIDIA-Grafikkarte (ca. 2.5 GB) …') : t('Installiere PyTorch (ca. 200 MB) …'), { percent: 10 });
-    const torchArgs = [...py.args, '-m', 'pip', 'install', '--user', '--upgrade', '--progress-bar', 'off', 'torch', '--index-url', nvidia ? 'https://download.pytorch.org/whl/cu124' : 'https://download.pytorch.org/whl/cpu'];
-    let r = await stream(py.exe, torchArgs, t('Installiere PyTorch …'));
+    step(nvidia ? t('Installiere PyTorch für deine NVIDIA-Grafikkarte (ca. 3 GB, dauert einige Minuten) …') : t('Installiere PyTorch (ca. 200 MB) …'), { percent: 10 });
+    const bar = await progressArgs(py);
+    const torchArgs = [...py.args, '-m', 'pip', 'install', '--user', '--upgrade', ...bar, 'torch', '--index-url', nvidia ? 'https://download.pytorch.org/whl/cu128' : 'https://download.pytorch.org/whl/cpu'];
+    let r = await stream(py.exe, torchArgs, t('Installiere PyTorch …'), [10, 42]);
     if (!r.ok) {
+      log(`Lokale KI: PyTorch-Index fehlgeschlagen: ${r.last}`);
       // Ausweichen auf das normale Paketverzeichnis
-      r = await stream(py.exe, [...py.args, '-m', 'pip', 'install', '--user', '--upgrade', '--progress-bar', 'off', 'torch'], t('Installiere PyTorch …'));
+      r = await stream(py.exe, [...py.args, '-m', 'pip', 'install', '--user', '--upgrade', ...bar, 'torch'], t('Installiere PyTorch …'), [10, 42]);
       if (!r.ok) return fail(t('PyTorch konnte nicht installiert werden: {e}', { e: r.last }));
     }
     step(t('Installiere Hugging Face Transformers …'), { percent: 45 });
-    r = await stream(py.exe, [...py.args, '-m', 'pip', 'install', '--user', '--upgrade', '--progress-bar', 'off', 'transformers', 'huggingface_hub'], t('Installiere Hugging Face Transformers …'));
+    r = await stream(py.exe, [...py.args, '-m', 'pip', 'install', '--user', '--upgrade', ...bar, 'transformers', 'huggingface_hub'], t('Installiere Hugging Face Transformers …'), [45, 53]);
     if (!r.ok) return fail(t('Transformers konnte nicht installiert werden: {e}', { e: r.last }));
 
     const found = await discovery.get({ force: true });
@@ -429,15 +488,17 @@ async function runLocalSetup() {
     saveSettings();
     step(t('Lade {name} herunter (ca. {gb} GB) …', { name: pick.name, gb: (pick.params * 2).toFixed(1) }), { percent: 55 });
     const expected = expectedBytes(pick.id);
-    const poll = setInterval(() => {
+    // Fortschritt aus der Grösse des Hugging-Face-Caches (huggingface_hub zeigt in der Pipe nichts)
+    const modelProgress = () => {
       const have = cacheBytes(pick.id);
-      if (expected) send({ state: 'running', text: t('Lade {name} herunter …', { name: pick.name }), percent: 55 + Math.round(Math.min(1, have / expected) * 40) });
-    }, 1500);
+      return expected
+        ? { percent: 55 + Math.round(Math.min(1, have / expected) * 40), text: `${t('Lade {name} herunter …', { name: pick.name })} (${Math.round(have / 1e6)} / ${Math.round(expected / 1e6)} MB)` }
+        : {};
+    };
     const dl = `from huggingface_hub import snapshot_download\nsnapshot_download(${JSON.stringify(pick.id)}, allow_patterns=["*.json","*.safetensors","*.model","*.txt","*.jinja","tokenizer*"])\nprint("ok")`;
     const env = getSecret('hfToken');
     if (env) process.env.HF_TOKEN = env;
-    r = await stream(found.python.exe, [...found.python.args, '-c', dl], t('Lade das Modell herunter …'));
-    clearInterval(poll);
+    r = await stream(found.python.exe, [...found.python.args, '-c', dl], t('Lade das Modell herunter …'), modelProgress);
     if (!r.ok) return fail(t('Das Modell konnte nicht geladen werden: {e}', { e: r.last }));
 
     step(t('Starte das Modell …'), { percent: 97 });

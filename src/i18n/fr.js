@@ -660,4 +660,9 @@ module.exports = {
   "Leertaste": "Espace",
   "Entf": "Suppr",
   "Rücktaste": "Retour arrière",
+  "Aktualisiere pip …": "Mise à jour de pip …",
+  "Seit 10 Minuten keine Antwort von pip (Internet unterbrochen?).": "Aucune réponse de pip depuis 10 minutes (internet interrompu ?).",
+  "Installiere PyTorch für deine NVIDIA-Grafikkarte (ca. 3 GB, dauert einige Minuten) …": "Installation de PyTorch pour ta carte graphique NVIDIA (env. 3 Go, quelques minutes) …",
+  "Start fehlgeschlagen": "Échec du démarrage",
+  "NVIDIA-Grafikkarte gefunden, aber PyTorch nutzt sie noch nicht (CUDA fehlt). Mit «pip install torch --index-url https://download.pytorch.org/whl/cu128» wird es viel schneller.": "Carte graphique NVIDIA trouvée, mais PyTorch ne l'utilise pas encore (CUDA manquant). Avec « pip install torch --index-url https://download.pytorch.org/whl/cu128 », ce sera beaucoup plus rapide.",
 };

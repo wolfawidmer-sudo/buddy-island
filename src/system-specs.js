@@ -151,7 +151,7 @@ function recommend(specs) {
 
   let summary;
   if (gpuMem) summary = t('Grafikkarte mit {gb} GB: Modelle bis etwa {n} Mrd. Parameter laufen schnell.', { gb: gpuMem, n: Math.floor((gpuMem * 0.9) / 2.4) });
-  else if (specs.gpus.some((g) => g.vendor === 'nvidia') && !specs.cuda) summary = t('NVIDIA-Grafikkarte gefunden, aber PyTorch nutzt sie noch nicht (CUDA fehlt). Mit «pip install torch --index-url https://download.pytorch.org/whl/cu124» wird es viel schneller.');
+  else if (specs.gpus.some((g) => g.vendor === 'nvidia') && !specs.cuda) summary = t('NVIDIA-Grafikkarte gefunden, aber PyTorch nutzt sie noch nicht (CUDA fehlt). Mit «pip install torch --index-url https://download.pytorch.org/whl/cu128» wird es viel schneller.');
   else summary = t('Ohne passende Grafikkarte rechnet der Prozessor ({threads} Threads, {ram} GB RAM). Kleine Modelle sind hier am besten.', { threads: specs.threads, ram: specs.ramGB });
 
   return { fastest, best, all: rated, summary };
