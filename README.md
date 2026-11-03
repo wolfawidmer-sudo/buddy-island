@@ -4,7 +4,7 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 
 **Website:** https://wolfawidmer-sudo.github.io/buddy-island-website/ ([Quellcode der Website](https://github.com/wolfawidmer-sudo/buddy-island-website))
 
-> **Status:** Testversion (0.4). Getestet mit einer simulierten Claude-API unter Linux. Auf echten Windows-PCs bitte den Selbsttest in den Einstellungen laufen lassen.
+> **Status:** Testversion (0.6). Getestet mit einer simulierten Claude-API unter Linux. Auf echten Windows-PCs bitte den Selbsttest in den Einstellungen laufen lassen.
 
 <p align="center"><img src="docs/island-states.png" alt="Buddy Island geschlossen: Ruhe, Timer, Musik und Notch" width="600"></p>
 
@@ -15,7 +15,9 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 ## Was Buddy kann
 
 - **Ruhiges Island**: Geschlossen zeigt Buddy nur seine Augen, genau in der Mitte. Kein Text, keine Symbole. Öffnen und Schliessen laufen ohne springende Texte.
-- **Notch-Modus**: Island mit der Maus nach oben ziehen, und es wird zu einem winzigen Notch am Bildschirmrand. Nach unten ziehen holt es zurück.
+- **Notch-Modus**: Island anklicken, gedrückt halten und schon 1 Pixel nach oben ziehen: Es wird sofort zu einem tiefschwarzen Notch am Bildschirmrand. 1 Pixel nach unten oder ein Klick holt es zurück.
+- **Passende Grösse**: Offen ist das Island höchstens 75 % der Bildschirmhöhe hoch (richtig umgerechnet bei Windows-Skalierung); Listen scrollen, das Eingabefeld bleibt sichtbar.
+- **Gedächtnis**: «Merk dir, dass …» speichert kurze Notizen lokal. Gespeichert wird nur auf ausdrücklichen Wunsch, nie Passwörter, Karten- oder Kontonummern; an die KI geht nur, was zur Frage passt. In den Einstellungen einzeln löschbar.
 - **Mehrere KI-Anbieter**: Anthropic Claude, OpenAI, xAI Grok, Google Gemini oder ein lokales Modell über Hugging Face Transformers. Alle hängen an einer gemeinsamen Schnittstelle (`LlmClient`), jeder Anbieter hat eine Fähigkeitsmatrix (Bilder, Werkzeuge, PC-Steuerung, strukturierte Ausgabe). Kann ein Modell etwas nicht, sagt Buddy das im Island, statt abzustürzen.
 - **Lokal zuerst**: Ohne API-Key wählt Buddy automatisch ein lokales Modell. Er misst Arbeitsspeicher, Prozessor und Grafikkarte, empfiehlt das schnellste und das beste Modell und richtet Python, PyTorch, Transformers und das Modell mit einem Klick ein (nur für deinen Benutzer, ohne Administratorrechte). Einen API-Key kannst du jederzeit in den Einstellungen ergänzen.
 - **Verbindungstest**: Einstellungen → «Provider & API-Keys» → «Verbindung testen» prüft jeden verbundenen Anbieter Schritt für Schritt (Key und Modellliste, einfache Antwort ohne Streaming, Streaming, Verlauf, Werkzeug mit Fortsetzung, parallele Werkzeuge, Router). Fehler nennen Anbieter, Modell, HTTP-Status und Stufe; der kopierbare Bericht enthält keine Keys.
@@ -27,7 +29,7 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 - **Dateien ordnen**: Dateien auflisten, Duplikate finden (per SHA-256), Ordner anlegen, verschieben, in den Papierkorb legen. Nur in deinen Benutzerordnern.
 - **Berechtigungen**: Niedriges Risiko läuft direkt, mittleres fragt einmal pro Aufgabe, hohes (Löschen, Admin, System, Sicherheit) jedes Mal.
 - **Kosten im Griff**: Tokens, Kosten pro Anfrage, Monatshochrechnung und ein Ausgabenlimit.
-- **KI-Nutzung**: Ein Dashboard für Buddy, die Claude API, Claude Code, Codex, ChatGPT und Grok, mit allem, was die Anbieter wirklich herausgeben. Frag einfach «Wie viel Codex habe ich noch?».
+- **KI-Nutzung**: Ein Dashboard, getrennt nach Abo-Nutzung (Claude Code, Codex, ChatGPT, Grok), API-Nutzung (Buddy pro Anbieter, Claude-/OpenAI-Organisation, Gemini) und lokaler Nutzung (Modell, Arbeitsspeicher). Was ein Anbieter nicht herausgibt, steht als «nicht verfügbar»; die Kopfzeile zeigt, ob die Daten live oder zwischengespeichert sind. Frag einfach «Wie viel Codex habe ich noch?».
 - **Chat**: Antworten erscheinen live, mit Code-Blöcken und Kopieren-Knopf.
 - **Timer**: «Stell einen Timer auf 10 Minuten». Der Countdown läuft im Island, am Ende wackelt Buddy und macht einen Ton.
 - **Apps, Websites, Musik**: Rechner, Editor, Spotify öffnen; Musik pausieren, lauter oder leiser machen.
