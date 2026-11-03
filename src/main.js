@@ -1924,6 +1924,7 @@ function setupIpc() {
   });
 
   ipcMain.on('chat:send', (event, { id, messages, meta } = {}) => {
+    if (currentProvider() === 'huggingface' && Date.now() - (settings.lastLocalUse || 0) > 3600 * 1000) { settings.lastLocalUse = Date.now(); saveSettings(); }
     const sender = event.sender;
     const send = (channel, payload) => { if (!sender.isDestroyed()) sender.send(channel, payload); };
     if (!id || !Array.isArray(messages) || running.has(id)) return;
@@ -2065,8 +2066,9 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       await autoSelectLocal().catch((err) => log(`Lokale Auswahl: ${err.message}`));
       // Oberfläche weiss jetzt, ob die lokale KI wirklich bereit ist
       win?.webContents.send('settings:changed', publicSettings());
-      // Lokales Modell schon jetzt im Hintergrund laden, damit es beim ersten Öffnen bereit ist
-      warmLocal();
+      // Lokales Modell schon beim Start laden, aber nur wenn es zuletzt auch benutzt wurde
+      // (sonst belegt es Gigabytes, ohne dass es jemand braucht; geladen wird dann beim Öffnen)
+      if (Date.now() - (settings.lastLocalUse || 0) < 7 * 24 * 3600 * 1000) warmLocal();
     }), 1500);
 
     computer = createComputer({

@@ -78,6 +78,7 @@ public static class BuddyFocus {
   }
 }
 $lastFocus = ''
+$mediaEvery = 2
 
 if ($listener -eq $null -and $mediaMgr -eq $null -and -not $focusOk) { exit 0 }
 
@@ -148,15 +149,18 @@ while ($true) {
     }
   }
 
-  # Medien alle 2 Sekunden (nur bei Änderung melden)
-  if ($mediaMgr -ne $null -and ($tick % 2) -eq 0) {
+  # Medien: alle 2 Sekunden, solange etwas läuft, sonst alle 5 (spart Rechenzeit im Leerlauf).
+  # Gemeldet wird nur bei Änderung.
+  if ($mediaMgr -ne $null -and ($tick % $mediaEvery) -eq 0) {
     try {
       $s = $mediaMgr.GetCurrentSession()
       if ($s -eq $null) {
+        $mediaEvery = 5
         if ($lastMedia -ne 'none') { Emit @{ kind = 'media'; playing = $false; title = '' }; $lastMedia = 'none' }
       } else {
         $info = $s.GetPlaybackInfo()
         $status = [string]$info.PlaybackStatus
+        if ($status -eq 'Playing') { $mediaEvery = 2 } else { $mediaEvery = 5 }
         $props = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
         $key = $s.SourceAppUserModelId + '|' + $props.Title + '|' + $props.Artist + '|' + $status
         if ($key -ne $lastMedia) {
