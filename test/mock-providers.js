@@ -43,7 +43,9 @@ function brain(conv, { tools, format }) {
 
 function createMock(provider, opts = {}) {
   const state = { requests: [], failOnce: { ...(opts.failOnce || {}) }, issued: new Map(), thinkingSigs: new Set() };
-  const isModel = (m) => MODELS[provider].includes(String(m).replace(/^models\//, ''));
+  // opts.models: andere Modellliste; opts.retired: steht in der Liste, liefert aber 404 (abgeschaltet)
+  const list = opts.models || MODELS[provider];
+  const isModel = (m) => list.includes(String(m).replace(/^models\//, '')) && !(opts.retired || []).includes(String(m).replace(/^models\//, ''));
   let seq = 0;
 
   async function fetchImpl(url, init = {}) {
@@ -70,7 +72,7 @@ function createMock(provider, opts = {}) {
   function anthropic(u, headers, body) {
     // Aktuell: Authorization: Bearer <key>; x-api-key ist die ältere, weiter gültige Form
     if (headers['x-api-key'] !== GOOD_KEY.anthropic && headers.authorization !== `Bearer ${GOOD_KEY.anthropic}`) return json({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }, 401);
-    if (u.pathname.endsWith('/models')) return json({ data: MODELS.anthropic.map((id) => ({ id, display_name: id })) });
+    if (u.pathname.endsWith('/models')) return json({ data: list.map((id) => ({ id, display_name: id })) });
     if (!isModel(body.model)) return json({ type: 'error', error: { type: 'not_found_error', message: `model: ${body.model}` } }, 404);
     const msgs = body.messages;
     if (!msgs.length || msgs[0].role !== 'user') return json({ type: 'error', error: { type: 'invalid_request_error', message: 'messages: first message must use the "user" role' } }, 400);
@@ -131,7 +133,7 @@ function createMock(provider, opts = {}) {
   // ---------- OpenAI / xAI Chat Completions ----------
   function openaiLike(u, headers, body) {
     if (headers.authorization !== `Bearer ${GOOD_KEY[provider]}`) return json({ error: { message: 'Incorrect API key provided: sk-…', type: 'invalid_request_error', code: 'invalid_api_key' } }, 401);
-    if (u.pathname.endsWith('/models')) return json({ object: 'list', data: MODELS[provider].map((id) => ({ id, object: 'model' })) });
+    if (u.pathname.endsWith('/models')) return json({ object: 'list', data: list.map((id) => ({ id, object: 'model' })) });
     if (!isModel(body.model)) return json({ error: { message: `The model \`${body.model}\` does not exist or you do not have access to it.`, type: 'invalid_request_error', code: 'model_not_found' } }, 404);
     if (opts.verifyStream && body.stream) return json({ error: { message: 'Your organization must be verified to stream this model. Please go to: https://platform.openai.com/settings/organization/general', type: 'invalid_request_error', param: 'stream', code: 'unsupported_value' } }, 400);
     if (provider === 'openai' && 'max_tokens' in body && /gpt-5/.test(body.model)) return json({ error: { message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.", type: 'invalid_request_error', param: 'max_tokens' } }, 400);
@@ -177,7 +179,7 @@ function createMock(provider, opts = {}) {
   function gemini(u, headers, body) {
     const err = (code, status, message, reason) => json({ error: { code, message, status, details: reason ? [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason }] : [] } }, code);
     if (headers['x-goog-api-key'] !== GOOD_KEY.gemini) return err(400, 'API key not valid. Please pass a valid API key.', 'INVALID_ARGUMENT', 'API_KEY_INVALID');
-    if (u.pathname.endsWith('/models')) return json({ models: [...MODELS.gemini.map((id) => ({ name: `models/${id}`, displayName: id, supportedGenerationMethods: ['generateContent', 'countTokens'] })), { name: 'models/text-embedding-004', supportedGenerationMethods: ['embedContent'] }] });
+    if (u.pathname.endsWith('/models')) return json({ models: [...list.map((id) => ({ name: `models/${id}`, displayName: id, supportedGenerationMethods: ['generateContent', 'countTokens'] })), { name: 'models/text-embedding-004', supportedGenerationMethods: ['embedContent'] }] });
     const m = /\/models\/([^:]+):(generateContent|streamGenerateContent)$/.exec(u.pathname);
     if (!m) return err(404, 'Not Found', 'NOT_FOUND');
     const model = decodeURIComponent(m[1]);

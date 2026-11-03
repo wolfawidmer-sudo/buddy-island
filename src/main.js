@@ -621,21 +621,31 @@ function providerKeyInfo(id) {
 }
 
 // Verfügbare Modelle des Anbieters (zwischengespeichert, spart Aufrufe)
-async function availableModels(provider = currentProvider()) {
+// Verfügbare Modelle des Anbieters: offizielle Liste, 6 Stunden zwischengespeichert. Die
+// zuletzt bestätigte Liste wird mit Zeitstempel gespeichert und bei Störungen (offline,
+// Zeitüberschreitung, Serverfehler) weiter benutzt, statt blind eingebaute Namen zu raten.
+// Bei abgelehntem Key gibt es keine Liste (das ist kein «Modell fehlt»).
+async function availableModels(provider = currentProvider(), { force = false } = {}) {
   if (provider === 'huggingface') {
     const model = getSecret('hfModel');
     return model ? [{ id: `${models.HF_PREFIX}${model}`, name: models.info(`${models.HF_PREFIX}${model}`).name }] : [];
   }
-  const cached = modelCache.get(provider);
-  if (cached && Date.now() - cached.at < MODELS_CACHE_MS) return cached.list;
+  const persisted = settings.modelLists?.[provider];
+  const cached = modelCache.get(provider) || (persisted ? { at: persisted.at, list: persisted.list } : null);
+  if (!force && cached && Date.now() - cached.at < MODELS_CACHE_MS) return cached.list;
   const key = getApiKey(provider);
   if (!key) return [];
   try {
     const list = await llm.client(provider).listModels(key, provider === 'anthropic' ? settings.workspaceId : undefined);
     modelCache.set(provider, { at: Date.now(), list });
+    if (list.length) {
+      settings.modelLists = { ...(settings.modelLists || {}), [provider]: { at: Date.now(), list: list.map((m) => ({ id: m.id, name: m.name })) } };
+      saveSettings();
+    }
     return list;
   } catch (err) {
-    if (err.status === 401) markKeyInvalid(provider);
+    if (err.category === 'auth' || err.status === 401) { markKeyInvalid(provider); return []; }
+    if (cached) log(`Modellliste ${provider} nicht abrufbar (${err.category || err.status}), benutze Stand von ${new Date(cached.at).toISOString()}`);
     return cached?.list || [];
   }
 }
@@ -1169,7 +1179,7 @@ function createAgentRuntime() {
     getComputer: () => computer,
     getFiles: () => files,
     isComputerAvailable: computerAvailable,
-    getAvailableModels: (pid) => availableModels(pid),
+    getAvailableModels: (pid, opts) => availableModels(pid, opts),
     getGame: () => game,
     systemPrompt,
     askControl: askToControl,

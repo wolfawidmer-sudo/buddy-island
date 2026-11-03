@@ -238,5 +238,48 @@ const errorOf = (events) => events.find((e) => e.c === 'chat:error')?.p;
     }
   }
 
+  // ---------- Modellverfügbarkeit ----------
+  // Abgeschaltetes Modell (in der Liste, aber 404): Automatik nimmt einmal ein Ersatzmodell und sagt es
+  {
+    const { client, mock } = registry('openai', { retired: ['gpt-4o-mini'] });
+    const a = agentFor('openai', client);
+    await a.run('hi');
+    assert.ok(!errorOf(a.events), `Ersatzmodell statt Fehler: ${errorOf(a.events)?.message}`);
+    assert.match(textOf(a.events), /Hallo/);
+    const notice = a.events.find((e) => e.c === 'chat:notice' && /nicht verfügbar/.test(e.p.text));
+    assert.ok(notice, 'Wechsel wird offen gesagt');
+    const used = mock.state.requests.filter((q) => q.body?.model).map((q) => q.body.model);
+    assert.ok(used.includes('gpt-4o-mini') && used[used.length - 1] !== 'gpt-4o-mini', `danach anderes Modell (${used})`);
+  }
+  // Manuell gewähltes, nicht verfügbares Modell: kein stiller Ersatz, klare Meldung mit dem Namen
+  {
+    const { client, mock } = registry('gemini', { retired: ['gemini-2.5-pro'] });
+    const a = agentFor('gemini', client, { autoModel: false, model: 'gemini-2.5-pro' });
+    await a.run('hi');
+    const e = errorOf(a.events);
+    assert.ok(e && /gemini-2\.5-pro/.test(e.message) && e.error.category === 'model', `klare Meldung: ${e?.message}`);
+    const used = mock.state.requests.filter((q) => /:(stream)?[gG]enerateContent/.test(q.path)).map((q) => q.path.split('/models/')[1].split(':')[0]);
+    assert.ok(used.every((m) => m === 'gemini-2.5-pro'), `kein anderes Modell benutzt (${used})`);
+  }
+  // Liste ohne die eingebauten Namen (z. B. neue Generation): Stufen kommen aus der echten Liste
+  {
+    const { client, mock } = registry('xai', { models: ['grok-5', 'grok-5-mini'] });
+    const a = agentFor('xai', client);
+    await a.run('hi');
+    assert.ok(!errorOf(a.events), `neue Modellnamen: ${errorOf(a.events)?.message}`);
+    const used = mock.state.requests.filter((q) => q.body?.model).map((q) => q.body.model);
+    assert.ok(used.length && used.every((m) => ['grok-5', 'grok-5-mini'].includes(m)), `nur echte Modelle (${used})`);
+  }
+  // Fehlerarten werden nicht als «Modell fehlt» gemeldet
+  {
+    const { classify } = require('../src/llm/errors');
+    assert.strictEqual(classify(401, 'invalid key'), 'auth');
+    assert.strictEqual(classify(403, 'forbidden'), 'permission');
+    assert.strictEqual(classify(429, 'slow down'), 'rate_limit');
+    assert.strictEqual(classify(502, 'bad gateway'), 'server');
+    assert.strictEqual(classify(0, ''), 'network');
+    assert.strictEqual(classify(404, 'Not Found'), 'endpoint');
+  }
+
   console.log('Matrix-Tests ok (Claude, OpenAI, Grok, Gemini: Basis, Streaming, Verlauf, Werkzeuge, Router, Fehler, Wiederholung, Wechsel)');
 })().catch((e) => { slow(); console.error(e); process.exit(1); });

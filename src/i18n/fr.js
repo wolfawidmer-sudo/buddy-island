@@ -722,4 +722,7 @@ module.exports = {
   "Antwort-Stream": "Flux de réponse",
   "Antwort lesen": "Lecture de la réponse",
   "Buddy-Adapter": "Adaptateur Buddy",
+  "{a} ist bei deinem Konto nicht verfügbar. Buddy nimmt stattdessen {b}.": "{a} n'est pas disponible pour ton compte. Buddy utilise {b} à la place.",
+  "Ersatz für ein nicht verfügbares Modell": "Remplacement d'un modèle indisponible",
+  "Das gewählte Modell «{model}» ist bei {name} nicht verfügbar. Wähle in den Einstellungen ein anderes oder schalte die automatische Modellwahl ein.": "Le modèle choisi « {model} » n'est pas disponible chez {name}. Choisis-en un autre dans les paramètres ou active le choix automatique du modèle.",
 };

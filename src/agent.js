@@ -222,7 +222,24 @@ function createAgent(deps) {
     let withComputer = Boolean(isComputerAvailable());
     const conversation = messages.map((m) => ({ role: m.role, content: m.content }));
     const userText = lastUserText(conversation);
-    const tiers = models.resolveTiers(await getAvailableModels(providerId).catch(() => []), providerId);
+    const available = await getAvailableModels(providerId).catch(() => []);
+    let tiers = models.resolveTiers(available, providerId);
+    // Bestätigte Modelle des Anbieters (leer = Liste unbekannt, dann entscheidet die API)
+    const knownIds = new Set(available.map((m) => m.id));
+
+    // Ersatz für ein nicht verfügbares Modell: nur unter den Modellen, die der Anbieter für
+    // diesen Key wirklich anbietet, zuerst dieselbe Stufe, Opus nur wenn Opus gefragt war,
+    // und nur Modelle mit den nötigen Fähigkeiten.
+    function alternativeModel(list, failed, wantTier, needTools) {
+      const ids = list.map((m) => m.id).filter((x) => x && x !== failed);
+      const alt = models.resolveTiers(ids.map((x) => ({ id: x })), providerId);
+      const order = [...new Set([wantTier, 'sonnet', 'haiku', ...(wantTier === 'opus' ? ['opus'] : [])])];
+      for (const tier of order) {
+        const m = alt[tier];
+        if (m && m !== failed && (!needTools || models.capabilities(m).tools)) return { model: m, tier, tiers: alt };
+      }
+      return null;
+    }
 
     const st = {
       round: 0,
@@ -624,6 +641,15 @@ function createAgent(deps) {
       });
       // Fähigkeiten des gewählten Modells: ohne Computer Use keine Bildschirmsteuerung,
       // ohne Function Calling ein reiner Chat
+      if (knownIds.size && decision.model && !knownIds.has(decision.model) && decision.source !== 'manuell' && decision.source !== 'lokal') {
+        const alt = alternativeModel(available, decision.model, decision.tier, true);
+        if (alt) {
+          log(`Modell ${decision.model} ist für diesen Key nicht verfügbar, nehme ${alt.model}`);
+          send('chat:notice', { id, text: t('{a} ist bei deinem Konto nicht verfügbar. Buddy nimmt stattdessen {b}.', { a: models.info(decision.model).short, b: models.info(alt.model).short }), soft: true });
+          decision = { ...decision, model: alt.model, tier: alt.tier, effort: models.supportedEffort(alt.model, decision.effort) };
+          tiers = alt.tiers;
+        }
+      }
       const caps = models.capabilities(decision.model);
       if (withComputer && !caps.computerUse) withComputer = false;
       const toolsAllowed = caps.tools;
@@ -706,8 +732,26 @@ function createAgent(deps) {
         try {
           call = await callModel({ model: st.model, effort: st.effort, system, toolList, maxTokens, holdText });
         } catch (err) {
-          // Überlastet trotz Wiederholungen: einmal auf ein anderes Modell ausweichen
-          if (auto && (err?.status === 529 || err?.type === 'overloaded_error') && !st.overloadFallback) {
+          // Modell gibt es (für diesen Key) nicht: Liste frisch holen und einmal ein passendes Ersatzmodell nehmen.
+          // Ein manuell gewähltes Modell wird nie still ersetzt.
+          if (err?.category === 'model' && !auto) {
+            throw Object.assign(err, { message: t('Das gewählte Modell «{model}» ist bei {name} nicht verfügbar. Wähle in den Einstellungen ein anderes oder schalte die automatische Modellwahl ein.', { model: st.model, name: err.provider || providerId }) });
+          }
+          if (err?.category === 'model' && auto && !st.modelFallback) {
+            st.modelFallback = true;
+            const fresh = await getAvailableModels(providerId, { force: true }).catch(() => []);
+            const alt = alternativeModel(fresh, st.model, st.tier, toolsAllowed);
+            if (!alt) throw err;
+            log(`Modell ${st.model} nicht gefunden (${err.status || ''} ${err.code || ''}), Ersatz: ${alt.model}`);
+            task.step('model', `${models.info(st.model).short} nicht verfügbar, weiter mit ${models.info(alt.model).short}`, 'warn');
+            send('chat:notice', { id, text: t('{a} ist bei deinem Konto nicht verfügbar. Buddy nimmt stattdessen {b}.', { a: models.info(st.model).short, b: models.info(alt.model).short }), soft: true });
+            st.model = alt.model;
+            st.tier = alt.tier;
+            st.effort = models.supportedEffort(st.model, st.effort);
+            tiers = alt.tiers;
+            send('agent:route', routeInfo({ switched: true, why: t('Ersatz für ein nicht verfügbares Modell') }));
+            call = await callModel({ model: st.model, effort: st.effort, system, toolList, maxTokens, holdText });
+          } else if (auto && (err?.status === 529 || err?.type === 'overloaded_error') && !st.overloadFallback) {
             st.overloadFallback = true;
             const alt = ['sonnet', 'haiku', 'opus'].find((k) => tiers[k] && tiers[k] !== st.model && models.tierRank(k) <= models.tierRank(budgetCap(usage.budget(limit))));
             if (alt) {
