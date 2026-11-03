@@ -25,7 +25,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - name: Installer bauen und veröffentlichen
-        run: npx electron-builder --win nsis --x64 --publish always
+      - name: Installer bauen
+        run: npx electron-builder --win nsis --x64 --publish never
+      - name: Release anlegen und Dateien hochladen
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "Buddy Island $VERSION" \
+              --notes "Installer für Windows 10 und 11. Einfach herunterladen und doppelklicken. Bereits installierte Versionen aktualisieren sich automatisch."
+          fi
+          gh release upload "$TAG" dist/BuddyIsland-Setup-*.exe dist/*.blockmap dist/latest.yml --clobber
