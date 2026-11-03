@@ -149,7 +149,8 @@ const TOOL_DEFINITIONS = [
     name: 'open_settings',
     description:
       'Öffnet eine Seite der Windows-Einstellungen, damit der Nutzer (oder du per Bildschirmsteuerung) dort etwas nachsehen kann. Öffnen ändert nichts. ' +
-      'Etwas in den Einstellungen zu ändern ist mittleres oder hohes Risiko und braucht vorher request_permission.',
+      'Etwas in den Einstellungen zu ändern ist mittleres oder hohes Risiko und braucht vorher request_permission. ' +
+      'Will der Nutzer die Windows-Banner unten rechts loswerden, öffne «mitteilungen» und erkläre: «Nicht stören» einschalten oder bei einzelnen Apps «Benachrichtigungsbanner anzeigen» ausschalten.',
     input_schema: {
       type: 'object',
       properties: { page: { type: 'string', enum: Object.keys(SETTINGS_PAGES) } },

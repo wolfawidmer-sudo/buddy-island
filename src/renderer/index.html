@@ -10,21 +10,27 @@
 <body>
   <main id="island" class="island" data-state="idle">
     <div class="top" id="top">
+      <span class="side side-l" aria-hidden="true"><img class="pill-cover" id="pillCover" alt="" hidden></span>
       <button class="face-btn" id="faceBtn" type="button" aria-label="Island öffnen">
         <span class="face" aria-hidden="true"><i class="eye"></i><i class="eye"></i></span>
-        <img class="pill-cover" id="pillCover" alt="" hidden>
       </button>
       <span class="label" id="label">Buddy</span>
       <span class="peek" id="peek" hidden><span class="peek-app" id="peekApp"></span><span class="peek-text" id="peekText"></span></span>
-      <span class="meter" aria-hidden="true"><i></i><i></i><i></i></span>
-      <span class="badge" aria-hidden="true"></span>
-      <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-      <span class="mic-dot" aria-hidden="true"></span>
-      <button class="stop" id="stopBtn" type="button" title="Stoppen" aria-label="Stoppen"><i></i></button>
+      <span class="side side-r">
+        <span class="meter" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="badge" aria-hidden="true"></span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span class="mic-dot" aria-hidden="true"></span>
+        <button class="stop" id="stopBtn" type="button" title="Stoppen" aria-label="Stoppen"><i></i></button>
+      </span>
+      <i class="pill-progress" id="pillProgress" aria-hidden="true"></i>
 
       <div class="actions">
         <button class="icon-btn" id="newBtn" type="button" title="Neuer Chat (Strg+N)" aria-label="Neuer Chat">
           <svg viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11"/></svg>
+        </button>
+        <button class="icon-btn" id="usageBtn" type="button" title="KI-Nutzung" aria-label="KI-Nutzung">
+          <svg viewBox="0 0 20 20"><path d="M4 16V11M8.5 16V6M13 16v-7M17 16V4"/></svg>
         </button>
         <button class="icon-btn" id="settingsBtn" type="button" title="Einstellungen (Strg+,)" aria-label="Einstellungen">
           <svg viewBox="0 0 20 20"><path d="M3.5 6h8M15.5 6h1M3.5 14h1M8.5 14h8"/><circle cx="13.5" cy="6" r="2"/><circle cx="6.5" cy="14" r="2"/></svg>
@@ -59,6 +65,13 @@
           </div>
           <div class="inbox" id="inbox" hidden>
             <div class="inbox-head"><span>Mitteilungen</span><button type="button" class="link" id="inboxClear">Löschen</button></div>
+            <div class="inbox-hint" id="bannerHint" hidden>
+              <span>Die Mitteilungen kommen jetzt auch hier. Sollen die Windows-Banner unten rechts weg?</span>
+              <div class="inbox-hint-actions">
+                <button type="button" class="button small primary" id="bannerOpen">Zu den Einstellungen</button>
+                <button type="button" class="link" id="bannerDismiss">Nicht mehr zeigen</button>
+              </div>
+            </div>
             <div class="inbox-list" id="inboxList"></div>
           </div>
           <div class="timers" id="timers" hidden></div>
@@ -72,6 +85,7 @@
               <button type="button" class="chip" data-send="Mach die Musik etwas leiser">Musik leiser</button>
               <button type="button" class="chip" data-send="Öffne den Rechner">Rechner öffnen</button>
               <button type="button" class="chip" data-send="Öffne den Editor und schreib eine Einkaufsliste für Spaghetti Bolognese hinein">Einkaufsliste im Editor schreiben</button>
+              <button type="button" class="chip" data-send="Wie viel KI-Nutzung habe ich noch, und was haben meine KI-Tools heute gemacht?">KI-Nutzung heute</button>
             </div>
             <button type="button" class="button primary" id="connectBtn" hidden>API-Key verbinden</button>
           </div>
@@ -87,6 +101,42 @@
             </button>
           </form>
           <p class="footnote" id="footnote"></p>
+        </section>
+
+        <!-- KI-Nutzung -->
+        <section class="view usage" id="usageView" hidden>
+          <div class="settings-scroll">
+            <div class="usage-head">
+              <span id="usageUpdated">Noch nicht geladen</span>
+              <button type="button" class="button small" id="usageRefresh">Aktualisieren</button>
+            </div>
+            <div id="usageCards"></div>
+            <h3 class="section">Verbindungen</h3>
+            <div class="group">
+              <div class="row">
+                <span class="row-label two">Anthropic-Admin-Key<small>Nutzung und Kosten aller Claude-API-Keys deiner Organisation</small></span>
+                <span class="row-value" id="adminAnthStatus">–</span>
+              </div>
+              <div class="row field-row">
+                <input id="adminAnthInput" type="password" placeholder="sk-ant-admin…" spellcheck="false" autocomplete="off" aria-label="Anthropic-Admin-Key">
+                <button type="button" class="button small" id="adminAnthSave">Speichern</button>
+              </div>
+              <div class="row">
+                <span class="row-label two">OpenAI-Admin-Key<small>Tokens und Kosten deiner OpenAI-API (nicht ChatGPT-Abo)</small></span>
+                <span class="row-value" id="adminOaiStatus">–</span>
+              </div>
+              <div class="row field-row">
+                <input id="adminOaiInput" type="password" placeholder="sk-admin-…" spellcheck="false" autocomplete="off" aria-label="OpenAI-Admin-Key">
+                <button type="button" class="button small" id="adminOaiSave">Speichern</button>
+              </div>
+              <label class="row">
+                <span class="row-label two">Lokale Protokolle lesen<small>Claude Code und Codex auf diesem PC</small></span>
+                <span class="switch"><input type="checkbox" id="usageLocalToggle"><span></span></span>
+              </label>
+            </div>
+            <p class="footer" id="adminMsg"></p>
+            <p class="footer">Buddy nimmt nur offizielle Schnittstellen und die eigenen Protokolldateien der Programme. Admin-Keys werden mit der Windows-Verschlüsselung gespeichert und nur an den jeweiligen Anbieter geschickt. Leeres Feld + Speichern löscht einen Key. Abo-Limits von Claude, ChatGPT und Grok geben die Anbieter nicht heraus, darum steht dort «nicht verfügbar».</p>
+          </div>
         </section>
 
         <!-- Einstellungen -->
@@ -236,9 +286,9 @@
                 <span class="row-label">Status</span>
                 <span class="row-value" id="notifyStatus">–</span>
               </div>
-              <button type="button" class="row row-button left" id="dndBtn">«Nicht stören» in Windows öffnen</button>
+              <button type="button" class="row row-button left" id="dndBtn">Windows-Banner unten rechts ausschalten</button>
             </div>
-            <p class="footer">Schalte in Windows «Nicht stören» ein, dann poppt unten rechts nichts mehr auf und alles kommt nur noch im Island. Die Inhalte bleiben auf deinem PC.</p>
+            <p class="footer">Der Knopf öffnet direkt die Windows-Einstellungen «Benachrichtigungen». Schalte dort «Nicht stören» ein (dann kommt kein Banner mehr) oder bei einzelnen Apps «Benachrichtigungsbanner anzeigen» aus. Buddy zeigt die Mitteilungen trotzdem weiter im Island. Die Inhalte bleiben auf deinem PC.</p>
 
             <h3 class="section">Sprache</h3>
             <div class="group">

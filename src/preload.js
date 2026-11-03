@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('buddy', {
   getAiStats: () => ipcRenderer.invoke('ai:stats'),
   resetUsage: () => ipcRenderer.invoke('usage:reset'),
   clearHistory: () => ipcRenderer.invoke('history:clear'),
+  getAiUsage: (force) => ipcRenderer.invoke('aiusage:get', { force: Boolean(force) }),
+  setUsageKey: (provider, key) => ipcRenderer.invoke('aiusage:key', { provider, key }),
 
   sendChat: (id, messages, meta) => ipcRenderer.send('chat:send', { id, messages, meta }),
   abortChat: (id) => ipcRenderer.send('chat:abort', id),

@@ -995,3 +995,216 @@ input::placeholder, textarea::placeholder { color: var(--label-3); }
 .hist-step.warn, .hist-step.skipped { color: #ffd60a; }
 .row-value.bad { color: var(--red); }
 .row-button.left.danger { color: var(--red); }
+
+/* ======================================================================
+   Island v2: geschlossen nur Augen, stabile Übergänge, Notch-Modus.
+   Alles im Kopf ist absolut positioniert: Beim Öffnen und Schliessen
+   ändert sich nur Breite/Höhe des Rahmens, Inhalte fliessen nie neu um.
+   ====================================================================== */
+
+:root {
+  --gap: 6px;          /* Abstand zum oberen Bildschirmrand */
+  --closed-h: 36px;
+  --open-ms: 460ms;
+  --close-ms: 340ms;
+}
+
+body { padding-top: var(--gap); }
+
+.island {
+  position: relative;
+  will-change: width;
+  transform: translateZ(0);
+  transition:
+    width var(--close-ms) var(--ease),
+    border-radius var(--close-ms) var(--ease),
+    box-shadow var(--close-ms) var(--ease),
+    transform var(--close-ms) var(--ease);
+}
+.island.open {
+  transition:
+    width var(--open-ms) var(--spring),
+    border-radius var(--open-ms) var(--ease),
+    box-shadow var(--open-ms) var(--ease),
+    transform var(--open-ms) var(--ease);
+}
+
+.top {
+  position: relative;
+  display: block;
+  height: var(--closed-h);
+  padding: 0;
+  transition: height var(--close-ms) var(--ease);
+}
+.island.open .top { height: 54px; padding: 0; transition: height var(--open-ms) var(--spring); }
+
+/* Augen: immer exakt in der Mitte, offen wandern sie nach links */
+.face-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  transition: left var(--close-ms) var(--ease), opacity 0.2s var(--ease);
+  z-index: 2;
+}
+.island.open .face-btn { left: 30px; transition: left var(--open-ms) var(--spring); }
+.face { width: 28px; height: 24px; gap: 6px; }
+
+/* Ruhe: geschlossene Augen (zwei feine Striche) */
+.island:not(.open)[data-state="idle"] .eye,
+.island:not(.open)[data-state="music"] .eye,
+.island:not(.open)[data-state="notch"] .eye {
+  width: 9px;
+  height: 2.5px;
+  border-radius: 2px;
+}
+/* Beim Darüberfahren blinzelt Buddy wach */
+.island:not(.open)[data-state="idle"]:hover .eye { width: 5px; height: 11px; border-radius: 3px; }
+
+/* Seitenplätze für Cover, Equalizer, Stopp und Mikrofon */
+.side {
+  position: absolute;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transform: translateY(-50%);
+  opacity: 1;
+  transition: opacity 0.18s var(--ease);
+}
+.side-l { left: 9px; }
+.side-r { right: 9px; }
+.island.open .side-l { opacity: 0; pointer-events: none; }
+.island.open .side-r { right: 128px; }
+.side-r .meter { display: none !important; }
+.side-r .badge { display: none !important; }
+.eq { margin: 0; }
+.pill-cover { width: 22px; height: 22px; border-radius: 6px; }
+.island:not(.open)[data-state="music"] .pill-cover.has { display: block; }
+
+/* Text nur im offenen Zustand. Er erscheint, wenn der Rahmen fast offen ist,
+   und verschwindet sofort beim Schliessen: kein Springen, kein Flackern. */
+.label {
+  position: absolute;
+  top: 50%;
+  left: 54px;
+  right: 170px;
+  transform: translateY(-50%);
+  opacity: 0;
+  visibility: hidden;
+  font: 600 15px/1.2 var(--display);
+  transition: opacity 0.12s var(--ease), visibility 0s linear 0.12s;
+}
+.island.open .label {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.22s var(--ease) 0.16s, visibility 0s;
+}
+.island.open[data-state="control"] .label { color: var(--label); }
+
+.actions {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: auto;
+  transform: translateY(-50%);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s var(--ease), visibility 0s linear 0.12s;
+}
+.island.open .actions {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.22s var(--ease) 0.16s, visibility 0s;
+}
+
+/* Fortschritt eines Timers: feine Linie unten im geschlossenen Island */
+.pill-progress {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 4px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  transform-origin: left;
+  transform: scaleX(var(--progress, 0));
+  opacity: 0;
+  transition: opacity 0.2s var(--ease), transform 1s linear;
+}
+.island:not(.open)[data-state="timer"] .pill-progress,
+.island:not(.open)[data-state="alarm"] .pill-progress { opacity: 0.9; }
+
+/* Mitteilungs-Vorschau: einzige Ausnahme mit Text, nur ein paar Sekunden */
+.peek {
+  position: absolute;
+  top: 50%;
+  left: 48px;
+  right: 16px;
+  transform: translateY(-50%);
+}
+.island:not(.open)[data-state="peek"] .top { height: 54px; }
+.island:not(.open)[data-state="peek"] .face-btn { left: 26px; }
+
+/* Aufklappbereich: Inhalt hat von Anfang an seine volle Breite und wird nur
+   aufgedeckt (mittig), statt beim Aufziehen ständig neu umzubrechen. */
+.body { transition: grid-template-rows var(--close-ms) var(--ease); }
+.island.open .body { transition: grid-template-rows var(--open-ms) var(--spring); }
+.body-inner {
+  width: 500px;
+  margin-left: calc(50% - 250px);
+  transition: opacity 0.12s var(--ease);
+}
+.island.open .body-inner { transition: opacity 0.24s var(--ease) 0.14s; }
+
+/* Notch-Modus: winzig, bündig am oberen Rand, ohne Inhalt */
+.island[data-state="notch"]:not(.open) {
+  border-radius: 0 0 10px 10px;
+  transform: translateY(calc(-1 * var(--gap)));
+}
+.island[data-state="notch"]:not(.open) .top { height: 12px; }
+.island[data-state="notch"]:not(.open) .face-btn { opacity: 0; }
+.island[data-state="notch"]:not(.open) .side,
+.island[data-state="notch"]:not(.open) .pill-progress { opacity: 0; pointer-events: none; }
+.island.dragging { transition: none !important; }
+.island.dragging .top { transition: none !important; }
+
+/* Hinweis: Windows-Banner ausschalten */
+.inbox-hint { margin: 2px 10px 8px; padding: 10px 12px; border-radius: 11px; background: var(--fill); font-size: 12.5px; color: var(--label-2); display: grid; gap: 8px; }
+.inbox-hint-actions { display: flex; align-items: center; gap: 12px; }
+.inbox-hint-actions .link { font-size: 12.5px; color: var(--label-2); }
+
+/* ---------- KI-Nutzung ---------- */
+.usage-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 2px 4px 10px; font-size: 12.5px; color: var(--label-3); }
+.ucard { margin-bottom: 12px; border-radius: 14px; background: var(--group); overflow: hidden; }
+.ucard-head { display: flex; align-items: center; gap: 8px; padding: 11px 14px 6px; }
+.ucard-head b { flex: 1; font: 600 14px/1.2 var(--display); }
+.ucard-src { font-size: 11px; color: var(--label-3); padding: 0 14px 6px; }
+.tag { flex: none; padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--fill); color: var(--label-2); }
+.tag.ok { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+.tag.unavailable, .tag.empty, .tag.off { color: var(--label-3); }
+.tag.error { background: color-mix(in srgb, var(--red) 18%, transparent); color: #ff9f99; }
+.tag.setup { color: var(--accent); }
+.urow { display: flex; align-items: baseline; gap: 10px; padding: 5px 14px; font-size: 13px; }
+.urow span:first-child { flex: 1; min-width: 0; color: var(--label-2); }
+.urow span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.urow.estimate span:last-child::after { content: " ≈"; color: var(--label-3); }
+.urow.unavailable span:last-child { color: var(--label-3); }
+.ulimit { padding: 6px 14px 4px; font-size: 13px; }
+.ulimit-top { display: flex; justify-content: space-between; gap: 10px; }
+.ulimit-top span:last-child { font-variant-numeric: tabular-nums; }
+.ulimit .budget-bar { margin: 6px 0 3px; }
+.ulimit small { color: var(--label-3); font-size: 11.5px; }
+.unote { padding: 6px 14px 10px; font-size: 12px; color: var(--label-3); line-height: 1.4; }
+.uact { padding: 4px 14px 10px; display: grid; gap: 6px; }
+.uact-item { font-size: 12.5px; }
+.uact-item b { font-weight: 600; color: var(--label); }
+.uact-item div { color: var(--label-3); font-size: 11.5px; }
+.uact-item.running b::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--green); vertical-align: 1px; }
+.ucard-foot { padding: 0 14px 10px; font-size: 11px; color: var(--label-3); }
+.island.open .side-r { right: 162px; }
+.label { right: 200px; }

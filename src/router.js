@@ -51,6 +51,7 @@ const SIMPLE_RULES = [
   { test: /\b(wie spät|wieviel uhr|wie viel uhr|welcher tag ist|welches datum)\b/i, reason: 'Uhrzeit oder Datum', caps: ['wissen'] },
   { test: /\b(was steht (heute|morgen)? ?an|meine termine|nächster termin|kalender)\b/i, reason: 'Kalender lesen', caps: ['werkzeuge'] },
   { test: /\b(was hab(e)? ich verpasst|neue mitteilungen|meine mitteilungen)\b/i, reason: 'Mitteilungen lesen', caps: ['werkzeuge'] },
+  { test: /\b(usage|nutzung|limits?|kontingent|verbrauch\w*|tokens?|ai-agents?|ki-agents?|agents?|codex|chatgpt|grok|claude code)\b/i, reason: 'KI-Nutzung abfragen', caps: ['werkzeuge'] },
 ];
 
 // Hinweise auf anspruchsvollere Aufgaben: dann immer den Dispatcher fragen

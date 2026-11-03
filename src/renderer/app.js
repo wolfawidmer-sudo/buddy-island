@@ -104,12 +104,36 @@
     historyList: $('historyList'),
     historyClear: $('historyClear'),
     rollbackBtn: $('rollbackBtn'),
+    pillProgress: $('pillProgress'),
+    bannerHint: $('bannerHint'),
+    bannerOpen: $('bannerOpen'),
+    bannerDismiss: $('bannerDismiss'),
+    usageBtn: $('usageBtn'),
+    usageView: $('usageView'),
+    usageUpdated: $('usageUpdated'),
+    usageRefresh: $('usageRefresh'),
+    usageCards: $('usageCards'),
+    adminAnthStatus: $('adminAnthStatus'),
+    adminAnthInput: $('adminAnthInput'),
+    adminAnthSave: $('adminAnthSave'),
+    adminOaiStatus: $('adminOaiStatus'),
+    adminOaiInput: $('adminOaiInput'),
+    adminOaiSave: $('adminOaiSave'),
+    usageLocalToggle: $('usageLocalToggle'),
+    adminMsg: $('adminMsg'),
   };
 
   const STORE_KEY = 'buddy.chat.v1';
   const MAX_HISTORY = 40;
-  const CLOSED_H = 40;
-  const PEEK_H = 56;
+  const GAP = 6; // Abstand zum oberen Rand (wie in style.css --gap)
+  const CLOSED_H = 36 + GAP;
+  const PEEK_H = 54 + GAP;
+  const NOTCH_H = 12 + GAP;
+  const OPEN_MS = 460;
+  const CLOSE_MS = 340;
+  // Feste Breiten im geschlossenen Zustand: kein Text, darum kein Messen und kein Springen
+  const CLOSED_W = { idle: 112, busy: 112, done: 112, error: 112, timer: 112, alarm: 112, listen: 136, control: 152, music: 168, notch: 96 };
+  const NOTCH_KEY = 'buddy.notch.v1';
   const PEEK_MS = 6000;
 
   const state = {
@@ -134,6 +158,9 @@
     game: { active: false, name: '' },
     missed: 0,
     update: { state: 'idle' },
+    phase: 'closed', // closed | opening | open | closing
+    openedAt: 0,
+    notch: (() => { try { return localStorage.getItem(NOTCH_KEY) === '1'; } catch { return false; } })(),
   };
 
   // ---------- Hilfsfunktionen ----------
@@ -221,6 +248,8 @@
     if (state.listening || state.voiceNote) return 'listen';
     if (state.peek && !state.open) return 'peek';
     if (state.status !== 'idle') return state.status;
+    // Im Notch-Modus bleiben ruhige Zustände klein; Aktivität zeigt das Island normal
+    if (state.notch && !state.open) return 'notch';
     if (state.timers.length && !state.open) return 'timer';
     if (state.media && !state.open && state.settings?.media !== false) return 'music';
     return 'idle';
@@ -245,16 +274,19 @@
     }
   }
 
+  const VIEW_TITLE = { settings: 'Einstellungen', usage: 'KI-Nutzung' };
+
   function render() {
     const shown = visibleState();
-    el.island.dataset.state = shown;
+    if (el.island.dataset.state !== shown) el.island.dataset.state = shown;
     el.island.classList.toggle('paused', Boolean(state.media && !state.media.playing));
     el.island.classList.toggle('listening', Boolean(state.listening));
-    if (state.open && shown !== 'alarm' && shown !== 'control') {
-      el.label.textContent = state.view === 'settings' ? 'Einstellungen' : state.settings?.name || 'Buddy';
-    } else {
-      el.label.textContent = labelFor(shown);
-    }
+    // Sichtbarer Text nur im offenen Island; geschlossen nur für Screenreader
+    const title = state.open
+      ? (shown === 'alarm' || shown === 'control' ? labelFor(shown) : VIEW_TITLE[state.view] || state.settings?.name || 'Buddy')
+      : null;
+    if (title !== null && el.label.textContent !== title) el.label.textContent = title;
+    el.faceBtn.setAttribute('aria-label', state.open ? 'Buddy' : labelFor(shown));
     el.peek.hidden = shown !== 'peek';
     syncLayout();
   }
@@ -274,15 +306,13 @@
     const shown = visibleState();
     if (shown === 'peek') {
       const w = Math.max(textWidth(el.peekText.textContent), textWidth(el.peekApp.textContent) * 0.9);
-      return { width: Math.ceil(Math.min(360, Math.max(240, 12 + 24 + 10 + w + 18)) / 8) * 8, height: PEEK_H };
+      return { width: Math.ceil(Math.min(360, Math.max(240, 48 + w + 20)) / 8) * 8, height: PEEK_H, notch: false };
     }
-    const extra = { busy: 30, done: 18, control: 34, alarm: 18, music: 22, listen: 16 }[shown] || 0;
-    const w = 8 + 24 + 8 + textWidth(el.label.textContent) + extra + 16;
-    // auf 8 px runden, damit sich das Fenster nicht bei jeder Ziffer ändert
-    return { width: Math.min(shown === 'music' ? 300 : 340, Math.max(148, Math.ceil(w / 8) * 8)), height: CLOSED_H };
+    if (shown === 'notch') return { width: CLOSED_W.notch, height: NOTCH_H, notch: true };
+    return { width: CLOSED_W[shown] || CLOSED_W.idle, height: CLOSED_H, notch: false };
   }
 
-  let windowSize = { open: false, width: 148, height: CLOSED_H };
+  let windowSize = { open: false, width: 112, height: CLOSED_H, notch: false };
   let shrinkTimer = 0;
 
   function sendLayout(next) {
@@ -297,24 +327,44 @@
       return;
     }
     const size = closedSize();
-    el.island.style.setProperty('--w', size.width + 'px');
+    const w = size.width + 'px';
+    if (el.island.style.getPropertyValue('--w') !== w) el.island.style.setProperty('--w', w);
     const grows = !windowSize.open && size.width >= windowSize.width && size.height >= windowSize.height;
     if (grows) {
       clearTimeout(shrinkTimer);
-      if (size.width !== windowSize.width || size.height !== windowSize.height) sendLayout({ open: false, ...size });
+      if (size.width !== windowSize.width || size.height !== windowSize.height || size.notch !== windowSize.notch) sendLayout({ open: false, ...size });
       return;
     }
-    // Kleiner werden erst nach der Animation
+    // Kleiner werden erst, wenn die Animation fertig ist
     clearTimeout(shrinkTimer);
     shrinkTimer = setTimeout(() => {
       if (state.open) return;
       sendLayout({ open: false, ...closedSize() });
-    }, 480);
+    }, CLOSE_MS + 60);
   }
 
   // ---------- Öffnen & Schliessen ----------
 
   let openTimer = 0;
+  let phaseTimer = 0;
+
+  // Wartet, bis das Fenster wirklich gross ist (sonst würde die Animation abgeschnitten)
+  function whenWindowIsLarge(cb) {
+    const started = performance.now();
+    const check = () => {
+      if (!state.open) return;
+      if (window.innerWidth >= 500 || performance.now() - started > 120) cb();
+      else openTimer = requestAnimationFrame(check);
+    };
+    openTimer = requestAnimationFrame(check);
+  }
+
+  function setPhase(phase, ms) {
+    state.phase = phase;
+    el.island.dataset.phase = phase;
+    clearTimeout(phaseTimer);
+    if (ms) phaseTimer = setTimeout(() => setPhase(phase === 'opening' ? 'open' : 'closed'), ms);
+  }
 
   function open(view) {
     if (view) showView(view);
@@ -323,15 +373,21 @@
     state.peek = null;
     if (!state.open) {
       state.open = true;
+      state.openedAt = Date.now();
+      clearTimeout(shrinkTimer);
       sendLayout({ open: true });
-      // kurz warten, bis das Fenster gross ist, dann animieren
-      clearTimeout(openTimer);
-      openTimer = setTimeout(() => {
+      cancelAnimationFrame(openTimer);
+      whenWindowIsLarge(() => {
         if (!state.open) return;
-        el.island.classList.add('open');
-        if (state.view === 'chat') el.input.focus();
-        scrollToBottom(true);
-      }, 16);
+        // Ein Frame Pause, damit der Startzustand sicher gezeichnet ist
+        requestAnimationFrame(() => {
+          if (!state.open) return;
+          setPhase('opening', OPEN_MS);
+          el.island.classList.add('open');
+          if (state.view === 'chat') el.input.focus({ preventScroll: true });
+          scrollToBottom(true);
+        });
+      });
     }
     renderInbox();
     renderNowPlaying();
@@ -341,14 +397,18 @@
   }
 
   function close() {
-    clearTimeout(openTimer);
+    cancelAnimationFrame(openTimer);
     if (!state.open) return;
     state.open = false;
     stopHotkeyRecording();
+    setPhase('closing', CLOSE_MS);
     el.island.classList.remove('open');
-    if (state.view === 'settings') showView('chat');
     api.releaseWindow();
     render();
+    // Ansicht erst zurücksetzen, wenn der Inhalt ausgeblendet ist (kein Umschalten während der Animation)
+    setTimeout(() => {
+      if (!state.open && state.view !== 'chat') showView('chat');
+    }, CLOSE_MS);
   }
 
   function toggle() {
@@ -360,8 +420,11 @@
     state.view = view;
     el.chatView.hidden = view !== 'chat';
     el.settingsView.hidden = view !== 'settings';
+    el.usageView.hidden = view !== 'usage';
     el.settingsBtn.classList.toggle('active', view === 'settings');
+    el.usageBtn.classList.toggle('active', view === 'usage');
     if (view === 'settings') { fillSettings(); loadAiStats(); }
+    if (view === 'usage') loadUsage(false);
     if (view === 'chat' && state.open) renderAgenda();
     render();
   }
@@ -972,7 +1035,15 @@
         bar.style.transform = `scaleX(${left / Number(bar.dataset.total)})`;
       }
     }
+    paintPillProgress(now);
     render();
+  }
+
+  // Restzeit des nächsten Timers als feine Linie im geschlossenen Island
+  function paintPillProgress(now = Date.now()) {
+    const next = state.timers[0];
+    const value = next ? Math.max(0, Math.min(1, (next.endsAt - now - 1000) / (next.durationMs || 1))) : 0;
+    el.pillProgress.style.setProperty('--progress', value.toFixed(4));
   }
 
   api.onTimers((list) => {
@@ -1047,6 +1118,8 @@
   function renderInbox() {
     el.inboxList.textContent = '';
     el.inbox.hidden = state.inbox.length === 0;
+    const s = state.settings;
+    el.bannerHint.hidden = !(s && s.notifications && s.canControl && !s.bannerHintDismissed && state.inbox.length);
     for (const n of state.inbox.slice(0, 10)) {
       const row = document.createElement('div');
       row.className = 'note';
@@ -1413,7 +1486,7 @@
     el.notifyToggle.checked = Boolean(s.notifications);
     const status = s.notifications ? s.notifyStatus : 'Off';
     el.notifyStatus.textContent = NOTIFY_STATUS[status] || status || '–';
-    el.dndBtn.textContent = status === 'Denied' ? 'Zugriff in Windows erlauben' : '«Nicht stören» in Windows öffnen';
+    el.dndBtn.textContent = status === 'Denied' ? 'Zugriff in Windows erlauben' : 'Windows-Banner unten rechts ausschalten';
     fillShortcuts();
     el.wakeToggle.checked = Boolean(s.voiceWake);
     el.wakeToggle.disabled = !s.canControl;
@@ -1474,6 +1547,135 @@
     }
     el.modelSelect.value = current;
   }
+
+  // ---------- KI-Nutzung (Dashboard) ----------
+
+  const USAGE_STATUS = { ok: 'Daten', empty: 'Keine Daten', unavailable: 'Nicht verfügbar', setup: 'Einrichten', error: 'Fehler', off: 'Aus' };
+  let usageLoading = false;
+
+  async function loadUsage(force) {
+    if (usageLoading) return;
+    usageLoading = true;
+    el.usageRefresh.disabled = true;
+    el.usageUpdated.textContent = 'Lädt …';
+    try {
+      renderUsage(await api.getAiUsage(force));
+    } catch {
+      el.usageUpdated.textContent = 'Konnte nicht geladen werden';
+    } finally {
+      usageLoading = false;
+      el.usageRefresh.disabled = false;
+    }
+    fillUsageConnections();
+  }
+
+  function fillUsageConnections() {
+    const s = state.settings || {};
+    el.adminAnthStatus.textContent = s.hasAnthropicAdmin ? 'Verbunden' : 'Nicht verbunden';
+    el.adminAnthStatus.classList.toggle('ok', Boolean(s.hasAnthropicAdmin));
+    el.adminOaiStatus.textContent = s.hasOpenaiAdmin ? 'Verbunden' : 'Nicht verbunden';
+    el.adminOaiStatus.classList.toggle('ok', Boolean(s.hasOpenaiAdmin));
+    el.usageLocalToggle.checked = s.usageLocal !== false;
+  }
+
+  const ago = (t) => {
+    const s = Math.round((Date.now() - t) / 1000);
+    if (s < 60) return 'gerade eben';
+    if (s < 3600) return `vor ${Math.round(s / 60)} min`;
+    if (s < 86400) return `vor ${Math.round(s / 3600)} h`;
+    return new Date(t).toLocaleDateString('de-CH');
+  };
+  const dur = (ms) => (ms < 60000 ? `${Math.max(1, Math.round(ms / 1000))} s` : ms < 3600e3 ? `${Math.round(ms / 60000)} min` : `${(ms / 3600e3).toFixed(1)} h`);
+  const when = (t) => new Date(t).toLocaleString('de-CH', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+
+  function node(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  function renderUsage(report) {
+    el.usageUpdated.textContent = `Zuletzt aktualisiert: ${clock(report.updatedAt)}`;
+    el.usageCards.textContent = '';
+
+    // Laufende KI-Programme zuerst
+    const live = node('div', 'ucard');
+    const lh = node('div', 'ucard-head');
+    lh.append(node('b', '', 'Läuft gerade'), node('span', `tag ${report.programsError ? 'error' : 'ok'}`, report.programsError ? 'Fehler' : 'Live'));
+    live.appendChild(lh);
+    const items = [...report.programs.map((p) => ({ title: p.name, sub: 'Programm läuft' })), ...report.running.map((r) => ({ title: r.name, sub: r.detail, running: true }))];
+    const box = node('div', 'uact');
+    if (report.programsError) box.appendChild(node('div', 'unote', `Nicht prüfbar: ${report.programsError}`));
+    else if (!items.length) box.appendChild(node('div', 'uact-item', 'Keine bekannten KI-Programme oder Agents aktiv.'));
+    for (const it of items) {
+      const i = node('div', `uact-item${it.running ? ' running' : ''}`);
+      i.append(node('b', '', it.title), node('div', '', it.sub));
+      box.appendChild(i);
+    }
+    live.appendChild(box);
+    el.usageCards.appendChild(live);
+
+    for (const p of report.providers) {
+      const card = node('div', 'ucard');
+      const head = node('div', 'ucard-head');
+      head.append(node('b', '', p.name), node('span', `tag ${p.status}`, USAGE_STATUS[p.status] || p.status));
+      card.appendChild(head);
+      if (p.source) card.appendChild(node('div', 'ucard-src', `Quelle: ${p.source}`));
+      if (p.status === 'error') card.appendChild(node('div', 'unote', p.error || 'Fehler beim Abrufen'));
+      for (const m of p.metrics || []) {
+        const row = node('div', `urow ${m.kind}`);
+        row.title = m.hint || (m.kind === 'estimate' ? 'Schätzung' : m.kind === 'measured' ? 'Gemessen' : '');
+        row.append(node('span', '', m.label), node('span', '', m.value));
+        card.appendChild(row);
+      }
+      for (const l of p.limits || []) {
+        const lim = node('div', 'ulimit');
+        const top = node('div', 'ulimit-top');
+        top.append(node('span', '', l.label), node('span', '', l.usedPercent === null ? 'zurückgesetzt' : `${l.usedPercent} % genutzt · ${100 - l.usedPercent} % übrig`));
+        const bar = node('div', 'budget-bar');
+        const fill = node('i');
+        fill.style.width = `${Math.min(100, l.usedPercent || 0)}%`;
+        if ((l.usedPercent || 0) >= 90) fill.style.background = 'var(--red)';
+        else if ((l.usedPercent || 0) >= 70) fill.style.background = '#ffd60a';
+        bar.appendChild(fill);
+        const meta = [l.detail, l.resetsAt ? `setzt zurück ${when(l.resetsAt)}` : null, l.asOf ? `Stand ${ago(l.asOf)}` : null, l.note].filter(Boolean).join(' · ');
+        lim.append(top, bar, node('small', '', meta));
+        card.appendChild(lim);
+      }
+      const notes = [p.note, p.limitsNote ? `Limits: ${p.limitsNote}` : null].filter(Boolean);
+      for (const n of notes) card.appendChild(node('div', 'unote', n));
+      const acts = (p.activity || []).slice(0, 5);
+      if (acts.length) {
+        const list = node('div', 'uact');
+        for (const a of acts) {
+          const i = node('div', `uact-item${a.running ? ' running' : ''}`);
+          i.appendChild(node('b', '', a.title));
+          const meta = [a.project, when(a.end), a.durationMs ? dur(a.durationMs) : null, a.tools?.length ? a.tools.join(', ') : null, a.errors ? `${a.errors} Fehler` : null].filter(Boolean).join(' · ');
+          i.appendChild(node('div', '', meta));
+          list.appendChild(i);
+        }
+        card.appendChild(list);
+      }
+      card.appendChild(node('div', 'ucard-foot', `Aktualisiert ${clock(p.updatedAt)}`));
+      el.usageCards.appendChild(card);
+    }
+  }
+
+  async function saveUsageKey(provider, input) {
+    footer(el.adminMsg, 'Prüfe …');
+    const result = await api.setUsageKey(provider, input.value);
+    if (!result.ok) { footer(el.adminMsg, result.error, 'err'); return; }
+    input.value = '';
+    state.settings = result.settings;
+    footer(el.adminMsg, 'Gespeichert.', 'ok');
+    if (result.report) renderUsage(result.report);
+    fillUsageConnections();
+  }
+  el.adminAnthSave.addEventListener('click', () => saveUsageKey('anthropicAdmin', el.adminAnthInput));
+  el.adminOaiSave.addEventListener('click', () => saveUsageKey('openaiAdmin', el.adminOaiInput));
+  el.usageRefresh.addEventListener('click', () => loadUsage(true));
+  el.usageLocalToggle.addEventListener('change', async () => { await save({ usageLocal: el.usageLocalToggle.checked }); loadUsage(true); });
 
   // ---------- Kosten und Verlauf ----------
 
@@ -1700,6 +1902,16 @@
   el.confirmToggle.addEventListener('change', () => save({ confirmControl: el.confirmToggle.checked }));
   el.glowToggle.addEventListener('change', () => save({ glow: el.glowToggle.checked }));
   el.notifyToggle.addEventListener('change', async () => { await save({ notifications: el.notifyToggle.checked }); fillSettings(); });
+  // Direkt zu den Windows-Einstellungen, um die Banner unten rechts auszuschalten
+  el.bannerOpen.addEventListener('click', (event) => {
+    event.stopPropagation();
+    api.openNotificationSettings();
+  });
+  el.bannerDismiss.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    await save({ bannerHintDismissed: true });
+    renderInbox();
+  });
   el.dndBtn.addEventListener('click', () => {
     if (state.settings?.notifyStatus === 'Denied') api.openNotificationPrivacy();
     else api.openNotificationSettings();
@@ -1936,11 +2148,75 @@
   // ---------- Kopfzeile & Tastatur ----------
 
   el.island.addEventListener('click', (event) => {
+    // Nach einem Ziehen kein Klick
+    if (drag.suppressClick) { drag.suppressClick = false; return; }
     // Nur ein Klick aufs geschlossene Island öffnet es (nicht Klicks im Inhalt)
-    if (!state.open && !event.target.closest('.stop') && !event.target.closest('.body')) open();
+    if (event.target.closest('.actions, .stop, .body')) return;
+    if (!state.open) open();
   });
+
+  // ---------- Notch-Modus: Island nach oben ziehen ----------
+  // Hochziehen (mind. 14 px, überwiegend senkrecht) macht einen kleinen Notch,
+  // Herunterziehen holt das Island zurück. Ein normaler Klick öffnet weiter.
+  const DRAG_UP = 14;
+  const DRAG_DOWN = 12;
+  const drag = { active: false, id: null, x: 0, y: 0, moved: false, suppressClick: false, started: 0 };
+
+  function setNotch(on) {
+    if (state.notch === on) return;
+    state.notch = on;
+    try { localStorage.setItem(NOTCH_KEY, on ? '1' : '0'); } catch { /* egal */ }
+    render();
+  }
+
+  el.island.addEventListener('pointerdown', (event) => {
+    if (state.open || event.button !== 0 || event.target.closest('.stop')) return;
+    drag.active = true;
+    drag.id = event.pointerId;
+    drag.x = event.screenX;
+    drag.y = event.screenY;
+    drag.moved = false;
+    drag.started = Date.now();
+    try { el.island.setPointerCapture(event.pointerId); } catch { /* egal */ }
+  });
+
+  el.island.addEventListener('pointermove', (event) => {
+    if (!drag.active || event.pointerId !== drag.id) return;
+    const dx = event.screenX - drag.x;
+    const dy = event.screenY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) > 4) {
+      drag.moved = true;
+      el.island.classList.add('dragging');
+    }
+    if (!drag.moved) return;
+    // Gummiband-Gefühl: folgt leicht der Maus, aber nur senkrecht und gedämpft
+    const pull = Math.max(-10, Math.min(10, dy * 0.35));
+    el.island.style.translate = `0 ${pull}px`;
+  });
+
+  function endDrag(event) {
+    if (!drag.active || (event && event.pointerId !== drag.id)) return;
+    drag.active = false;
+    el.island.classList.remove('dragging');
+    el.island.style.translate = '';
+    if (!drag.moved || !event) return;
+    drag.suppressClick = true;
+    setTimeout(() => { drag.suppressClick = false; }, 300);
+    const dx = event.screenX - drag.x;
+    const dy = event.screenY - drag.y;
+    const vertical = Math.abs(dy) > Math.abs(dx) * 1.5;
+    const quick = Date.now() - drag.started < 2500;
+    // Am oberen Rand kommt die Maus nicht weiter: dort zählt auch ein kürzerer Zug
+    const atEdge = event.screenY <= window.screenY + 2;
+    if (!state.notch && vertical && quick && (dy <= -DRAG_UP || (atEdge && dy <= -6))) setNotch(true);
+    else if (state.notch && vertical && quick && dy >= DRAG_DOWN) setNotch(false);
+  }
+  el.island.addEventListener('pointerup', endDrag);
+  el.island.addEventListener('pointercancel', () => endDrag(null));
+  el.island.addEventListener('lostpointercapture', () => { if (drag.active) endDrag(null); });
   el.newBtn.addEventListener('click', newChat);
   el.settingsBtn.addEventListener('click', () => showView(state.view === 'settings' ? 'chat' : 'settings'));
+  el.usageBtn.addEventListener('click', () => showView(state.view === 'usage' ? 'chat' : 'usage'));
   el.closeBtn.addEventListener('click', close);
 
   document.addEventListener('keydown', (event) => {
@@ -1961,7 +2237,9 @@
   api.onToggle(() => toggle());
   api.onOpen((view) => open(view || undefined));
   api.onBlur(() => {
-    // Klick ausserhalb schliesst, ausser während der Hotkey aufgenommen oder gefragt wird
+    // Klick ausserhalb schliesst, ausser während der Hotkey aufgenommen oder gefragt wird.
+    // Direkt nach dem Öffnen nicht: Windows meldet beim Vergrössern manchmal kurz «blur».
+    if (Date.now() - state.openedAt < 350) return;
     if (!state.recordingHotkey && !el.messages.querySelector('.confirm')) close();
   });
 
@@ -1974,6 +2252,7 @@
     updateSendButton();
     state.timers = await api.getTimers();
     renderTimers();
+    paintPillProgress();
     state.inbox = await api.listNotifications();
     renderInbox();
     state.media = await api.getMedia();

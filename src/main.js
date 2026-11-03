@@ -15,6 +15,7 @@ const { createFiles } = require('./files');
 const { createRouter } = require('./router');
 const { createAgent } = require('./agent');
 const updateSecurity = require('./update-security');
+const { createAiUsage } = require('./ai-usage');
 const { createComputer, supportsCaptureExclusion } = require('./computer');
 const { createSystemWatcher } = require('./notifications');
 const { createCalendar } = require('./calendar');
@@ -31,9 +32,10 @@ app.commandLine.appendSwitch('disable-features', [
 ].join(','));
 
 const OPEN_W = 560;
-const OPEN_H = 660;
-const CLOSED_H = 40;
-const TOP_GAP = 6; // wie die Dynamic Island: knapp unter dem oberen Rand
+const TOP_GAP = 6; // wie die Dynamic Island: knapp unter dem oberen Rand (im Fenster als Innenabstand)
+const OPEN_H = 660 + TOP_GAP;
+const CLOSED_H = 36 + TOP_GAP;
+const NOTCH_H = 12 + TOP_GAP;
 const SETTINGS_VERSION = 3;
 const MODELS_CACHE_MS = 6 * 3600 * 1000;
 
@@ -47,6 +49,8 @@ const DEFAULTS = {
   monthlyLimit: 5, // US-Dollar pro Monat, 0 = kein Limit
   permissions: { medium: 'ask', high: 'ask' },
   historyEnabled: true,
+  bannerHintDismissed: false,
+  usageLocal: true, // lokale Nutzungsdaten von Claude Code und Codex lesen
   maxTokens: 4096,
   hotkey: 'Control+Shift+Space',
   shortcuts: { newChat: '', settings: '', stop: '', voice: '' },
@@ -110,9 +114,10 @@ let usage = null;
 let history = null;
 let files = null;
 let agent = null;
+let aiUsage = null;
 let modelCache = { at: 0, list: null };
 let updateHealth = null; // Infos für Rollback und Anzeige
-let layout = { open: false, width: 148, height: 40 };
+let layout = { open: false, width: 112, height: 42, notch: false };
 let mouseCaptured = false;
 let agentInput = false; // Buddy bewegt gerade Maus/Tastatur
 let capturing = false; // Island ist für ein Bildschirmfoto kurz versteckt
@@ -212,11 +217,13 @@ function displayList() {
 }
 
 function publicSettings() {
-  const { keyEncrypted, keyPlain, calendarEncrypted, calendarPlain, ...rest } = settings;
+  const { keyEncrypted, keyPlain, calendarEncrypted, calendarPlain, anthropicAdminEncrypted, anthropicAdminPlain, openaiAdminEncrypted, openaiAdminPlain, ...rest } = settings;
   return {
     ...rest,
     providers: Object.values(models.PROVIDERS).map((p) => ({ id: p.id, name: p.name, consoleUrl: p.consoleUrl })),
     keyProtected: Boolean(keyEncrypted),
+    hasAnthropicAdmin: Boolean(settings.anthropicAdminEncrypted || settings.anthropicAdminPlain),
+    hasOpenaiAdmin: Boolean(settings.openaiAdminEncrypted || settings.openaiAdminPlain),
     hasKey: Boolean(keyEncrypted || keyPlain),
     hasCalendar: Boolean(calendarEncrypted || calendarPlain),
     calendarStatus: calendar?.status() || null,
@@ -329,14 +336,23 @@ function placeWindow() {
   if (!win) return;
   // Genau in der Mitte des ganzen Bildschirms, oben (unter einer Taskleiste, falls die oben ist)
   const { bounds, workArea } = targetDisplay();
-  const w = layout.open ? OPEN_W : Math.max(100, Math.min(420, Math.round(layout.width)));
-  const h = layout.open ? OPEN_H : Math.max(CLOSED_H, Math.min(72, Math.round(layout.height || CLOSED_H)));
+  // Das Fenster beginnt ganz oben; den Abstand macht das Fenster selbst (so kann der Notch bündig sitzen)
+  const w = layout.open ? OPEN_W : Math.max(80, Math.min(420, Math.round(layout.width)));
+  const h = layout.open ? OPEN_H : Math.max(NOTCH_H, Math.min(72, Math.round(layout.height || CLOSED_H)));
   win.setBounds({
     x: bounds.x + Math.round((bounds.width - w) / 2),
-    y: workArea.y + TOP_GAP,
+    y: workArea.y,
     width: w,
     height: h,
   });
+  // Geschlossen nur das Island selbst anklickbar machen (nicht den Streifen darüber)
+  if (process.platform === 'win32') {
+    try {
+      if (layout.open) win.setShape([]);
+      else if (layout.notch) win.setShape([{ x: 0, y: 0, width: w, height: h - TOP_GAP }]);
+      else win.setShape([{ x: 0, y: TOP_GAP, width: w, height: h - TOP_GAP }]);
+    } catch { /* ältere Windows-Versionen */ }
+  }
 }
 
 // Klicks durchlassen? Geschlossen ist das Fenster genau so gross wie das
@@ -682,6 +698,53 @@ async function runChat(id, messages, meta, send) {
   }
 }
 
+// Offizielle Usage-APIs der Anbieter (nur deren eigene Hosts, mit Zeitlimit)
+async function fetchProviderJson(url, headers) {
+  if (!/^https:\/\/api\.(anthropic|openai)\.com\//.test(url)) throw new Error('Unerlaubte Adresse.');
+  const local = new AbortController();
+  const timer = setTimeout(() => local.abort(), 20000);
+  try {
+    const res = await net.fetch(url, { headers, signal: local.signal });
+    if (res.status === 401 || res.status === 403) throw new Error('Der Admin-Key wurde abgelehnt. Prüfe ihn in der Nutzungs-Ansicht.');
+    if (!res.ok) throw new Error(`Der Dienst antwortet mit Fehler ${res.status}.`);
+    return await res.json();
+  } catch (err) {
+    if (local.signal.aborted) throw new Error('Zeitüberschreitung beim Abrufen.');
+    if (/abgelehnt|Fehler \d/.test(err.message)) throw err;
+    throw new Error('Keine Verbindung zum Dienst.');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Laufende Programme (nur Name, Pfad und Befehlszeile zum Erkennen bekannter KI-Programme;
+// nichts davon wird gespeichert oder verschickt)
+function listProcesses() {
+  const { execFile } = require('child_process');
+  return new Promise((resolve, reject) => {
+    if (process.platform === 'win32') {
+      const ps = 'Get-CimInstance Win32_Process | Select-Object Name,ExecutablePath,CommandLine | ConvertTo-Json -Compress';
+      execFile('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', ps], { windowsHide: true, timeout: 12000, maxBuffer: 32 * 1024 * 1024 }, (err, out) => {
+        if (err) { reject(new Error('Prozessliste nicht lesbar.')); return; }
+        try {
+          const list = JSON.parse(out || '[]');
+          resolve((Array.isArray(list) ? list : [list]).map((p) => ({ name: String(p.Name || '').replace(/\.exe$/i, ''), path: p.ExecutablePath || '', cmd: p.CommandLine || '' })));
+        } catch {
+          reject(new Error('Prozessliste nicht lesbar.'));
+        }
+      });
+    } else {
+      execFile('ps', ['-eo', 'comm=,args='], { timeout: 8000, maxBuffer: 8 * 1024 * 1024 }, (err, out) => {
+        if (err) { reject(new Error('Prozessliste nicht lesbar.')); return; }
+        resolve(String(out).split('\n').filter(Boolean).map((line) => {
+          const [name, ...rest] = line.trim().split(/\s+/);
+          return { name, path: '', cmd: rest.join(' ') };
+        }));
+      });
+    }
+  });
+}
+
 function createAgentRuntime() {
   usage = createUsage({ file: path.join(app.getPath('userData'), 'usage.json'), log });
   history = createHistory({ file: path.join(app.getPath('userData'), 'history.json'), enabled: () => settings.historyEnabled !== false, log });
@@ -692,6 +755,22 @@ function createAgentRuntime() {
     trash: (p) => shell.trashItem(p),
     home: os.homedir(),
   });
+  aiUsage = createAiUsage({
+    home: os.homedir(),
+    getSecret,
+    fetchJson: fetchProviderJson,
+    getBuddyUsage: () => usage.summary(settings.monthlyLimit),
+    getBuddyHistory: () => history.list(50),
+    isBuddyRunning: () => running.size > 0,
+    listProcesses,
+    isEnabled: () => settings.usageLocal !== false,
+    log,
+  });
+  // Buddy kann die Nutzung auch im Chat beantworten
+  const baseTools = { definitions: tools.definitions, run: tools.run, describe: tools.describe };
+  tools.definitions = [...baseTools.definitions, ...aiUsage.definitions];
+  tools.run = (name, input) => (aiUsage.names.has(name) ? aiUsage.run(name, input) : baseTools.run(name, input));
+  tools.describe = (name, input) => (aiUsage.names.has(name) ? aiUsage.describe(name, input) : baseTools.describe(name, input));
   const router = createRouter({ claude, usage, log });
   agent = createAgent({
     claude,
@@ -1129,7 +1208,7 @@ async function runDiagnostics() {
 
 function setupIpc() {
   ipcMain.on('layout', (_e, next = {}) => {
-    layout = { open: Boolean(next.open), width: Number(next.width) || layout.width, height: Number(next.height) || CLOSED_H };
+    layout = { open: Boolean(next.open), width: Number(next.width) || layout.width, height: Number(next.height) || CLOSED_H, notch: Boolean(next.notch) };
     if (!layout.open) mouseCaptured = false;
     placeWindow();
     applyMouseMode();
@@ -1159,7 +1238,7 @@ function setupIpc() {
   ipcMain.handle('settings:get', () => publicSettings());
 
   ipcMain.handle('settings:set', (_e, patch = {}) => {
-    const allowedKeys = ['name', 'model', 'maxTokens', 'sound', 'autostart', 'accent', 'systemPrompt', 'workspaceId', 'computerUse', 'confirmControl', 'glow', 'notifications', 'media', 'gameMode', 'calendarLead', 'voiceWake', 'speak', 'displayId'];
+    const allowedKeys = ['usageLocal', 'bannerHintDismissed', 'name', 'model', 'maxTokens', 'sound', 'autostart', 'accent', 'systemPrompt', 'workspaceId', 'computerUse', 'confirmControl', 'glow', 'notifications', 'media', 'gameMode', 'calendarLead', 'voiceWake', 'speak', 'displayId'];
     for (const k of allowedKeys) if (k in patch) settings[k] = patch[k];
     // KI-Einstellungen mit Prüfung
     if ('effort' in patch && ['auto', 'low', 'medium', 'high'].includes(patch.effort)) settings.effort = patch.effort;
@@ -1243,6 +1322,30 @@ function setupIpc() {
     const provider = models.PROVIDERS[settings.provider] || models.PROVIDERS.anthropic;
     shell.openExternal(provider.consoleUrl);
     return publicSettings();
+  });
+
+  ipcMain.handle('aiusage:get', (_e, { force } = {}) => aiUsage.collect({ force: Boolean(force) }));
+  ipcMain.handle('aiusage:key', async (_e, { provider, key } = {}) => {
+    const spec = {
+      anthropicAdmin: { prefix: 'sk-ant-admin', hint: 'Ein Anthropic-Admin-Key beginnt mit «sk-ant-admin».' },
+      openaiAdmin: { prefix: 'sk-admin-', hint: 'Ein OpenAI-Admin-Key beginnt mit «sk-admin-».' },
+    }[provider];
+    if (!spec) return { ok: false, error: 'Unbekannter Anbieter.' };
+    const clean = String(key || '').trim();
+    if (!clean) {
+      setSecret(provider, '');
+      return { ok: true, settings: publicSettings() };
+    }
+    if (!clean.startsWith(spec.prefix) || /\s/.test(clean)) return { ok: false, error: spec.hint };
+    if (!safeStorage.isEncryptionAvailable() && process.platform === 'win32') return { ok: false, error: 'Die Windows-Verschlüsselung ist nicht verfügbar.' };
+    setSecret(provider, clean);
+    const report = await aiUsage.collect({ force: true });
+    const entry = report.providers.find((p) => p.id === (provider === 'anthropicAdmin' ? 'claude_api' : 'chatgpt'));
+    if (entry?.status === 'error') {
+      setSecret(provider, '');
+      return { ok: false, error: entry.error };
+    }
+    return { ok: true, settings: publicSettings(), report };
   });
 
   ipcMain.handle('ai:stats', () => ({

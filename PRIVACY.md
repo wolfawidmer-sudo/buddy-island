@@ -16,10 +16,19 @@ Wie Anthropic diese Daten behandelt, steht in der Datenschutzerklärung von Anth
 
 ## Was nur auf deinem PC bleibt
 
-- Dein **API-Key** und dein **Kalender-Link**: mit der Windows-Verschlüsselung (DPAPI) gespeichert.
+- Dein **API-Key**, optionale **Admin-Keys** (Anthropic, OpenAI) und dein **Kalender-Link**: mit der Windows-Verschlüsselung (DPAPI) gespeichert, nie im Protokoll. Jeder Key geht nur an den eigenen Anbieter.
+- **Kostenstatistik** (`usage.json`): nur Zahlen (Tokens, Kosten, Modell, Zeit), keine Inhalte.
+- **Ausführungsverlauf** (`history.json`): kurzer Titel der Aufgabe, Schritte, Modelle und Kosten, keine Antworten. Abschaltbar und löschbar in den Einstellungen.
 - **Chatverlauf**, **Einstellungen** und ein kurzes **Protokoll** für die Fehlersuche (ohne Chat-Inhalte) im Ordner `%APPDATA%\Buddy Island`.
 - **Windows-Mitteilungen**, **«Läuft gerade»** (Musik) und **Termine**: Buddy liest sie nur, um sie im Island zu zeigen. Sie werden nicht dauerhaft gespeichert.
 - **Spielmodus**: Buddy schaut nur, welches Programm im Vordergrund ist und ob Windows «Vollbild» meldet.
+
+## KI-Nutzung
+
+- Die Nutzungs-Ansicht liest auf Wunsch die **Protokolldateien von Claude Code und Codex** auf deinem PC (`.claude\projects`, `.codex\sessions`). Buddy zählt daraus Tokens, Werkzeuge und Fehler und zeigt den ersten Auftrag einer Sitzung als Titel. Die Dateien werden nur gelesen, nie verändert oder verschickt. Abschaltbar unter «Lokale Protokolle lesen».
+- Für «Was läuft gerade?» schaut Buddy kurz in die **Liste der laufenden Programme**, um bekannte KI-Programme zu erkennen. Davon wird nichts gespeichert.
+- Fragst du Buddy im Chat nach deiner Nutzung, geht die Zusammenfassung (inkl. der Sitzungstitel) an Claude, damit er antworten kann.
+- Mit einem Admin-Key fragt Buddy die offiziellen Usage- und Cost-Schnittstellen von Anthropic bzw. OpenAI ab.
 
 ## Sprache
 
@@ -33,7 +42,7 @@ Buddy lädt deinen privaten iCal-Link direkt bei deinem Kalenderanbieter (z. B. 
 
 ## Updates
 
-Buddy fragt bei GitHub nach neuen Versionen, sobald das Repository öffentlich ist. Dabei wird nur die Versionsdatei abgerufen.
+Buddy fragt bei GitHub nach neuen Versionen und lädt sie über HTTPS. Installiert wird nur, wenn die Signatur und die Prüfsumme stimmen. Dabei werden keine Daten über dich verschickt.
 
 ## Löschen
 

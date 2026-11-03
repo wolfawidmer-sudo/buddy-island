@@ -10,7 +10,8 @@ const fs = require('fs');
 
 // Öffentliche Schlüssel (mehrere möglich, damit ein Schlüsselwechsel ohne Bruch geht)
 const PUBLIC_KEYS = {
-  '72db1fd0b545': '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAikuWbB7YhjNdIKn1fw6O/kLyCQU5wlIDXSW+uCG8b3M=\n-----END PUBLIC KEY-----\n',
+  // Öffentlicher Schlüssel und seine ID: kein Geheimnis
+  '72db1fd0b545': '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAikuWbB7YhjNdIKn1fw6O/kLyCQU5wlIDXSW+uCG8b3M=\n-----END PUBLIC KEY-----\n', // pragma: allowlist secret
 };
 
 const SIGNED_FIELDS = ['app', 'version', 'file', 'sha512', 'size', 'minWindowsBuild', 'arch', 'minUpdateFrom', 'created', 'keyId'];

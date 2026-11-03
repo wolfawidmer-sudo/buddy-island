@@ -70,6 +70,7 @@ const TOOL_RISK = {
   list_files: ['low', 'read'],
   find_duplicates: ['low', 'read'],
   system_info: ['low', 'read'],
+  ai_usage: ['low', 'read'],
   update_plan: ['low', 'read'],
   escalate: ['low', 'read'],
   // Öffnen und Harmloses
