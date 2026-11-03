@@ -133,6 +133,9 @@
     permMedium: $('permMedium'),
     permHigh: $('permHigh'),
     historyToggle: $('historyToggle'),
+    memoryToggle: $('memoryToggle'),
+    memoryList: $('memoryList'),
+    memoryClear: $('memoryClear'),
     historyList: $('historyList'),
     historyClear: $('historyClear'),
     rollbackBtn: $('rollbackBtn'),
@@ -1885,6 +1888,8 @@
     el.permMedium.value = s.permissions?.medium || 'ask';
     el.permHigh.value = s.permissions?.high || 'ask';
     el.historyToggle.checked = s.historyEnabled !== false;
+    el.memoryToggle.checked = s.memoryEnabled !== false;
+    loadMemory();
     el.rollbackBtn.hidden = !s.rollbackVersion;
     if (s.rollbackVersion) el.rollbackBtn.textContent = t('Vorherige Version {v} wiederherstellen', { v: s.rollbackVersion });
     renderStats();
@@ -2390,6 +2395,40 @@
   el.permMedium.addEventListener('change', () => save({ permissions: { medium: el.permMedium.value } }));
   el.permHigh.addEventListener('change', () => save({ permissions: { high: el.permHigh.value } }));
   el.historyToggle.addEventListener('change', () => save({ historyEnabled: el.historyToggle.checked }));
+
+  // ---------- Gedächtnis ----------
+  function renderMemory(list) {
+    el.memoryList.textContent = '';
+    if (!list.length) {
+      el.memoryList.appendChild(node('div', 'memory-empty', t('Noch nichts gemerkt.')));
+    }
+    for (const m of list) {
+      const row = node('div', 'memory-item');
+      const del = node('button', 'icon-btn small', '×');
+      del.type = 'button';
+      del.title = t('Vergessen');
+      del.setAttribute('aria-label', t('Vergessen'));
+      del.addEventListener('click', async () => renderMemory(await api.deleteMemory(m.id)));
+      row.append(node('span', '', m.text), del);
+      el.memoryList.appendChild(row);
+    }
+    el.memoryClear.hidden = !list.length;
+  }
+  async function loadMemory() {
+    try { renderMemory(await api.listMemory()); } catch { /* egal */ }
+  }
+  el.memoryToggle.addEventListener('change', () => save({ memoryEnabled: el.memoryToggle.checked }));
+  el.memoryClear.addEventListener('click', async () => {
+    if (el.memoryClear.dataset.confirm !== '1') {
+      el.memoryClear.dataset.confirm = '1';
+      el.memoryClear.textContent = t('Wirklich alles vergessen?');
+      setTimeout(() => { el.memoryClear.dataset.confirm = ''; el.memoryClear.textContent = t('Alles vergessen'); }, 3000);
+      return;
+    }
+    el.memoryClear.dataset.confirm = '';
+    el.memoryClear.textContent = t('Alles vergessen');
+    renderMemory(await api.clearMemory());
+  });
   el.historyClear.addEventListener('click', () => confirmTwice(el.historyClear, t('Wirklich löschen?'), async () => {
     await api.clearHistory();
     loadAiStats();

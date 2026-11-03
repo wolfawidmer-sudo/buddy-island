@@ -192,7 +192,7 @@ function planText(plan) {
 function createAgent(deps) {
   const {
     claude, router, usage, history, getKey, getSettings, getTools, getComputer, getFiles, isComputerAvailable,
-    getAvailableModels, getGame, systemPrompt, askControl, askPermission, onControl, onAuthError, log = () => {},
+    getAvailableModels, getGame, systemPrompt, askControl, askPermission, onControl, onAuthError, getMemoryContext, log = () => {},
     getProvider = () => 'anthropic',
   } = deps;
   // Aktiver Anbieter: Client über die Registry, in Tests direkt `claude`
@@ -671,7 +671,8 @@ function createAgent(deps) {
         last.content = typeof last.content === 'string' ? [{ type: 'text', text: last.content }, hint] : [...last.content, hint];
       }
 
-      const system = systemPrompt(withComputer, { tools: toolsAllowed, provider: providerId, model: decision.model }) + (toolsAllowed ? AGENT_RULES_TEXT() : '');
+      // Gedächtnis: nur Einträge, die zu dieser Anfrage passen
+      const system = systemPrompt(withComputer, { tools: toolsAllowed, provider: providerId, model: decision.model }) + (toolsAllowed ? AGENT_RULES_TEXT() : '') + (getMemoryContext?.(userText) || '');
       const baseTools = () => {
         if (!toolsAllowed) return [];
         const list = [...tools.definitions, ...(files?.definitions || []), ...AGENT_TOOLS];
@@ -841,7 +842,16 @@ function createAgent(deps) {
         conversation.push({ role: 'assistant', content: result.content });
         const ctx = { computerFailed: false, escalated: false, stuck: false };
         const results = [];
+        // Derselbe Aufruf zweimal in einer Antwort (z. B. zwei gleiche Timer) wird nur einmal
+        // ausgeführt. Bildschirm-Aktionen sind ausgenommen (zwei gleiche Klicks können gewollt sein).
+        const seenCalls = new Set();
         for (const c of calls) {
+          const key = c.toolset_name ? null : `${c.name}:${JSON.stringify(c.input || {})}`;
+          if (key && seenCalls.has(key)) {
+            results.push({ type: 'tool_result', tool_use_id: c.id, is_error: true, content: 'Not executed: identical call already executed in this step.' });
+            continue;
+          }
+          if (key) seenCalls.add(key);
           results.push(await execute(c, ctx));
           if (signal.aborted) throw abortError();
         }

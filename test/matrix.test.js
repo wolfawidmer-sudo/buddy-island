@@ -39,7 +39,7 @@ function agentFor(provider, client, settings = {}, extra = {}) {
     getKey: () => extra.key || GOOD_KEY[provider], getSettings: () => ({ autoModel: true, effort: 'auto', confirmControl: false, permissions: {}, ...settings }),
     getTools: () => ({
       definitions: [{ name: 'get_number', description: 'Returns a number for a key.', input_schema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] } }],
-      run: async (name, input) => ({ text: input.key === 'b' ? '22' : '11' }), describe: () => 'Zahl',
+      run: async (name, input) => { toolRuns.push(input.key); return { text: input.key === 'b' ? '22' : '11' }; }, describe: () => 'Zahl',
     }),
     getComputer: () => ({ describe: (n) => n, run: async () => [], warmUp() {}, stop() {} }), getFiles: () => null,
     isComputerAvailable: () => false, getAvailableModels: async (pid) => (await client.listModels(GOOD_KEY[pid] || 'x').catch(() => [])),
@@ -47,10 +47,12 @@ function agentFor(provider, client, settings = {}, extra = {}) {
     systemPrompt: () => 'Du bist Buddy.',
     askControl: async () => true, askPermission: async () => true,
     onAuthError: (pid) => authErrors.push(pid),
+    getMemoryContext: extra.memory ? (text) => extra.memory.context(text) : undefined,
   });
   const run = (messages) => agent.run({ id: `r${Math.random()}`, messages: typeof messages === 'string' ? [{ role: 'user', content: messages }] : messages, send: (c, p) => events.push({ c, p }), signal: new AbortController().signal });
   return { events, authErrors, run };
 }
+const toolRuns = [];
 const textOf = (events) => events.filter((e) => e.c === 'chat:delta').map((e) => e.p.text).join('');
 const errorOf = (events) => events.find((e) => e.c === 'chat:error')?.p;
 
@@ -236,6 +238,34 @@ const errorOf = (events) => events.find((e) => e.c === 'chat:error')?.p;
       await a.run(history);
       assert.match(textOf(a.events), /APFEL/, `${provider}: Verlauf nach Wechsel`);
     }
+  }
+
+  // Gedächtnis im Agenten: nur passende Einträge gehen an die KI
+  {
+    const { createMemory } = require('../src/memory');
+    const os = require('os'); const fs = require('fs'); const path = require('path');
+    const memFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'bm-')), 'm.json');
+    const mem = createMemory({ file: memFile });
+    mem.setUserText('Merk dir, dass ich Tee mag'); mem.add('Mag Tee lieber als Kaffee');
+    const { client, mock } = registry('gemini');
+    const a = agentFor('gemini', client, {}, { memory: mem });
+    await a.run('Soll ich Tee oder Kaffee trinken?');
+    const sys = mock.state.requests.filter((q) => q.body?.systemInstruction).map((q) => q.body.systemInstruction.parts[0].text);
+    assert.ok(sys.some((x) => /Mag Tee lieber als Kaffee/.test(x)), 'passender Eintrag im System-Prompt');
+    const m2 = registry('gemini');
+    const b = agentFor('gemini', m2.client, {}, { memory: mem });
+    await b.run('Stell einen Timer auf 5 Minuten');
+    assert.ok(m2.mock.state.requests.every((q) => !JSON.stringify(q.body || {}).includes('Mag Tee')), 'unpassender Eintrag bleibt draussen');
+  }
+
+  // Zwei identische Aufrufe in einer Antwort: nur einmal ausgeführt, Fortsetzung bleibt gültig
+  for (const provider of ['anthropic', 'openai', 'gemini']) {
+    toolRuns.length = 0;
+    const { client } = registry(provider);
+    const a = agentFor(provider, client);
+    await a.run('Call get_number identical twice with key "a".');
+    assert.ok(!errorOf(a.events), `${provider}: doppelter Aufruf ohne Fehler: ${errorOf(a.events)?.message}`);
+    assert.deepStrictEqual(toolRuns, ['a'], `${provider}: nur einmal ausgeführt`);
   }
 
   // ---------- Modellverfügbarkeit ----------

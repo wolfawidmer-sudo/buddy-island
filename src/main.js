@@ -11,6 +11,7 @@ const models = require('./models');
 const permissions = require('./permissions');
 const { createUsage } = require('./usage');
 const { createHistory } = require('./history');
+const { createMemory } = require('./memory');
 const { createFiles } = require('./files');
 const { createRouter } = require('./router');
 const { createAgent } = require('./agent');
@@ -55,6 +56,7 @@ const DEFAULTS = {
   monthlyLimit: 5, // US-Dollar pro Monat, 0 = kein Limit
   permissions: { medium: 'ask', high: 'ask' },
   historyEnabled: true,
+  memoryEnabled: true,
   bannerHintDismissed: false,
   usageLocal: true, // lokale Nutzungsdaten von Claude Code und Codex lesen
   maxTokens: 4096,
@@ -122,6 +124,7 @@ let notifyStatus = process.platform === 'win32' ? 'Starting' : 'Unsupported';
 let settings = { ...DEFAULTS };
 let usage = null;
 let history = null;
+let memory = null;
 let files = null;
 let agent = null;
 let aiUsage = null;
@@ -1166,6 +1169,7 @@ function listProcesses() {
 function createAgentRuntime() {
   usage = createUsage({ file: path.join(app.getPath('userData'), 'usage.json'), log });
   history = createHistory({ file: path.join(app.getPath('userData'), 'history.json'), enabled: () => settings.historyEnabled !== false, log });
+  memory = createMemory({ file: path.join(app.getPath('userData'), 'memory.json'), enabled: () => settings.memoryEnabled !== false, log });
   files = createFiles({
     roots: Object.fromEntries(['desktop', 'documents', 'downloads', 'pictures', 'music', 'videos'].map((k) => {
       try { return [k, app.getPath(k)]; } catch { return [k, null]; }
@@ -1191,6 +1195,11 @@ function createAgentRuntime() {
   tools.definitions = [...baseTools.definitions, ...aiUsage.definitions];
   tools.run = (name, input) => (aiUsage.names.has(name) ? aiUsage.run(name, input) : baseTools.run(name, input));
   tools.describe = (name, input) => (aiUsage.names.has(name) ? aiUsage.describe(name, input) : baseTools.describe(name, input));
+  // Gedächtnis-Werkzeuge (nur wenn eingeschaltet)
+  const withUsage = { definitions: tools.definitions, run: tools.run, describe: tools.describe };
+  Object.defineProperty(tools, 'definitions', { configurable: true, get: () => (settings.memoryEnabled !== false ? [...withUsage.definitions, ...memory.definitions] : withUsage.definitions) });
+  tools.run = (name, input) => (memory.names.has(name) ? memory.run(name, input) : withUsage.run(name, input));
+  tools.describe = (name, input) => (memory.names.has(name) ? memory.describe(name, input) : withUsage.describe(name, input));
   const router = createRouter({ claude, usage, log });
   agent = createAgent({
     claude,
@@ -1207,6 +1216,7 @@ function createAgentRuntime() {
     getFiles: () => files,
     isComputerAvailable: computerAvailable,
     getAvailableModels: (pid, opts) => availableModels(pid, opts),
+    getMemoryContext: (text) => (memory ? memory.context(text) : ''),
     getGame: () => game,
     systemPrompt,
     askControl: askToControl,
@@ -1685,6 +1695,7 @@ function setupIpc() {
     if ('autoModel' in patch) settings.autoModel = Boolean(patch.autoModel);
     if ('showRouting' in patch) settings.showRouting = Boolean(patch.showRouting);
     if ('historyEnabled' in patch) settings.historyEnabled = Boolean(patch.historyEnabled);
+    if ('memoryEnabled' in patch) settings.memoryEnabled = Boolean(patch.memoryEnabled);
     if ('visualizer' in patch) {
       settings.visualizer = Boolean(patch.visualizer);
       if (!settings.visualizer) audioMeter?.stop();
@@ -1936,6 +1947,11 @@ function setupIpc() {
     }
   });
 
+  // Gedächtnis: anzeigen, einzeln löschen, alles vergessen
+  ipcMain.handle('memory:list', () => memory?.list() || []);
+  ipcMain.handle('memory:delete', (_e, id) => { memory?.remove(String(id || '')); return memory?.list() || []; });
+  ipcMain.handle('memory:clear', () => { memory?.clear(); return []; });
+
   ipcMain.handle('models:list', async () => {
     const pid = currentProvider();
     const fallback = pid === 'anthropic' ? FALLBACK_MODELS : models.CATALOG.filter((m) => m.provider === pid).map((m) => ({ id: m.id, name: m.name }));
@@ -1952,6 +1968,8 @@ function setupIpc() {
 
   ipcMain.on('chat:send', (event, { id, messages, meta } = {}) => {
     if (currentProvider() === 'huggingface' && Date.now() - (settings.lastLocalUse || 0) > 3600 * 1000) { settings.lastLocalUse = Date.now(); saveSettings(); }
+    const lastUser = Array.isArray(messages) ? [...messages].reverse().find((m) => m?.role === 'user' && typeof m.content === 'string') : null;
+    memory?.setUserText(lastUser?.content || '');
     const sender = event.sender;
     const send = (channel, payload) => { if (!sender.isDestroyed()) sender.send(channel, payload); };
     if (!id || !Array.isArray(messages) || running.has(id)) return;

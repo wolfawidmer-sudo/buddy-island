@@ -33,6 +33,7 @@ function brain(conv, { tools, format }) {
   }
   if (last.results.length) return { text: `Results: ${last.results.map((r) => r.text).join(', ')}` };
   if (tools && /get_number/.test(last.text)) {
+    if (/identical twice/.test(last.text)) return { calls: [{ name: 'get_number', args: { key: 'a' } }, { name: 'get_number', args: { key: 'a' } }] };
     if (/twice in parallel/.test(last.text)) return { calls: [{ name: 'get_number', args: { key: 'a' } }, { name: 'get_number', args: { key: 'b' } }] };
     return { calls: [{ name: 'get_number', args: { key: 'a' } }] };
   }
