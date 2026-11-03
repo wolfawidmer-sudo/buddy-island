@@ -7,6 +7,14 @@ const fs = require('fs');
 const os = require('os');
 const { createClient, FALLBACK_MODELS } = require('./claude');
 const { createTools, formatDuration } = require('./tools');
+const models = require('./models');
+const permissions = require('./permissions');
+const { createUsage } = require('./usage');
+const { createHistory } = require('./history');
+const { createFiles } = require('./files');
+const { createRouter } = require('./router');
+const { createAgent } = require('./agent');
+const updateSecurity = require('./update-security');
 const { createComputer, supportsCaptureExclusion } = require('./computer');
 const { createSystemWatcher } = require('./notifications');
 const { createCalendar } = require('./calendar');
@@ -26,13 +34,19 @@ const OPEN_W = 560;
 const OPEN_H = 660;
 const CLOSED_H = 40;
 const TOP_GAP = 6; // wie die Dynamic Island: knapp unter dem oberen Rand
-const MAX_TOOL_ROUNDS = 8;
-const MAX_COMPUTER_ROUNDS = 60;
+const SETTINGS_VERSION = 3;
+const MODELS_CACHE_MS = 6 * 3600 * 1000;
 
 const DEFAULTS = {
   name: 'Buddy',
-  model: 'claude-sonnet-5-5',
-  effort: 'low',
+  provider: 'anthropic',
+  model: 'claude-sonnet-5-5', // manuelle Wahl und Rückfall
+  autoModel: true, // Router wählt Modell und Denkaufwand
+  effort: 'auto', // auto | low | medium | high
+  showRouting: true, // Modell, Aufwand, Grund und Kosten im Chat zeigen
+  monthlyLimit: 5, // US-Dollar pro Monat, 0 = kein Limit
+  permissions: { medium: 'ask', high: 'ask' },
+  historyEnabled: true,
   maxTokens: 4096,
   hotkey: 'Control+Shift+Space',
   shortcuts: { newChat: '', settings: '', stop: '', voice: '' },
@@ -60,7 +74,9 @@ const DEFAULTS = {
   keyEncrypted: null,
   keyPlain: null,
   keyHint: null,
+  keyStatus: null, // null | 'ok' | 'invalid'
   shortcutsCreated: false,
+  settingsVersion: SETTINGS_VERSION,
 };
 
 function prettyKeys(acc) {
@@ -90,6 +106,12 @@ let game = { active: false, name: '' }; // Spielmodus
 let mediaOk = null;
 let notifyStatus = process.platform === 'win32' ? 'Starting' : 'Unsupported';
 let settings = { ...DEFAULTS };
+let usage = null;
+let history = null;
+let files = null;
+let agent = null;
+let modelCache = { at: 0, list: null };
+let updateHealth = null; // Infos für Rollback und Anzeige
 let layout = { open: false, width: 148, height: 40 };
 let mouseCaptured = false;
 let agentInput = false; // Buddy bewegt gerade Maus/Tastatur
@@ -97,18 +119,39 @@ let capturing = false; // Island ist für ein Bildschirmfoto kurz versteckt
 let controlling = 0; // Anzahl laufender Steuerungs-Aufgaben
 const running = new Map(); // chatId -> AbortController
 const confirms = new Map(); // chatId -> resolve(bool)
+const permissionAsks = new Map(); // `${chatId}:${reqId}` -> resolve(bool)
 const claude = createClient((url, init) => net.fetch(url, init));
 const captureExclusion = supportsCaptureExclusion();
+const startedAt = Date.now();
 
 // ---------- Einstellungen ----------
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 
 function loadSettings() {
+  let saved = null;
   try {
-    settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) };
+    saved = JSON.parse(fs.readFileSync(settingsFile(), 'utf8'));
   } catch {
-    settings = { ...DEFAULTS };
+    saved = null;
+  }
+  settings = { ...DEFAULTS, ...(saved || {}) };
+  settings.permissions = permissions.cleanPolicy(settings.permissions);
+  // Ältere Versionen: neu gibt es die automatische Modellwahl
+  if (saved && (Number(saved.settingsVersion) || 0) < SETTINGS_VERSION) {
+    settings.autoModel = true;
+    settings.effort = 'auto';
+    settings.settingsVersion = SETTINGS_VERSION;
+    migrateKey();
+    saveSettings();
+  }
+}
+
+// Ein unverschlüsselt gespeicherter Key wird verschlüsselt, sobald Windows es kann.
+function migrateKey() {
+  if (settings.keyPlain && safeStorage.isEncryptionAvailable()) {
+    settings.keyEncrypted = safeStorage.encryptString(settings.keyPlain).toString('base64');
+    settings.keyPlain = null;
   }
 }
 
@@ -117,12 +160,21 @@ function saveSettings() {
   fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2));
 }
 
+// Keys und Tokens nie ins Protokoll schreiben
+function redact(message) {
+  return String(message)
+    .replace(/sk-ant-[\w-]+/g, 'sk-ant-…')
+    .replace(/\bsk-[A-Za-z0-9_-]{16,}/g, 'sk-…')
+    .replace(/(bearer|x-api-key|authorization)[\s:=]+[^\s,;]+/gi, '$1 …')
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[privater Schlüssel entfernt]');
+}
+
 // Kleines Protokoll für die Fehlersuche (max. ~1 MB, keine Inhalte von Chats)
 function log(message) {
   try {
     const file = path.join(app.getPath('userData'), 'buddy.log');
     try { if (fs.statSync(file).size > 1024 * 1024) fs.renameSync(file, file + '.1'); } catch { /* neu */ }
-    fs.appendFileSync(file, `${new Date().toISOString()} ${String(message).replace(/sk-ant-[\w-]+/g, 'sk-ant-…')}\n`);
+    fs.appendFileSync(file, `${new Date().toISOString()} ${redact(message)}\n`);
   } catch { /* egal */ }
 }
 
@@ -163,6 +215,8 @@ function publicSettings() {
   const { keyEncrypted, keyPlain, calendarEncrypted, calendarPlain, ...rest } = settings;
   return {
     ...rest,
+    providers: Object.values(models.PROVIDERS).map((p) => ({ id: p.id, name: p.name, consoleUrl: p.consoleUrl })),
+    keyProtected: Boolean(keyEncrypted),
     hasKey: Boolean(keyEncrypted || keyPlain),
     hasCalendar: Boolean(calendarEncrypted || calendarPlain),
     calendarStatus: calendar?.status() || null,
@@ -175,6 +229,9 @@ function publicSettings() {
     version: app.getVersion(),
     updateState,
     canUpdate: Boolean(updater),
+    rollbackVersion: updater?.rollbackTarget?.() || null,
+    updateHealth,
+    signingKeys: Object.keys(updateSecurity.PUBLIC_KEYS),
   };
 }
 
@@ -189,22 +246,54 @@ function getApiKey() {
   return settings.keyPlain || null;
 }
 
+// Speichert den Key mit DPAPI (Windows-Verschlüsselung über Electrons safeStorage).
+// Unter Windows nie im Klartext: Gibt es keine Verschlüsselung, wird nichts gespeichert.
 function setApiKey(key) {
   const clean = (key || '').trim();
+  modelCache = { at: 0, list: null };
   if (!clean) {
     settings.keyEncrypted = null;
     settings.keyPlain = null;
     settings.keyHint = null;
+    settings.keyStatus = null;
   } else if (safeStorage.isEncryptionAvailable()) {
     settings.keyEncrypted = safeStorage.encryptString(clean).toString('base64');
     settings.keyPlain = null;
     settings.keyHint = clean.slice(-4);
+    settings.keyStatus = 'ok';
+  } else if (process.platform === 'win32') {
+    throw new Error('Die Windows-Verschlüsselung ist gerade nicht verfügbar. Der Key wurde nicht gespeichert.');
   } else {
+    // Nur für die Entwicklung unter Linux ohne Schlüsselbund
     settings.keyEncrypted = null;
     settings.keyPlain = clean;
     settings.keyHint = clean.slice(-4);
+    settings.keyStatus = 'ok';
   }
   saveSettings();
+}
+
+// Verfügbare Modelle des Keys (zwischengespeichert, spart Aufrufe)
+async function availableModels() {
+  if (modelCache.list && Date.now() - modelCache.at < MODELS_CACHE_MS) return modelCache.list;
+  const key = getApiKey();
+  if (!key) return [];
+  try {
+    const list = await claude.listModels(key, settings.workspaceId);
+    modelCache = { at: Date.now(), list };
+    return list;
+  } catch (err) {
+    if (err.status === 401) markKeyInvalid();
+    return modelCache.list || [];
+  }
+}
+
+function markKeyInvalid() {
+  if (settings.keyStatus === 'invalid') return;
+  settings.keyStatus = 'invalid';
+  saveSettings();
+  win?.webContents.send('key:status', 'invalid');
+  log('API-Key wurde von Claude abgelehnt (401)');
 }
 
 function systemPrompt(withComputer) {
@@ -214,7 +303,7 @@ function systemPrompt(withComputer) {
   let text = `${settings.systemPrompt || ''}
 
 Jetzt ist ${now}.
-Mit deinen Werkzeugen kannst du Timer stellen, Apps und Websites öffnen, Musik/Lautstärke steuern, sehen was gerade läuft, Termine im Kalender nachschauen und die letzten Windows-Mitteilungen lesen (nur wenn der Nutzer danach fragt). Nutze sie, wenn der Nutzer das will, und bestätige danach kurz in einem Satz, was du gemacht hast.`;
+Mit deinen Werkzeugen kannst du Timer stellen, Apps, Websites und Windows-Einstellungsseiten öffnen, Musik/Lautstärke steuern, sehen was gerade läuft, Termine im Kalender nachschauen, Systeminfos lesen, Dateien in den Benutzerordnern auflisten, Duplikate finden, ordnen und in den Papierkorb legen und die letzten Windows-Mitteilungen lesen (nur wenn der Nutzer danach fragt). Nutze sie, wenn der Nutzer das will, und bestätige danach kurz, was du gemacht hast.`;
 
   if (withComputer) {
     const size = computer.screenSize();
@@ -294,6 +383,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   win.once('ready-to-show', () => win.showInactive());
+  win.webContents.on('render-process-gone', (_e, details) => onRenderCrash(details));
   win.on('blur', () => { if (!capturing) win.webContents.send('island:blur'); });
 
   // Links aus Antworten im normalen Browser öffnen, nie im Island.
@@ -531,160 +621,98 @@ function createTray() {
 
 // ---------- Aufgaben mit Claude ----------
 
-const abortError = () => Object.assign(new Error('abgebrochen'), { name: 'AbortError' });
-
 function askToControl(id, send) {
-  if (!settings.confirmControl) return Promise.resolve(true);
   return new Promise((resolve) => {
     confirms.set(id, resolve);
     send('agent:confirm', { id });
   });
 }
 
-async function runChat(id, messages, send) {
-  const key = getApiKey();
-  if (!key) {
-    send('chat:error', { id, message: 'Noch kein API-Key verbunden. Öffne die Einstellungen.' });
-    return;
+// Freigabe für Aktionen mit mittlerem oder hohem Risiko
+function askPermission(id, request, send) {
+  const reqId = Math.random().toString(36).slice(2, 10);
+  return new Promise((resolve) => {
+    permissionAsks.set(`${id}:${reqId}`, resolve);
+    send('agent:permission', { id, reqId, ...request });
+  });
+}
+
+function resolvePermissions(id, value) {
+  for (const [key, resolve] of permissionAsks) {
+    if (key.startsWith(`${id}:`)) {
+      permissionAsks.delete(key);
+      resolve(value);
+    }
   }
+}
 
-  const controller = new AbortController();
-  running.set(id, controller);
-  const conversation = [...messages];
-  let withComputer = Boolean(settings.computerUse && computer && (process.platform === 'win32' || process.env.BUDDY_FAKE_INPUT));
-  const system = systemPrompt(withComputer);
-  let wroteText = false;
-  let allowed = null; // null = noch nicht gefragt
-  let actions = 0;
-  let inControl = false;
-
-  const startControl = () => {
-    if (inControl) return;
-    inControl = true;
+// Fenster-Effekte, solange Buddy Maus und Tastatur bedient
+function setControlling(active) {
+  if (active) {
     controlling += 1;
     setCaptureHidden(true);
     win?.setFocusable(false);
     win?.blur();
     setGlow('control');
-    send('agent:control', { id, active: true });
-  };
-  const endControl = () => {
-    if (!inControl) return;
-    inControl = false;
+  } else {
     controlling = Math.max(0, controlling - 1);
     if (!controlling) {
       setCaptureHidden(false);
       win?.setFocusable(true);
+      setGlow(running.size ? 'think' : 'off');
     }
-    send('agent:control', { id, active: false, actions });
-  };
+  }
+}
 
+function computerAvailable() {
+  return Boolean(settings.computerUse && computer && (process.platform === 'win32' || process.env.BUDDY_FAKE_INPUT));
+}
+
+async function runChat(id, messages, meta, send) {
+  const controller = new AbortController();
+  running.set(id, controller);
   setGlow('think');
   try {
-    for (let round = 0; ; round += 1) {
-      const lastRound = round >= (allowed ? MAX_COMPUTER_ROUNDS : MAX_TOOL_ROUNDS);
-      let firstInRound = true;
-      const toolList = lastRound ? [] : [...tools.definitions];
-      if (withComputer && !lastRound) toolList.push({ type: 'computer_toolset_20260801' });
-
-      const result = await claude.streamMessage({
-        apiKey: key,
-        workspaceId: settings.workspaceId,
-        model: settings.model,
-        system,
-        messages: conversation,
-        tools: toolList,
-        maxTokens: Number(settings.maxTokens) || 4096,
-        effort: settings.effort,
-        signal: controller.signal,
-        onText: (text) => {
-          const prefix = firstInRound && wroteText ? '\n\n' : '';
-          firstInRound = false;
-          wroteText = true;
-          send('chat:delta', { id, text: prefix + text });
-        },
-      });
-      if (result.droppedComputer) withComputer = false;
-
-      const calls = result.content.filter((b) => b.type === 'tool_use');
-      if (result.stopReason !== 'tool_use' || !calls.length) {
-        endControl();
-        send('chat:done', { id, stopReason: result.stopReason, usage: result.usage });
-        return;
-      }
-
-      // Antwort unverändert (inkl. Denk-Blöcke mit Signatur) zurückgeben
-      conversation.push({ role: 'assistant', content: result.content });
-      const results = [];
-      let computerFailed = false;
-
-      for (const call of calls) {
-        if (call.toolset_name === 'computer') {
-          const base = { type: 'tool_result', tool_use_id: call.id, toolset_name: 'computer' };
-          if (computerFailed) {
-            results.push({ ...base, is_error: true, content: 'Not executed: an earlier computer action in this turn failed.' });
-            continue;
-          }
-          if (game.active) {
-            computerFailed = true;
-            results.push({ ...base, is_error: true, content: `Gerade läuft ein Spiel (${game.name}). Im Spielmodus steuert Buddy den PC nicht. Sag dem Nutzer, dass du das nach dem Spiel machen kannst.` });
-            continue;
-          }
-          if (allowed === null) {
-            send('agent:action', { id, label: 'fragt um Erlaubnis' });
-            allowed = await askToControl(id, send);
-            if (controller.signal.aborted) throw abortError();
-            if (allowed) computer.warmUp();
-          }
-          if (!allowed) {
-            computerFailed = true;
-            results.push({ ...base, is_error: true, content: 'Der Nutzer hat die PC-Steuerung für diese Aufgabe abgelehnt. Mach ohne Steuerung weiter oder erkläre, wie er es selbst tun kann.' });
-            continue;
-          }
-          startControl();
-          send('agent:action', { id, label: computer.describe(call.name, call.input) });
-          try {
-            const content = await computer.run(call.name, call.input, controller.signal);
-            actions += 1;
-            results.push({ ...base, content });
-          } catch (err) {
-            if (err?.name === 'AbortError') throw err;
-            computerFailed = true;
-            results.push({ ...base, is_error: true, content: err.message || String(err) });
-          }
-          if (controller.signal.aborted) throw abortError();
-          continue;
-        }
-
-        let output;
-        try {
-          output = await tools.run(call.name, call.input);
-        } catch (err) {
-          output = { error: true, text: err.message || String(err) };
-        }
-        send('chat:tool', { id, name: call.name, label: tools.describe(call.name, call.input), error: Boolean(output.error) });
-        results.push({
-          type: 'tool_result',
-          tool_use_id: call.id,
-          content: output.text,
-          ...(output.error ? { is_error: true } : {}),
-        });
-      }
-      conversation.push({ role: 'user', content: results });
-    }
-  } catch (err) {
-    endControl();
-    if (err?.name === 'AbortError') send('chat:done', { id, stopReason: 'aborted' });
-    else {
-      log(`Chat-Fehler: ${err.status || ''} ${err.raw || err.message || err}`);
-      send('chat:error', { id, message: err.message || String(err) });
-    }
+    await agent.run({ id, messages, meta, send, signal: controller.signal });
   } finally {
-    endControl();
     running.delete(id);
     confirms.delete(id);
-    if (!running.size) setGlow('off');
+    resolvePermissions(id, false);
+    if (!running.size && !controlling) setGlow('off');
   }
+}
+
+function createAgentRuntime() {
+  usage = createUsage({ file: path.join(app.getPath('userData'), 'usage.json'), log });
+  history = createHistory({ file: path.join(app.getPath('userData'), 'history.json'), enabled: () => settings.historyEnabled !== false, log });
+  files = createFiles({
+    roots: Object.fromEntries(['desktop', 'documents', 'downloads', 'pictures', 'music', 'videos'].map((k) => {
+      try { return [k, app.getPath(k)]; } catch { return [k, null]; }
+    })),
+    trash: (p) => shell.trashItem(p),
+    home: os.homedir(),
+  });
+  const router = createRouter({ claude, usage, log });
+  agent = createAgent({
+    claude,
+    router,
+    usage,
+    history,
+    log,
+    getKey: getApiKey,
+    getSettings: () => settings,
+    getTools: () => tools,
+    getComputer: () => computer,
+    getFiles: () => files,
+    isComputerAvailable: computerAvailable,
+    getAvailableModels: availableModels,
+    getGame: () => game,
+    systemPrompt,
+    askControl: askToControl,
+    askPermission,
+    onControl: setControlling,
+    onAuthError: markKeyInvalid,
+  });
 }
 
 // ---------- Hintergrund-Dienste ----------
@@ -732,6 +760,86 @@ function startListening() {
   voice.listen();
 }
 
+// ---------- Updates (electron-updater + Signaturprüfung + Rollback) ----------
+
+const PUBLISH = (() => {
+  try { return require('../package.json').build.publish; } catch { return { owner: 'wolfawidmer-sudo', repo: 'buddy-island' }; }
+})();
+const releaseUrl = (version, file) => `https://github.com/${PUBLISH.owner}/${PUBLISH.repo}/releases/download/v${version}/${encodeURIComponent(file)}`;
+const updateStateFile = () => path.join(app.getPath('userData'), 'update-state.json');
+
+function readUpdateFile() {
+  try {
+    const data = JSON.parse(fs.readFileSync(updateStateFile(), 'utf8'));
+    return data && typeof data === 'object' ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeUpdateFile(data) {
+  try {
+    fs.writeFileSync(updateStateFile(), JSON.stringify(data, null, 2));
+  } catch (err) {
+    log(`Update-Status nicht gespeichert: ${err.message}`);
+  }
+}
+
+// HTTPS-Abruf nur von GitHub, mit Zeit- und Grössenlimit
+async function fetchFromGitHub(url, { maxBytes, timeoutMs = 30000 } = {}) {
+  if (!updateSecurity.isAllowedUrl(url)) throw new Error('Unsichere Update-Adresse.');
+  const local = new AbortController();
+  const timer = setTimeout(() => local.abort(), timeoutMs);
+  try {
+    const res = await net.fetch(url, { signal: local.signal, redirect: 'follow' });
+    if (res.url && !updateSecurity.isAllowedUrl(res.url)) throw new Error('Update-Download wurde auf eine fremde Adresse umgeleitet.');
+    if (res.status === 404) throw Object.assign(new Error('nicht gefunden'), { notFound: true });
+    if (!res.ok) throw new Error(`GitHub antwortet mit Fehler ${res.status}.`);
+    const length = Number(res.headers.get('content-length') || 0);
+    if (maxBytes && length > maxBytes) throw new Error('Datei ist unerwartet gross.');
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchManifest(version) {
+  let res;
+  try {
+    res = await fetchFromGitHub(releaseUrl(version, updateSecurity.MANIFEST_NAME), { maxBytes: 64 * 1024 });
+  } catch (err) {
+    if (err.notFound) throw new Error(`Version ${version} ist nicht signiert und wird aus Sicherheitsgründen nicht installiert.`);
+    throw err;
+  }
+  const text = await res.text();
+  if (text.length > 64 * 1024) throw new Error('Signaturdatei ist zu gross.');
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('Signaturdatei ist unlesbar.');
+  }
+}
+
+async function downloadVerified(url, dest, maxBytes = 400 * 1024 * 1024) {
+  const res = await fetchFromGitHub(url, { maxBytes, timeoutMs: 10 * 60 * 1000 });
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const out = fs.createWriteStream(dest);
+  const reader = res.body.getReader();
+  let total = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > maxBytes) throw new Error('Download ist unerwartet gross.');
+      if (!out.write(Buffer.from(value))) await new Promise((r) => out.once('drain', r));
+    }
+  } finally {
+    await new Promise((r) => out.end(r));
+  }
+  return dest;
+}
+
 function setupUpdater() {
   if (!installedWithSetup()) return null;
   let autoUpdater;
@@ -741,31 +849,215 @@ function setupUpdater() {
     log(`Updater fehlt: ${err.message}`);
     return null;
   }
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Erst prüfen, dann laden, dann nochmals prüfen, dann installieren
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.allowDowngrade = false;
+  autoUpdater.allowPrerelease = false;
   autoUpdater.logger = { info() {}, debug() {}, warn: (m) => log(`Update: ${m}`), error: (m) => log(`Update-Fehler: ${m}`) };
+
+  const current = app.getVersion();
+  let manifest = null;
+  let verified = null; // { version, file }
+
   const setState = (st) => {
     updateState = st;
     win?.webContents.send('update', st);
   };
+  const reject = (version, error) => {
+    manifest = null;
+    verified = null;
+    autoUpdater.autoInstallOnAppQuit = false;
+    log(`Update ${version || ''} abgelehnt: ${error}`);
+    setState({ state: 'error', version, error });
+  };
+
   autoUpdater.on('checking-for-update', () => setState({ state: 'checking' }));
-  autoUpdater.on('update-available', (i) => setState({ state: 'downloading', version: i.version, percent: 0 }));
   autoUpdater.on('update-not-available', () => setState({ state: 'latest', checkedAt: Date.now() }));
+  autoUpdater.on('update-available', async (info) => {
+    const version = info.version;
+    try {
+      // Versionsprüfung: nur echte, neuere Versionen; zurückgerollte überspringen
+      if (updateSecurity.compareVersions(version, current) <= 0) {
+        setState({ state: 'latest', checkedAt: Date.now() });
+        return;
+      }
+      const skip = readUpdateFile().skip || [];
+      if (skip.includes(version)) {
+        setState({ state: 'skipped', version, error: `Version ${version} wurde nach einem Fehler zurückgerollt und wird übersprungen.` });
+        return;
+      }
+      setState({ state: 'verifying', version });
+      const m = await fetchManifest(version);
+      const sha = info.files?.[0]?.sha512 || info.sha512;
+      const sig = updateSecurity.verifyManifest(m, { version, sha512: sha });
+      if (!sig.ok) return reject(version, sig.error);
+      const compat = updateSecurity.checkCompatibility(m, { osRelease: os.release(), arch: process.arch, currentVersion: current, platform: process.platform });
+      if (!compat.ok) return reject(version, compat.error);
+      manifest = m;
+      setState({ state: 'downloading', version, percent: 0 });
+      await autoUpdater.downloadUpdate();
+    } catch (err) {
+      reject(version, err.message || String(err));
+    }
+  });
   autoUpdater.on('download-progress', (p) => setState({ state: 'downloading', version: updateState.version, percent: Math.round(p.percent || 0) }));
-  autoUpdater.on('update-downloaded', (i) => setState({ state: 'ready', version: i.version }));
+  autoUpdater.on('update-downloaded', async (info) => {
+    try {
+      if (!manifest || manifest.version !== info.version) throw new Error('Keine passende Signatur für diesen Download.');
+      // Integrität: Prüfsumme der heruntergeladenen Datei selbst berechnen
+      const file = info.downloadedFile;
+      if (!file || !fs.existsSync(file)) throw new Error('Die heruntergeladene Datei fehlt.');
+      const hash = await updateSecurity.sha512File(file);
+      if (hash !== manifest.sha512) throw new Error('Die Prüfsumme der heruntergeladenen Datei stimmt nicht. Der Download war beschädigt oder verändert.');
+      verified = { version: info.version, file };
+      autoUpdater.autoInstallOnAppQuit = true;
+      log(`Update ${info.version} heruntergeladen und verifiziert (Schlüssel ${manifest.keyId})`);
+      setState({ state: 'ready', version: info.version, verified: true });
+    } catch (err) {
+      reject(info.version, `Update ${info.version} wird nicht installiert: ${err.message}`);
+    }
+  });
   autoUpdater.on('error', (err) => {
     const text = String(err?.message || err);
+    if (updateState.state === 'error') return; // eigene Meldung behalten
     setState({
       state: 'error',
       error: /404|Unable to find latest version|private|authentication|HttpError: 40/i.test(text)
-        ? 'Noch keine öffentlichen Updates gefunden (das GitHub-Repo ist privat oder hat noch kein Release).'
-        : 'Update-Prüfung fehlgeschlagen. Bist du online?',
+        ? 'Noch keine öffentlichen Updates gefunden.'
+        : /sha512|checksum/i.test(text)
+          ? 'Der Download war beschädigt. Buddy versucht es später nochmals.'
+          : 'Update-Prüfung fehlgeschlagen. Bist du online?',
     });
   });
-  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+
+  // Vor dem Installieren merken, von welcher auf welche Version es geht (für den Rollback)
+  const rememberPending = () => {
+    if (!verified) return;
+    const data = readUpdateFile();
+    data.pending = { from: current, to: verified.version, at: Date.now() };
+    writeUpdateFile(data);
+  };
+  app.on('before-quit', rememberPending);
+
+  const check = () => {
+    if (updateState.state === 'downloading' || updateState.state === 'verifying' || updateState.state === 'ready') return;
+    autoUpdater.checkForUpdates().catch(() => {});
+  };
   setTimeout(check, 30 * 1000);
   setInterval(check, 6 * 3600 * 1000);
-  return { check, install: () => autoUpdater.quitAndInstall(true, true) };
+  return {
+    check,
+    install: () => {
+      if (!verified) return;
+      rememberPending();
+      autoUpdater.quitAndInstall(true, true);
+    },
+    rollbackTarget: () => {
+      const prev = readUpdateFile().previous;
+      return prev && updateSecurity.compareVersions(prev, current) < 0 ? prev : null;
+    },
+    rollback: (reason) => {
+      const prev = readUpdateFile().previous;
+      if (!prev) return Promise.resolve({ ok: false, error: 'Keine vorherige Version bekannt.' });
+      return rollbackTo(prev, reason || 'Vom Nutzer gewünscht');
+    },
+  };
+}
+
+// Installiert eine ältere, signierte Version (automatischer Rollback oder auf Wunsch)
+async function rollbackTo(version, reason) {
+  const current = app.getVersion();
+  const setState = (st) => { updateState = st; win?.webContents.send('update', st); };
+  try {
+    setState({ state: 'rollback', version });
+    log(`Rollback ${current} -> ${version}: ${reason}`);
+    const m = await fetchManifest(version);
+    const sig = updateSecurity.verifyManifest(m, { version });
+    if (!sig.ok) throw new Error(sig.error);
+    const compat = updateSecurity.checkCompatibility({ ...m, minUpdateFrom: '' }, { osRelease: os.release(), arch: process.arch, platform: process.platform });
+    if (!compat.ok) throw new Error(compat.error);
+    const file = path.join(app.getPath('temp'), 'buddy-island-rollback', path.basename(m.file));
+    await downloadVerified(releaseUrl(version, m.file), file);
+    const hash = await updateSecurity.sha512File(file);
+    if (hash !== m.sha512) throw new Error('Die Prüfsumme der älteren Version stimmt nicht.');
+    const data = readUpdateFile();
+    data.skip = [...new Set([...(data.skip || []), current])].slice(-10);
+    data.rolledBack = { from: current, to: version, reason, at: Date.now() };
+    data.trial = null;
+    data.pending = { from: current, to: version, at: Date.now(), rollback: true };
+    writeUpdateFile(data);
+    const { spawn } = require('child_process');
+    spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    setTimeout(() => app.quit(), 500);
+    return { ok: true };
+  } catch (err) {
+    log(`Rollback fehlgeschlagen: ${err.message}`);
+    setState({ state: 'error', error: `Zurück zur Version ${version} ging nicht: ${err.message}` });
+    return { ok: false, error: err.message };
+  }
+}
+
+// Läuft die neue Version stabil? Sonst automatisch zurück.
+function checkUpdateHealth() {
+  if (!installedWithSetup()) return;
+  const current = app.getVersion();
+  const data = readUpdateFile();
+  if (data.pending) {
+    if (data.pending.to === current) {
+      if (data.pending.rollback) {
+        updateHealth = { kind: 'rolledBack', version: current, from: data.pending.from };
+        data.lastGood = current;
+        data.previous = null;
+      } else {
+        updateHealth = { kind: 'updated', version: current, from: data.pending.from };
+        data.previous = data.pending.from;
+        data.trial = { version: current, launches: 0, since: Date.now() };
+      }
+      data.pending = null;
+    } else if (updateSecurity.compareVersions(current, data.pending.to) !== 0 && Date.now() - data.pending.at > 60 * 1000) {
+      updateHealth = { kind: 'failed', version: data.pending.to };
+      log(`Update auf ${data.pending.to} wurde nicht installiert, Buddy läuft mit ${current}`);
+      data.pending = null;
+    }
+  }
+  if (data.trial && data.trial.version === current) {
+    data.trial.launches = (data.trial.launches || 0) + 1;
+    writeUpdateFile(data);
+    // Startet die neue Version mehrmals hintereinander nicht sauber, zurück zur alten
+    if (data.trial.launches >= 3 && data.previous) {
+      setTimeout(() => rollbackTo(data.previous, 'Die neue Version ist mehrmals kurz nach dem Start abgestürzt.'), 5000);
+      return;
+    }
+    setTimeout(() => markUpdateHealthy(current), 2 * 60 * 1000);
+    app.on('will-quit', () => {
+      if (Date.now() - startedAt > 15 * 1000) markUpdateHealthy(current);
+    });
+  } else {
+    writeUpdateFile(data);
+  }
+}
+
+function markUpdateHealthy(version) {
+  const data = readUpdateFile();
+  if (data.trial?.version !== version) return;
+  data.trial = null;
+  data.lastGood = version;
+  writeUpdateFile(data);
+  log(`Version ${version} läuft stabil`);
+}
+
+// Stürzt das Fenster in einer frisch installierten Version ab: neu laden, beim zweiten Mal zurück
+let renderCrashes = 0;
+function onRenderCrash(details) {
+  log(`Fenster abgestürzt: ${details?.reason || ''}`);
+  renderCrashes += 1;
+  const data = readUpdateFile();
+  if (data.trial?.version === app.getVersion() && data.previous && renderCrashes >= 2) {
+    rollbackTo(data.previous, 'Das Fenster der neuen Version ist wiederholt abgestürzt.');
+    return;
+  }
+  setTimeout(() => { if (win && !win.isDestroyed()) win.reload(); }, 800);
 }
 
 // Selbsttest für die Einstellungen («Diagnose»)
@@ -821,8 +1113,14 @@ async function runDiagnostics() {
   else add('Sprache', v.offline || v.online, [v.online ? 'Online-Diktat' : null, v.offline ? `Offline (${v.language})` : null, v.wake ? '«Hey Buddy» aktiv' : null].filter(Boolean).join(', ') || 'Keine Spracherkennung installiert');
 
   add('Updates', updater ? updateState.state !== 'error' : null, updater
-    ? ({ idle: 'Noch nicht geprüft', checking: 'Prüfe …', latest: 'Aktuell', downloading: 'Lädt Update …', ready: `Version ${updateState.version} bereit`, error: updateState.error }[updateState.state] || '')
+    ? ({ idle: 'Noch nicht geprüft', checking: 'Prüfe …', latest: 'Aktuell', verifying: 'Prüfe Signatur …', downloading: 'Lädt Update …', ready: `Version ${updateState.version} bereit und verifiziert`, skipped: updateState.error, rollback: 'Stellt ältere Version wieder her …', error: updateState.error }[updateState.state] || '')
     : 'Nur mit dem Installer');
+  add('Update-Signatur', true, `Ed25519, Schlüssel ${Object.keys(updateSecurity.PUBLIC_KEYS).join(', ')} eingebaut`);
+  const b = usage.budget(settings.monthlyLimit);
+  add('Ausgabenlimit', b.level === 'none' ? null : b.level !== 'blocked', b.level === 'none'
+    ? 'Kein Limit gesetzt'
+    : `$${b.spent.toFixed(2)} von $${b.limit.toFixed(2)} diesen Monat`);
+  add('API-Key-Schutz', settings.keyEncrypted ? true : settings.keyPlain ? false : null, settings.keyEncrypted ? 'Mit Windows-Verschlüsselung (DPAPI) gespeichert' : settings.keyPlain ? 'Unverschlüsselt (nur Entwicklung)' : 'Kein Key');
   log(`Diagnose: ${results.map((r) => `${r.name}=${r.ok}`).join(', ')}`);
   return results;
 }
@@ -861,8 +1159,19 @@ function setupIpc() {
   ipcMain.handle('settings:get', () => publicSettings());
 
   ipcMain.handle('settings:set', (_e, patch = {}) => {
-    const allowedKeys = ['name', 'model', 'effort', 'maxTokens', 'sound', 'autostart', 'accent', 'systemPrompt', 'workspaceId', 'computerUse', 'confirmControl', 'glow', 'notifications', 'media', 'gameMode', 'calendarLead', 'voiceWake', 'speak', 'displayId'];
+    const allowedKeys = ['name', 'model', 'maxTokens', 'sound', 'autostart', 'accent', 'systemPrompt', 'workspaceId', 'computerUse', 'confirmControl', 'glow', 'notifications', 'media', 'gameMode', 'calendarLead', 'voiceWake', 'speak', 'displayId'];
     for (const k of allowedKeys) if (k in patch) settings[k] = patch[k];
+    // KI-Einstellungen mit Prüfung
+    if ('effort' in patch && ['auto', 'low', 'medium', 'high'].includes(patch.effort)) settings.effort = patch.effort;
+    if ('autoModel' in patch) settings.autoModel = Boolean(patch.autoModel);
+    if ('showRouting' in patch) settings.showRouting = Boolean(patch.showRouting);
+    if ('historyEnabled' in patch) settings.historyEnabled = Boolean(patch.historyEnabled);
+    if ('provider' in patch && models.PROVIDERS[patch.provider]) settings.provider = patch.provider;
+    if ('monthlyLimit' in patch) {
+      const n = Number(patch.monthlyLimit);
+      settings.monthlyLimit = Number.isFinite(n) ? Math.min(1000, Math.max(0, Math.round(n * 100) / 100)) : settings.monthlyLimit;
+    }
+    if ('permissions' in patch) settings.permissions = permissions.cleanPolicy({ ...settings.permissions, ...patch.permissions });
 
     // Tastenkürzel: erst prüfen, dann übernehmen, bei Problemen zurück auf den alten Stand
     let shortcutError = null;
@@ -907,13 +1216,17 @@ function setupIpc() {
 
   ipcMain.handle('key:set', async (_e, { key, workspaceId } = {}) => {
     const clean = (key || '').trim();
+    const provider = models.PROVIDERS[settings.provider] || models.PROVIDERS.anthropic;
     if (!clean) return { ok: false, error: 'Bitte einen Key einfügen.' };
-    if (!clean.startsWith('sk-ant-')) return { ok: false, error: 'Ein Claude-API-Key beginnt mit «sk-ant-».' };
+    if (!clean.startsWith(provider.keyPrefix)) return { ok: false, error: provider.keyHint };
+    if (/\s/.test(clean) || clean.length > 300) return { ok: false, error: 'Der Key enthält Leerzeichen oder ist zu lang. Kopiere ihn nochmals aus der Console.' };
     try {
-      const models = await claude.listModels(clean, workspaceId);
+      // Der Key geht nur an die API des Anbieters, um ihn zu prüfen
+      const list = await claude.listModels(clean, workspaceId);
       settings.workspaceId = (workspaceId || '').trim();
       setApiKey(clean);
-      return { ok: true, models, settings: publicSettings() };
+      modelCache = { at: Date.now(), list };
+      return { ok: true, models: list, settings: publicSettings() };
     } catch (err) {
       return { ok: false, error: err.message };
     }
@@ -922,6 +1235,27 @@ function setupIpc() {
   ipcMain.handle('key:clear', () => {
     setApiKey(null);
     return publicSettings();
+  });
+
+  // Widerrufen geht nur in der Console des Anbieters: Key hier löschen und Console öffnen
+  ipcMain.handle('key:revoke', () => {
+    setApiKey(null);
+    const provider = models.PROVIDERS[settings.provider] || models.PROVIDERS.anthropic;
+    shell.openExternal(provider.consoleUrl);
+    return publicSettings();
+  });
+
+  ipcMain.handle('ai:stats', () => ({
+    usage: usage.summary(settings.monthlyLimit),
+    history: history.list(25),
+  }));
+  ipcMain.handle('usage:reset', () => {
+    usage.reset();
+    return usage.summary(settings.monthlyLimit);
+  });
+  ipcMain.handle('history:clear', () => {
+    history.clear();
+    return [];
   });
 
   ipcMain.handle('models:list', async () => {
@@ -935,10 +1269,15 @@ function setupIpc() {
     }
   });
 
-  ipcMain.on('chat:send', (event, { id, messages }) => {
+  ipcMain.on('chat:send', (event, { id, messages, meta } = {}) => {
     const sender = event.sender;
     const send = (channel, payload) => { if (!sender.isDestroyed()) sender.send(channel, payload); };
-    runChat(id, messages, send);
+    if (!id || !Array.isArray(messages) || running.has(id)) return;
+    const clean = messages
+      .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content)
+      .slice(-60);
+    if (!clean.length || clean[clean.length - 1].role !== 'user') return;
+    runChat(id, clean, { lastTier: models.TIERS.includes(meta?.lastTier) ? meta.lastTier : null }, send);
   });
 
   ipcMain.on('chat:abort', (_e, id) => {
@@ -946,6 +1285,14 @@ function setupIpc() {
     const resolve = confirms.get(id);
     confirms.delete(id);
     resolve?.(false);
+    resolvePermissions(id, false);
+  });
+
+  ipcMain.on('agent:permission-reply', (_e, { id, reqId, allow } = {}) => {
+    const key = `${id}:${reqId}`;
+    const resolve = permissionAsks.get(key);
+    permissionAsks.delete(key);
+    resolve?.(allow === true);
   });
 
   ipcMain.on('agent:confirm-reply', (_e, { id, allow }) => {
@@ -996,6 +1343,7 @@ function setupIpc() {
 
   ipcMain.on('update:check', () => updater?.check());
   ipcMain.on('update:install', () => updater?.install());
+  ipcMain.handle('update:rollback', () => updater?.rollback('Vom Nutzer gewünscht') || { ok: false, error: 'Nur mit dem Installer' });
 
   ipcMain.handle('diag:run', () => runDiagnostics());
   ipcMain.on('logs:open', () => shell.openPath(app.getPath('userData')));
@@ -1076,6 +1424,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       mediaCommand: (cmd) => watcher?.media(cmd) || false,
       getCalendar: (from, to) => (getSecret('calendar') ? calendar.list(from, to) : []),
     });
+    createAgentRuntime();
 
     watcher = createSystemWatcher({
       scriptDir: app.getPath('userData'),
@@ -1131,6 +1480,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     });
     if (settings.voiceWake) voice.setWake(true);
 
+    checkUpdateHealth();
     updater = setupUpdater();
     setupIpc();
     createWindow();
@@ -1146,6 +1496,8 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
   });
 
   app.on('will-quit', () => {
+    usage?.flush();
+    history?.flush();
     globalShortcut.unregisterAll();
     computer?.stop();
     watcher?.stop();

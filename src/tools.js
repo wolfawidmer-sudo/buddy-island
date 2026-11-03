@@ -22,6 +22,34 @@ const APPS = {
   edge: { uri: 'microsoft-edge:' },
 };
 
+// Windows-Einstellungsseiten, die Buddy öffnen darf (nur öffnen, nicht ändern)
+const SETTINGS_PAGES = {
+  start: 'ms-settings:',
+  anzeige: 'ms-settings:display',
+  ton: 'ms-settings:sound',
+  bluetooth: 'ms-settings:bluetooth',
+  wlan: 'ms-settings:network-wifi',
+  netzwerk: 'ms-settings:network',
+  mitteilungen: 'ms-settings:notifications',
+  nicht_stoeren: 'ms-settings:quiethours',
+  apps: 'ms-settings:appsfeatures',
+  standard_apps: 'ms-settings:defaultapps',
+  autostart: 'ms-settings:startupapps',
+  speicher: 'ms-settings:storagesense',
+  energie: 'ms-settings:powersleep',
+  akku: 'ms-settings:batterysaver',
+  maus: 'ms-settings:mousetouchpad',
+  tastatur: 'ms-settings:typing',
+  hintergrund: 'ms-settings:personalization-background',
+  farben: 'ms-settings:colors',
+  taskleiste: 'ms-settings:taskbar',
+  datum_uhrzeit: 'ms-settings:dateandtime',
+  sprache: 'ms-settings:regionlanguage',
+  konten: 'ms-settings:yourinfo',
+  datenschutz: 'ms-settings:privacy',
+  windows_update: 'ms-settings:windowsupdate',
+};
+
 // Virtuelle Tastencodes für Medientasten (über WScript.Shell SendKeys)
 const MEDIA_KEYS = {
   play_pause: 179,
@@ -113,6 +141,22 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'system_info',
+    description: 'Zeigt Infos zum PC: Windows-Version, Prozessor, Arbeitsspeicher, freier Speicherplatz, Laufzeit seit dem Start. Nur lesen.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'open_settings',
+    description:
+      'Öffnet eine Seite der Windows-Einstellungen, damit der Nutzer (oder du per Bildschirmsteuerung) dort etwas nachsehen kann. Öffnen ändert nichts. ' +
+      'Etwas in den Einstellungen zu ändern ist mittleres oder hohes Risiko und braucht vorher request_permission.',
+    input_schema: {
+      type: 'object',
+      properties: { page: { type: 'string', enum: Object.keys(SETTINGS_PAGES) } },
+      required: ['page'],
+    },
+  },
+  {
     name: 'media_control',
     description:
       'Steuert Musik und Lautstärke wie die Medientasten der Tastatur: abspielen/pausieren, nächster/vorheriger Titel, lauter, leiser, stumm. ' +
@@ -139,6 +183,8 @@ function describe(name, input = {}) {
     case 'cancel_timer': return 'Timer gestoppt';
     case 'open_website': return `Website geöffnet`;
     case 'open_app': return `${capitalize(input.app || 'App')} geöffnet`;
+    case 'system_info': return 'Systeminfos gelesen';
+    case 'open_settings': return `Einstellungen: ${capitalize(String(input.page || '').replace(/_/g, ' '))}`;
     case 'media_control': return {
       play_pause: 'Wiedergabe umgeschaltet', next: 'Nächster Titel', previous: 'Vorheriger Titel',
       volume_up: 'Lauter', volume_down: 'Leiser', mute: 'Stumm umgeschaltet',
@@ -302,6 +348,32 @@ function createTools({
       case 'open_app': {
         await openApp(input.app);
         return { text: `${capitalize(input.app)} wurde geöffnet.` };
+      }
+      case 'system_info': {
+        const gb = (b) => `${(b / 1024 ** 3).toFixed(1)} GB`;
+        const cpus = os.cpus();
+        const up = os.uptime();
+        const lines = [
+          `System: ${os.type()} ${os.release()} (${os.arch()})`,
+          `Prozessor: ${cpus[0]?.model?.trim() || 'unbekannt'} (${cpus.length} Threads)`,
+          `Arbeitsspeicher: ${gb(os.totalmem() - os.freemem())} von ${gb(os.totalmem())} belegt`,
+          `Läuft seit: ${Math.floor(up / 86400)} T ${Math.floor((up % 86400) / 3600)} h ${Math.floor((up % 3600) / 60)} min`,
+        ];
+        try {
+          const root = process.platform === 'win32' ? (process.env.SystemDrive || 'C:') + '\\' : '/';
+          const fsStat = require('fs').statfsSync(root);
+          lines.push(`Speicherplatz ${root}: ${gb(fsStat.bavail * fsStat.bsize)} frei von ${gb(fsStat.blocks * fsStat.bsize)}`);
+        } catch {
+          /* nicht verfügbar */
+        }
+        return { text: lines.join('\n') };
+      }
+      case 'open_settings': {
+        const uri = SETTINGS_PAGES[input.page];
+        if (!uri) return { error: true, text: `Unbekannte Seite. Möglich: ${Object.keys(SETTINGS_PAGES).join(', ')}` };
+        if (process.platform !== 'win32') return { error: true, text: 'Windows-Einstellungen gibt es nur unter Windows.' };
+        await shell.openExternal(uri);
+        return { text: `Einstellungen geöffnet: ${input.page}` };
       }
       case 'media_control': {
         const code = MEDIA_KEYS[input.action];

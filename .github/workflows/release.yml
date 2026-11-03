@@ -1,10 +1,15 @@
 name: Release
 
 # Neue Version veröffentlichen:
-#   1. "version" in package.json erhöhen
-#   2. git tag v0.3.0 && git push --tags
-# GitHub baut dann den Windows-Installer und hängt ihn ans Release.
-# Buddy Island holt sich das Update danach automatisch.
+#   1. "version" in package.json erhöhen und pushen
+#   2. Tag v0.x.y pushen oder diesen Workflow von Hand starten
+# GitHub baut den Windows-Installer, signiert das Update (Ed25519) und hängt
+# alles ans Release. Installierte Buddys prüfen die Signatur vor dem Update.
+#
+# Signierschlüssel: Repository-Secret BUDDY_UPDATE_SIGNING_KEY (privater Schlüssel, PEM).
+# Fehlt er, wird das Release ohne Signatur veröffentlicht. Buddys ab Version 0.3
+# installieren es dann nicht automatisch, bis eine Signatur angehängt ist
+# (Workflow "Release signieren").
 
 on:
   push:
@@ -27,6 +32,25 @@ jobs:
       - run: npm test
       - name: Installer bauen
         run: npx electron-builder --win nsis --x64 --publish never
+      - name: Update signieren
+        id: sign
+        shell: bash
+        env:
+          BUDDY_UPDATE_SIGNING_KEY: ${{ secrets.BUDDY_UPDATE_SIGNING_KEY }}
+        run: |
+          set +e
+          node scripts/sign-update.js dist/latest.yml dist/update-signature.json
+          code=$?
+          set -e
+          if [ "$code" = "0" ]; then
+            node scripts/sign-update.js --verify dist/update-signature.json dist/latest.yml dist/BuddyIsland-Setup-*.exe
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$code" = "2" ]; then
+            echo "::warning::Kein Signierschlüssel gesetzt. Das Release ist nicht signiert."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          else
+            exit "$code"
+          fi
       - name: Release anlegen und Dateien hochladen
         shell: bash
         env:
@@ -36,6 +60,9 @@ jobs:
           TAG="v$VERSION"
           if ! gh release view "$TAG" > /dev/null 2>&1; then
             gh release create "$TAG" --target "$GITHUB_SHA" --title "Buddy Island $VERSION" \
-              --notes "Installer für Windows 10 und 11. Einfach herunterladen und doppelklicken. Bereits installierte Versionen aktualisieren sich automatisch."
+              --notes "Installer für Windows 10 und 11. Einfach herunterladen und doppelklicken. Bereits installierte Versionen aktualisieren sich automatisch, nachdem sie die Signatur geprüft haben."
           fi
-          gh release upload "$TAG" dist/BuddyIsland-Setup-*.exe dist/*.blockmap dist/latest.yml --clobber
+          # Signatur vor latest.yml hochladen, damit Buddys sie schon finden, wenn sie das Update sehen
+          gh release upload "$TAG" dist/BuddyIsland-Setup-*.exe dist/*.blockmap --clobber
+          if [ -f dist/update-signature.json ]; then gh release upload "$TAG" dist/update-signature.json --clobber; fi
+          gh release upload "$TAG" dist/latest.yml --clobber

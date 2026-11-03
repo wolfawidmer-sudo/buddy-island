@@ -81,6 +81,29 @@
     diagBtn: $('diagBtn'),
     diagList: $('diagList'),
     logsBtn: $('logsBtn'),
+    providerSelect: $('providerSelect'),
+    keyRevoke: $('keyRevoke'),
+    autoToggle: $('autoToggle'),
+    modelLabel: $('modelLabel'),
+    routeToggle: $('routeToggle'),
+    routeHint: $('routeHint'),
+    costMonth: $('costMonth'),
+    costBar: $('costBar'),
+    costNote: $('costNote'),
+    limitSelect: $('limitSelect'),
+    costEstimate: $('costEstimate'),
+    costSession: $('costSession'),
+    costTokens: $('costTokens'),
+    modelUsage: $('modelUsage'),
+    recentCount: $('recentCount'),
+    recentList: $('recentList'),
+    usageReset: $('usageReset'),
+    permMedium: $('permMedium'),
+    permHigh: $('permHigh'),
+    historyToggle: $('historyToggle'),
+    historyList: $('historyList'),
+    historyClear: $('historyClear'),
+    rollbackBtn: $('rollbackBtn'),
   };
 
   const STORE_KEY = 'buddy.chat.v1';
@@ -94,6 +117,7 @@
     view: 'chat',
     settings: null,
     models: [],
+    stats: null, // { usage, history }
     history: loadHistory(), // [{ role, content, tools? }]
     stream: null, // { id, text, node, raf, tools }
     status: 'idle', // idle | busy | done | error
@@ -139,6 +163,23 @@
       .replace(/-(\d+)-(\d+)$/, ' $1.$2')
       .replace(/-/g, ' ')
       .replace(/^\w/, (c) => c.toUpperCase());
+  }
+
+  const EFFORT_LABEL = { low: 'Schnell', medium: 'Normal', high: 'Gründlich', xhigh: 'Sehr gründlich', max: 'Maximal' };
+
+  function usd(v) {
+    const n = Number(v) || 0;
+    if (n === 0) return '$0.00';
+    if (n < 0.001) return '< $0.001';
+    if (n < 0.1) return `$${n.toFixed(3)}`;
+    return `$${n.toFixed(2)}`;
+  }
+
+  function tokens(n) {
+    const v = Number(n) || 0;
+    if (v < 1000) return String(v);
+    if (v < 1e6) return `${(v / 1000).toFixed(1)}k`;
+    return `${(v / 1e6).toFixed(2)} Mio.`;
   }
 
   function prettyHotkey(acc) {
@@ -320,7 +361,7 @@
     el.chatView.hidden = view !== 'chat';
     el.settingsView.hidden = view !== 'settings';
     el.settingsBtn.classList.toggle('active', view === 'settings');
-    if (view === 'settings') fillSettings();
+    if (view === 'settings') { fillSettings(); loadAiStats(); }
     if (view === 'chat' && state.open) renderAgenda();
     render();
   }
@@ -379,15 +420,81 @@
     return row;
   }
 
-  function assistantBubble(text, toolList) {
+  // Teile einer Antwort immer in derselben Reihenfolge
+  const PART_ORDER = ['route', 'plan', 'tool-row', 'md', 'msg-tools'];
+
+  function placePart(node, part) {
+    const rank = PART_ORDER.indexOf(part.classList[0]);
+    const after = [...node.children].find((c) => PART_ORDER.indexOf(c.classList[0]) > rank);
+    node.insertBefore(part, after || null);
+    return part;
+  }
+
+  function routeLine(route, extra = {}) {
+    const box = document.createElement('div');
+    box.className = 'route';
+    if (!route) return box;
+    const dot = document.createElement('i');
+    dot.className = `tier ${route.tier || ''}`;
+    const model = document.createElement('b');
+    const chain = (extra.models && extra.models.length > 1) ? extra.models.join(' → ') : route.modelName || '';
+    model.textContent = chain;
+    const parts = [dot, model];
+    const add = (text, cls) => {
+      const sep = document.createElement('span');
+      sep.className = 'sep';
+      const span = document.createElement('span');
+      if (cls) span.className = cls;
+      span.textContent = text;
+      parts.push(sep, span);
+    };
+    add(EFFORT_LABEL[route.effort] || 'Standard');
+    const cost = extra.final ? usd(extra.cost) : extra.cost ? usd(extra.cost) : route.estimate ? `≈ ${usd(route.estimate)}` : '';
+    if (cost) add(cost, 'cost');
+    if (extra.final && extra.tokens) add(`${tokens(extra.tokens)} Tokens`);
+    if (route.reason) {
+      const reason = document.createElement('span');
+      reason.className = 'reason';
+      reason.textContent = extra.switchNote || route.reason;
+      reason.title = route.reason;
+      parts.push(reason);
+    }
+    box.append(...parts);
+    return box;
+  }
+
+  function planCard(steps) {
+    const box = document.createElement('div');
+    box.className = 'plan';
+    for (const step of steps || []) {
+      const row = document.createElement('div');
+      row.className = `plan-step ${step.status}`;
+      const icon = document.createElement('i');
+      const title = document.createElement('span');
+      title.textContent = step.title + (step.note && step.status === 'failed' ? ` – ${step.note}` : '');
+      row.append(icon, title);
+      box.appendChild(row);
+    }
+    return box;
+  }
+
+  function showRouting() {
+    return state.settings?.showRouting !== false;
+  }
+
+  function assistantBubble(text, toolList, extra = {}) {
     const node = document.createElement('div');
     node.className = 'bubble assistant';
-    if (toolList && toolList.length) node.appendChild(toolRow(toolList));
+    if (extra.route && showRouting()) {
+      placePart(node, routeLine(extra.route, { final: Boolean(extra.usage), cost: extra.usage?.cost, tokens: (extra.usage?.input_tokens || 0) + (extra.usage?.output_tokens || 0), models: extra.usage?.models }));
+    }
+    if (extra.plan && extra.plan.length) placePart(node, planCard(extra.plan));
+    if (toolList && toolList.length) placePart(node, toolRow(toolList));
     if (!text) return node;
     const body = document.createElement('div');
     body.className = 'md';
     body.innerHTML = window.renderMarkdown(text);
-    node.appendChild(body);
+    placePart(node, body);
 
     const tools = document.createElement('div');
     tools.className = 'msg-tools';
@@ -396,7 +503,7 @@
     copy.textContent = 'Kopieren';
     copy.addEventListener('click', () => copyText(text, copy));
     tools.appendChild(copy);
-    node.appendChild(tools);
+    placePart(node, tools);
     return node;
   }
 
@@ -419,7 +526,7 @@
   function renderHistory() {
     el.messages.textContent = '';
     for (const msg of state.history) {
-      el.messages.appendChild(msg.role === 'user' ? userBubble(msg.content) : assistantBubble(msg.content, msg.tools));
+      el.messages.appendChild(msg.role === 'user' ? userBubble(msg.content) : assistantBubble(msg.content, msg.tools, msg));
     }
     renderEmpty();
     scrollToBottom(true);
@@ -451,7 +558,7 @@
     if (!s) return;
     el.footnote.textContent = '';
     const left = document.createElement('span');
-    left.textContent = modelLabel(s.model);
+    left.textContent = s.autoModel !== false ? 'Modell: automatisch' : modelLabel(s.model);
     const right = document.createElement('span');
     right.textContent = `${prettyHotkey(s.hotkey)} öffnet`;
     el.footnote.append(left, right);
@@ -518,12 +625,13 @@
     const node = typingBubble();
     el.messages.appendChild(node);
     scrollToBottom(true);
-    state.stream = { id, text: '', node, raf: 0, tools: [], voice: viaVoice };
+    state.stream = { id, text: '', node, raf: 0, tools: [], voice: viaVoice, route: null, plan: null, cost: 0, switchNote: '' };
     stopSpeaking();
     el.island.classList.add('streaming');
     setStatus('busy');
     updateSendButton();
-    api.sendChat(id, apiMessages());
+    const lastAssistant = [...state.history].reverse().find((m) => m.role === 'assistant' && m.route);
+    api.sendChat(id, apiMessages(), { lastTier: lastAssistant?.route?.tier || null });
   }
 
   function paintStream() {
@@ -535,7 +643,7 @@
     if (!body) {
       body = document.createElement('div');
       body.className = 'md';
-      s.node.appendChild(body);
+      placePart(s.node, body);
     }
     body.innerHTML = window.renderMarkdown(s.text);
     const last = body.lastElementChild;
@@ -543,7 +651,7 @@
     scrollToBottom(false);
   }
 
-  function finishStream({ error, stopReason }) {
+  function finishStream({ error, stopReason, usage }) {
     const s = state.stream;
     if (!s) return;
     if (s.raf) cancelAnimationFrame(s.raf);
@@ -554,13 +662,20 @@
     el.messages.querySelector('.confirm')?.remove();
 
     const text = s.text;
-    if (text || s.tools.length) {
-      s.node.replaceWith(assistantBubble(text, s.tools));
-      state.history.push({ role: 'assistant', content: text || '', tools: s.tools });
+    const entry = { role: 'assistant', content: text || '', tools: s.tools };
+    if (s.route) entry.route = { model: s.route.model, modelName: s.route.modelName, tier: s.route.tier, effort: s.route.effort, reason: s.route.reason, estimate: s.route.estimate };
+    if (s.plan) entry.plan = s.plan;
+    if (usage) entry.usage = { cost: usage.cost || 0, input_tokens: usage.input_tokens || 0, output_tokens: usage.output_tokens || 0, models: usage.models || [] };
+    if (text || s.tools.length || (s.plan && s.plan.length)) {
+      s.node.replaceWith(assistantBubble(text, s.tools, entry));
+      state.history.push(entry);
       saveHistory();
+    } else if (s.route && usage && showRouting()) {
+      s.node.replaceWith(assistantBubble('', [], entry));
     } else {
       s.node.remove();
     }
+    if (state.view === 'settings') loadAiStats();
     if (stopReason === 'max_tokens') el.messages.appendChild(noticeNode('Die Antwort wurde gekürzt (Längenlimit).', true));
     if (stopReason === 'aborted') el.messages.appendChild(noticeNode('Gestoppt.', true));
     if (stopReason === 'refusal' && !text) el.messages.appendChild(noticeNode('Dabei kann ich leider nicht helfen.', true));
@@ -589,12 +704,83 @@
     if (!s.raf) s.raf = requestAnimationFrame(paintStream);
   });
 
-  api.onDone(({ id, stopReason }) => {
-    if (state.stream?.id === id) finishStream({ stopReason });
+  api.onDone(({ id, stopReason, usage }) => {
+    if (state.stream?.id === id) finishStream({ stopReason, usage });
   });
 
-  api.onError(({ id, message }) => {
-    if (state.stream?.id === id) finishStream({ error: message });
+  api.onError(({ id, message, code }) => {
+    if (state.stream?.id !== id) return;
+    finishStream({ error: message });
+    if (code === 'key' && state.settings) {
+      state.settings.keyStatus = 'invalid';
+      renderEmpty();
+    }
+  });
+
+  // Modellwahl des Routers (und spätere Wechsel)
+  function paintRoute() {
+    const s = state.stream;
+    if (!s || !s.route) return;
+    s.node.querySelector('.route')?.remove();
+    if (!showRouting()) return;
+    placePart(s.node, routeLine(s.route, { cost: s.cost, switchNote: s.switchNote }));
+  }
+
+  api.onRoute((route) => {
+    const s = state.stream;
+    if (!s || s.id !== route.id) return;
+    if (route.switched && s.route && s.route.modelName !== route.modelName) {
+      s.switchNote = route.why ? `Wechsel auf ${route.modelName}: ${route.why}` : `Wechsel auf ${route.modelName}`;
+    }
+    s.route = route;
+    paintRoute();
+    scrollToBottom(false);
+  });
+
+  api.onEscalate(({ id, to, reason }) => {
+    const s = state.stream;
+    if (!s || s.id !== id) return;
+    s.switchNote = `Stärkeres Modell: ${to} · ${reason}`;
+    addStreamTool({ label: `Wechsel auf ${to}` });
+    paintRoute();
+  });
+
+  api.onCost(({ id, cost }) => {
+    const s = state.stream;
+    if (!s || s.id !== id) return;
+    s.cost = cost;
+    paintRoute();
+  });
+
+  api.onPlan(({ id, steps }) => {
+    const s = state.stream;
+    if (!s || s.id !== id) return;
+    s.plan = steps;
+    s.node.querySelector('.plan')?.remove();
+    s.node.querySelector('.typing')?.parentElement.remove();
+    placePart(s.node, planCard(steps));
+    render();
+    scrollToBottom(false);
+  });
+
+  // Verbindung brach mitten in der Antwort ab: angefangenen Text zurücknehmen
+  api.onRewind(({ id, chars }) => {
+    const s = state.stream;
+    if (!s || s.id !== id || !chars) return;
+    s.text = s.text.slice(0, Math.max(0, s.text.length - chars));
+    if (!s.raf) s.raf = requestAnimationFrame(paintStream);
+  });
+
+  api.onNotice(({ id, text }) => {
+    if (state.stream?.id !== id) return;
+    el.messages.appendChild(noticeNode(text, true));
+    scrollToBottom(true);
+  });
+
+  api.onKeyStatus((status) => {
+    if (!state.settings) return;
+    state.settings.keyStatus = status;
+    if (state.view === 'settings') fillSettings();
   });
 
   api.onTool(({ id, label, error }) => {
@@ -605,10 +791,7 @@
     const s = state.stream;
     s.tools.push(tool);
     let row = s.node.querySelector('.tool-row');
-    if (!row) {
-      row = toolRow([]);
-      s.node.insertBefore(row, s.node.firstChild);
-    }
+    if (!row) row = placePart(s.node, toolRow([]));
     s.node.querySelector('.typing')?.parentElement.remove();
     row.appendChild(toolChip(tool));
     render();
@@ -642,6 +825,45 @@
     el.messages.appendChild(card);
     scrollToBottom(true);
     card.querySelector('.primary').focus();
+  });
+
+  // Freigabe für Aktionen mit mittlerem oder hohem Risiko
+  api.onPermission(({ id, reqId, level, label, summary, details }) => {
+    if (state.stream?.id !== id) {
+      api.replyPermission(id, reqId, false);
+      return;
+    }
+    if (!state.open) open('chat');
+    showView('chat');
+    const high = level === 'high';
+    const card = document.createElement('div');
+    card.className = `confirm ${high ? 'high' : 'medium'}`;
+    card.innerHTML =
+      '<span class="risk"></span><p class="confirm-title"></p><p class="confirm-text"></p>' +
+      '<div class="confirm-actions"><button type="button" class="button" data-allow="0">Ablehnen</button>' +
+      '<button type="button" class="button primary" data-allow="1"></button></div>';
+    card.querySelector('.risk').textContent = `${high ? 'Hohes' : 'Mittleres'} Risiko · ${label}`;
+    card.querySelector('.confirm-title').textContent = high ? `${state.settings?.name || 'Buddy'} möchte etwas Riskantes tun` : `Darf ${state.settings?.name || 'Buddy'} das?`;
+    card.querySelector('.confirm-text').textContent = summary || label;
+    if (details) {
+      const pre = document.createElement('div');
+      pre.className = 'confirm-detail';
+      pre.textContent = details;
+      card.insertBefore(pre, card.querySelector('.confirm-actions'));
+    }
+    card.querySelector('.primary').textContent = high ? 'Ja, ausführen' : 'Für diese Aufgabe erlauben';
+    card.addEventListener('click', (event) => {
+      const btn = event.target.closest('button[data-allow]');
+      if (!btn) return;
+      event.stopPropagation();
+      card.remove();
+      api.replyPermission(id, reqId, btn.dataset.allow === '1');
+    });
+    el.messages.appendChild(card);
+    scrollToBottom(true);
+    // Bei hohem Risiko nicht vorauswählen: bewusst klicken
+    card.querySelector(high ? '[data-allow="0"]' : '.primary').focus();
+    if (state.settings?.sound && !state.game.active) chime(true);
   });
 
   api.onControl(({ id, active, actions }) => {
@@ -1041,7 +1263,10 @@
       case 'checking': return 'Prüfe …';
       case 'latest': return 'Aktuell';
       case 'downloading': return u.percent ? `Lädt Version ${u.version} (${u.percent} %)` : `Lädt Version ${u.version} …`;
-      case 'ready': return `Version ${u.version} bereit`;
+      case 'verifying': return `Prüfe Signatur von ${u.version} …`;
+      case 'ready': return `Version ${u.version} bereit (geprüft)`;
+      case 'skipped': return u.error || `Version ${u.version} übersprungen`;
+      case 'rollback': return `Stellt Version ${u.version} wieder her …`;
       case 'error': return u.error || 'Fehler';
       default: return state.settings?.canUpdate ? 'Noch nicht geprüft' : 'Nur mit dem Installer';
     }
@@ -1137,9 +1362,43 @@
   function fillSettings() {
     const s = state.settings;
     if (!s) return;
-    el.keyStatus.textContent = s.hasKey ? `Verbunden · …${s.keyHint || ''}` : 'Nicht verbunden';
-    el.keyStatus.classList.toggle('ok', Boolean(s.hasKey));
+    el.providerSelect.textContent = '';
+    for (const p of s.providers || []) {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      el.providerSelect.appendChild(opt);
+    }
+    el.providerSelect.value = s.provider || 'anthropic';
+    el.providerSelect.disabled = (s.providers || []).length < 2;
+    const invalid = s.hasKey && s.keyStatus === 'invalid';
+    el.keyStatus.textContent = !s.hasKey ? 'Nicht verbunden' : invalid ? 'Abgelehnt, bitte ersetzen' : `Verbunden · …${s.keyHint || ''}${s.keyProtected ? ' · verschlüsselt' : ''}`;
+    el.keyStatus.classList.toggle('ok', Boolean(s.hasKey) && !invalid);
+    el.keyStatus.classList.toggle('bad', invalid);
     el.keyRemove.hidden = !s.hasKey;
+    el.keyRevoke.hidden = !s.hasKey;
+    const auto = s.autoModel !== false;
+    el.autoToggle.checked = auto;
+    el.modelSelect.disabled = auto;
+    el.modelLabel.textContent = auto ? 'Modell (wird gewählt)' : 'Modell';
+    el.routeToggle.checked = s.showRouting !== false;
+    el.routeHint.textContent = auto
+      ? 'Haiku prüft jede Anfrage und nimmt das günstigste Modell, das reicht: Haiku für Einfaches, Sonnet für mehrstufige Aufgaben, Opus nur für sehr Schwieriges. Einzelne Schritte einer Aufgabe können verschiedene Modelle übernehmen. Hakt es, wechselt Buddy selbst auf ein stärkeres Modell.'
+      : 'Buddy nimmt immer das gewählte Modell und wechselt nicht selbst. «Auto» bei der Denktiefe lässt das Modell selbst entscheiden.';
+    el.limitSelect.value = [...el.limitSelect.options].some((o) => Number(o.value) === Number(s.monthlyLimit)) ? String(Number(s.monthlyLimit)) : '5';
+    if (![...el.limitSelect.options].some((o) => Number(o.value) === Number(s.monthlyLimit))) {
+      const opt = document.createElement('option');
+      opt.value = String(s.monthlyLimit);
+      opt.textContent = `$${s.monthlyLimit}`;
+      el.limitSelect.appendChild(opt);
+      el.limitSelect.value = String(s.monthlyLimit);
+    }
+    el.permMedium.value = s.permissions?.medium || 'ask';
+    el.permHigh.value = s.permissions?.high || 'ask';
+    el.historyToggle.checked = s.historyEnabled !== false;
+    el.rollbackBtn.hidden = !s.rollbackVersion;
+    if (s.rollbackVersion) el.rollbackBtn.textContent = `Vorherige Version ${s.rollbackVersion} wiederherstellen`;
+    renderStats();
     el.keySave.textContent = s.hasKey ? 'Ersetzen' : 'Verbinden';
     el.workspaceInput.value = s.workspaceId || '';
     el.nameInput.value = s.name || '';
@@ -1216,6 +1475,124 @@
     el.modelSelect.value = current;
   }
 
+  // ---------- Kosten und Verlauf ----------
+
+  async function loadAiStats() {
+    try {
+      state.stats = await api.getAiStats();
+    } catch {
+      state.stats = null;
+    }
+    renderStats();
+  }
+
+  function renderStats() {
+    const st = state.stats;
+    if (!st || !st.usage) return;
+    const u = st.usage;
+    const b = u.budget;
+    el.costMonth.textContent = usd(u.totals.cost);
+    const box = el.costBar.closest('.budget');
+    box.classList.remove('ok', 'warn', 'tight', 'blocked', 'none');
+    box.classList.add(b.level);
+    el.costBar.style.width = b.limit ? `${Math.min(100, Math.round(b.ratio * 100))}%` : '0%';
+    el.costNote.textContent = b.limit
+      ? (b.level === 'blocked' ? `Limit von $${b.limit.toFixed(2)} erreicht` : `${Math.round(b.ratio * 100)} % von $${b.limit.toFixed(2)} · noch ${usd(b.left)}`)
+      : 'Kein Limit gesetzt';
+    el.costEstimate.textContent = u.estimate ? `≈ ${usd(u.estimate)}` : '–';
+    el.costSession.textContent = `${usd(u.session.cost)} · ${u.session.requests} ${u.session.requests === 1 ? 'Anfrage' : 'Anfragen'}`;
+    el.costTokens.textContent = `${tokens(u.totals.input + u.totals.cacheWrite + u.totals.cacheRead)} ein · ${tokens(u.totals.output)} aus`;
+    el.modelUsage.textContent = '';
+    for (const m of u.models) {
+      const row = document.createElement('div');
+      row.className = 'usage-row';
+      const name = document.createElement('span');
+      name.className = 'row-label';
+      name.textContent = m.name;
+      const value = document.createElement('span');
+      value.className = 'row-value';
+      value.textContent = `${m.requests}× · ${usd(m.cost)}`;
+      row.append(name, value);
+      el.modelUsage.appendChild(row);
+    }
+    el.recentCount.textContent = u.recent.length ? String(u.recent.length) : '';
+    el.recentList.textContent = '';
+    for (const r of u.recent) {
+      const row = document.createElement('div');
+      const left = document.createElement('span');
+      left.textContent = `${clock(r.time)} · ${r.purpose} · ${(r.model || '').replace(/^claude-/, '')}`;
+      const right = document.createElement('span');
+      right.textContent = `${tokens(r.input)}/${tokens(r.output)} · ${usd(r.cost)}`;
+      row.append(left, right);
+      el.recentList.appendChild(row);
+    }
+    renderHistoryList(st.history || []);
+  }
+
+  const TASK_STATUS = { done: 'Erledigt', partial: 'Teilweise', error: 'Fehler', aborted: 'Gestoppt', stopped: 'Angehalten', limit: 'Limit erreicht', running: 'Läuft', interrupted: 'Unterbrochen' };
+
+  function renderHistoryList(list) {
+    el.historyList.textContent = '';
+    for (const t of list.slice(0, 25)) {
+      const item = document.createElement('details');
+      item.className = 'hist';
+      const sum = document.createElement('summary');
+      const dot = document.createElement('i');
+      dot.className = `hist-dot ${t.status}`;
+      dot.title = TASK_STATUS[t.status] || t.status;
+      const title = document.createElement('span');
+      title.className = 'hist-title';
+      title.textContent = t.title || 'Aufgabe';
+      const meta = document.createElement('span');
+      meta.className = 'hist-meta';
+      meta.textContent = `${clock(t.started)} · ${usd(t.cost)}`;
+      sum.append(dot, title, meta);
+      const body = document.createElement('div');
+      body.className = 'hist-body';
+      const head = document.createElement('div');
+      head.className = 'hist-models';
+      const modelNames = (t.models || []).map((m) => modelLabel(m)).join(' → ') || '–';
+      head.textContent = `${TASK_STATUS[t.status] || t.status}${t.verified === false ? ' (nicht geprüft)' : ''} · ${modelNames} · ${tokens((t.tokens?.input || 0) + (t.tokens?.output || 0))} Tokens${t.escalations?.length ? ` · ${t.escalations.length}× gewechselt` : ''}`;
+      body.appendChild(head);
+      if (t.error) {
+        const err = document.createElement('div');
+        err.className = 'hist-step error';
+        err.textContent = t.error;
+        body.appendChild(err);
+      }
+      for (const step of (t.steps || []).slice(-40)) {
+        const row = document.createElement('div');
+        row.className = `hist-step ${step.status}`;
+        const time = document.createElement('time');
+        time.textContent = new Date(step.time).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const label = document.createElement('span');
+        label.textContent = step.label;
+        row.append(time, label);
+        body.appendChild(row);
+      }
+      item.append(sum, body);
+      el.historyList.appendChild(item);
+    }
+  }
+
+  // Zweimal klicken für Löschendes
+  function confirmTwice(button, text, action) {
+    if (button.dataset.armed) {
+      delete button.dataset.armed;
+      button.textContent = button.dataset.label;
+      action();
+      return;
+    }
+    button.dataset.label = button.textContent;
+    button.dataset.armed = '1';
+    button.textContent = text;
+    setTimeout(() => {
+      if (!button.dataset.armed) return;
+      delete button.dataset.armed;
+      button.textContent = button.dataset.label;
+    }, 3500);
+  }
+
   async function loadModels() {
     const result = await api.listModels();
     state.models = result.models || [];
@@ -1265,6 +1642,33 @@
     renderEmpty();
   });
 
+  el.keyRevoke.addEventListener('click', () => confirmTwice(el.keyRevoke, 'Wirklich? Key wird hier gelöscht', async () => {
+    state.settings = await api.revokeKey();
+    footer(el.keyMsg, 'Key gelöscht. Sperre ihn jetzt in der Claude Console (dort auf «Delete» beim Key).', 'ok');
+    fillSettings();
+    renderEmpty();
+  }));
+  el.providerSelect.addEventListener('change', () => save({ provider: el.providerSelect.value }));
+  el.autoToggle.addEventListener('change', async () => { await save({ autoModel: el.autoToggle.checked }); fillSettings(); });
+  el.routeToggle.addEventListener('change', async () => { await save({ showRouting: el.routeToggle.checked }); renderHistory(); });
+  el.limitSelect.addEventListener('change', async () => { await save({ monthlyLimit: Number(el.limitSelect.value) }); loadAiStats(); });
+  el.permMedium.addEventListener('change', () => save({ permissions: { medium: el.permMedium.value } }));
+  el.permHigh.addEventListener('change', () => save({ permissions: { high: el.permHigh.value } }));
+  el.historyToggle.addEventListener('change', () => save({ historyEnabled: el.historyToggle.checked }));
+  el.historyClear.addEventListener('click', () => confirmTwice(el.historyClear, 'Wirklich löschen?', async () => {
+    await api.clearHistory();
+    loadAiStats();
+  }));
+  el.usageReset.addEventListener('click', () => confirmTwice(el.usageReset, 'Wirklich zurücksetzen?', async () => {
+    await api.resetUsage();
+    loadAiStats();
+  }));
+  el.rollbackBtn.addEventListener('click', () => confirmTwice(el.rollbackBtn, 'Buddy startet danach neu. Nochmals klicken', async () => {
+    el.rollbackBtn.disabled = true;
+    const result = await api.rollbackUpdate();
+    el.rollbackBtn.disabled = false;
+    if (result && !result.ok) el.updateStatus.textContent = result.error || 'Ging nicht';
+  }));
   el.workspaceInput.addEventListener('change', () => save({ workspaceId: el.workspaceInput.value.trim() }));
   el.modelSelect.addEventListener('change', () => save({ model: el.modelSelect.value }));
   el.effortSeg.addEventListener('click', async (e) => {

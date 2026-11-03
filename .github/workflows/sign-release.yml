@@ -1,0 +1,54 @@
+name: Release signieren
+
+# Hängt eine Update-Signatur an ein bestehendes Release.
+# Mit dem Secret BUDDY_UPDATE_SIGNING_KEY wird neu signiert, sonst wird die
+# Datei release-signatures/v<Version>.json aus dem Repo genommen. In beiden
+# Fällen wird vor dem Hochladen gegen latest.yml und den Installer geprüft.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, z. B. 0.3.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Release-Dateien holen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          case "$VERSION" in *[!0-9.]*|'') echo "Ungültige Version"; exit 1;; esac
+          mkdir -p rel
+          gh release download "v$VERSION" --dir rel --pattern latest.yml --pattern 'BuddyIsland-Setup-*.exe' --clobber
+      - name: Signieren oder vorhandene Signatur nehmen
+        env:
+          BUDDY_UPDATE_SIGNING_KEY: ${{ secrets.BUDDY_UPDATE_SIGNING_KEY }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set +e
+          node scripts/sign-update.js rel/latest.yml rel/update-signature.json
+          code=$?
+          set -e
+          if [ "$code" = "2" ]; then
+            test -f "release-signatures/v$VERSION.json" || { echo "Weder Secret noch release-signatures/v$VERSION.json vorhanden"; exit 1; }
+            cp "release-signatures/v$VERSION.json" rel/update-signature.json
+          elif [ "$code" != "0" ]; then
+            exit "$code"
+          fi
+          node scripts/sign-update.js --verify rel/update-signature.json rel/latest.yml rel/BuddyIsland-Setup-*.exe
+      - name: Hochladen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: gh release upload "v$VERSION" rel/update-signature.json --clobber

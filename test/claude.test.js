@@ -91,3 +91,49 @@ function sseResponse(events, status = 200) {
   assert.strictEqual(tools.describe('set_timer', { minutes: 10, label: 'Pizza' }), 'Timer 10 Min. · Pizza');
   console.log('Tool-Tests ok');
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// Wiederholungen bei Überlastung, strukturierte Ausgabe, Cache-Tokens
+(async () => {
+  let count = 0;
+  const bodies = [];
+  const client = createClient(async (url, init) => {
+    count += 1;
+    bodies.push(JSON.parse(init.body));
+    if (count === 1) return new Response(JSON.stringify({ error: { type: 'overloaded_error', message: 'Overloaded' } }), { status: 529, headers: { 'retry-after': '0.01' } });
+    if (count === 2) throw new TypeError('fetch failed');
+    return sseResponse([
+      ['message_start', { message: { usage: { input_tokens: 7, cache_read_input_tokens: 900, cache_creation_input_tokens: 50 } } }],
+      ['content_block_start', { index: 0, content_block: { type: 'text', text: '' } }],
+      ['content_block_delta', { index: 0, delta: { type: 'text_delta', text: '{"ok":true}' } }],
+      ['message_delta', { delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 4 } }],
+    ]);
+  });
+  const retries = [];
+  const realSetTimeout = global.setTimeout;
+  global.setTimeout = (fn, ms, ...a) => realSetTimeout(fn, Math.min(ms, 5), ...a); // Wartezeiten im Test kürzen
+  const r = await client.json({ apiKey: 'k', model: 'claude-haiku-5-5', prompt: 'x', schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false } });
+  global.setTimeout = realSetTimeout;
+  assert.deepStrictEqual(r.data, { ok: true });
+  assert.strictEqual(count, 3, 'zwei kontrollierte Wiederholungen');
+  assert.strictEqual(bodies[2].output_config.format.type, 'json_schema');
+  assert.strictEqual(r.usage.cache_read_input_tokens, 900);
+  assert.strictEqual(r.usage.output_tokens, 4);
+
+  // 400 wegen format: ohne format nochmals
+  let n2 = 0;
+  const c2 = createClient(async (url, init) => {
+    n2 += 1;
+    if (n2 === 1) return new Response(JSON.stringify({ error: { type: 'invalid_request_error', message: 'output_config.format: json_schema not supported for this model' } }), { status: 400 });
+    assert.ok(!JSON.parse(init.body).output_config?.format);
+    return sseResponse([['content_block_start', { index: 0, content_block: { type: 'text', text: '' } }], ['content_block_delta', { index: 0, delta: { type: 'text_delta', text: 'Hier: {"ok":false}' } }], ['message_delta', { delta: { stop_reason: 'end_turn' } }]]);
+  });
+  const r2 = await c2.json({ apiKey: 'k', model: 'm', prompt: 'x', schema: { type: 'object' } });
+  assert.deepStrictEqual(r2.data, { ok: false }, 'JSON auch aus freiem Text');
+
+  // 401 wird nicht wiederholt
+  let n3 = 0;
+  const c3 = createClient(async () => { n3 += 1; return new Response(JSON.stringify({ error: { type: 'authentication_error', message: 'invalid' } }), { status: 401 }); });
+  await assert.rejects(c3.streamMessage({ apiKey: 'k', messages: [] }), /ungültig/);
+  assert.strictEqual(n3, 1);
+  console.log('Wiederholungs-Tests ok');
+})().catch((e) => { console.error(e); process.exit(1); });

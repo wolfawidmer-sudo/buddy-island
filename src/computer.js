@@ -14,6 +14,7 @@ const os = require('os');
 
 const SHOT_LONG_EDGE = 1366; // gute Balance aus Lesbarkeit, Tempo und Kosten
 const HELPER_IDLE_MS = 2 * 60 * 1000;
+const HELPER_COMMAND_TIMEOUT_MS = 15000;
 const MAX_WAIT_S = 30;
 
 // ---------- PowerShell-Helfer ----------
@@ -228,8 +229,24 @@ class InputHelper {
     await this.start();
     this.touch();
     return new Promise((resolve, reject) => {
-      this.queue.push({ resolve, reject });
-      this.proc.stdin.write(JSON.stringify(cmd) + '\n');
+      // Hängt der Helfer, nicht ewig warten: neu starten, sobald er wieder gebraucht wird
+      const timer = setTimeout(() => {
+        const err = new Error('Der Steuerungs-Helfer reagiert nicht. Er wird neu gestartet.');
+        err.timeout = true;
+        this.stop();
+        reject(err);
+      }, HELPER_COMMAND_TIMEOUT_MS);
+      this.queue.push({
+        resolve: (v) => { clearTimeout(timer); resolve(v); },
+        reject: (e) => { clearTimeout(timer); reject(e); },
+      });
+      try {
+        this.proc.stdin.write(JSON.stringify(cmd) + '\n');
+      } catch (err) {
+        clearTimeout(timer);
+        this.stop();
+        reject(new Error('Der Steuerungs-Helfer ist nicht erreichbar.'));
+      }
     });
   }
 
@@ -240,6 +257,11 @@ class InputHelper {
 
   stop() {
     clearTimeout(this.idleTimer);
+    const pending = this.queue.splice(0);
+    if (pending.length) {
+      const err = new Error('Der Steuerungs-Helfer wurde beendet.');
+      pending.forEach((p) => p.reject(err));
+    }
     if (this.proc) {
       try { this.proc.stdin.end(); } catch { /* schon zu */ }
       try { this.proc.kill(); } catch { /* schon weg */ }

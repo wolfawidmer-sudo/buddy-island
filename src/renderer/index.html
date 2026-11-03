@@ -93,8 +93,12 @@
         <section class="view settings" id="settingsView" hidden>
           <div class="settings-scroll">
 
-            <h3 class="section">Claude</h3>
+            <h3 class="section">KI-Anbieter</h3>
             <div class="group">
+              <label class="row">
+                <span class="row-label">Anbieter</span>
+                <select id="providerSelect" class="row-select"></select>
+              </label>
               <div class="row">
                 <span class="row-label">API-Key</span>
                 <span class="row-value" id="keyStatus">Nicht verbunden</span>
@@ -108,25 +112,102 @@
                 <summary><span class="row-label">Workspace-ID</span><span class="row-value">nur falls nötig</span></summary>
                 <input id="workspaceInput" type="text" placeholder="wrkspc_…" spellcheck="false" aria-label="Workspace-ID">
               </details>
+              <button type="button" class="row row-button left danger" id="keyRevoke" hidden>Key widerrufen …</button>
             </div>
             <p class="footer" id="keyMsg"></p>
-            <p class="footer">Den Key erstellst du in der <a href="https://platform.claude.com/settings/keys">Claude Console</a>. Er wird verschlüsselt auf diesem PC gespeichert und nur an Claude geschickt.</p>
+            <p class="footer">Den Key erstellst du in der <a href="https://platform.claude.com/settings/keys">Claude Console</a>. Buddy speichert ihn mit der Windows-Verschlüsselung (DPAPI), schreibt ihn nie ins Protokoll und schickt ihn nur an api.anthropic.com. «Widerrufen» löscht ihn hier und öffnet die Console, wo du ihn endgültig sperrst.</p>
 
-            <h3 class="section">Modell</h3>
+            <h3 class="section">Modell und Denktiefe</h3>
             <div class="group">
               <label class="row">
-                <span class="row-label">Modell</span>
+                <span class="row-label">Automatische Modellwahl</span>
+                <span class="switch"><input type="checkbox" id="autoToggle"><span></span></span>
+              </label>
+              <label class="row">
+                <span class="row-label" id="modelLabel">Modell</span>
                 <select id="modelSelect" class="row-select"></select>
               </label>
               <div class="row stacked">
                 <span class="row-label">Denktiefe</span>
                 <div class="segmented" id="effortSeg" role="radiogroup" aria-label="Denktiefe">
+                  <button type="button" data-value="auto">Auto</button>
                   <button type="button" data-value="low">Schnell</button>
                   <button type="button" data-value="medium">Normal</button>
                   <button type="button" data-value="high">Gründlich</button>
                 </div>
               </div>
+              <label class="row">
+                <span class="row-label">Modellwahl im Chat anzeigen</span>
+                <span class="switch"><input type="checkbox" id="routeToggle"><span></span></span>
+              </label>
             </div>
+            <p class="footer" id="routeHint"></p>
+
+            <h3 class="section">Kosten</h3>
+            <div class="group">
+              <div class="row stacked budget">
+                <div class="budget-head"><span class="row-label">Diesen Monat</span><span class="budget-value" id="costMonth">$0.00</span></div>
+                <div class="budget-bar"><i id="costBar"></i></div>
+                <span class="budget-note" id="costNote"></span>
+              </div>
+              <label class="row">
+                <span class="row-label">Ausgabenlimit pro Monat</span>
+                <select id="limitSelect" class="row-select">
+                  <option value="0">Kein Limit</option>
+                  <option value="1">$1</option>
+                  <option value="2">$2</option>
+                  <option value="5">$5</option>
+                  <option value="10">$10</option>
+                  <option value="20">$20</option>
+                  <option value="50">$50</option>
+                  <option value="100">$100</option>
+                </select>
+              </label>
+              <div class="row"><span class="row-label">Hochrechnung für den Monat</span><span class="row-value" id="costEstimate">–</span></div>
+              <div class="row"><span class="row-label">Seit dem Start von Buddy</span><span class="row-value" id="costSession">–</span></div>
+              <div class="row"><span class="row-label">Tokens diesen Monat</span><span class="row-value" id="costTokens">–</span></div>
+              <div id="modelUsage"></div>
+              <details class="row disclosure" id="recentBox">
+                <summary><span class="row-label">Letzte Anfragen</span><span class="row-value" id="recentCount"></span></summary>
+                <div class="mini-list" id="recentList"></div>
+              </details>
+              <button type="button" class="row row-button left danger" id="usageReset">Statistik zurücksetzen</button>
+            </div>
+            <p class="footer">Geschätzt aus den Token-Zahlen der API und den Preisen von Anthropic, in US-Dollar. Massgebend ist die Abrechnung in der Claude Console. Ab 80 % des Limits nimmt Buddy kein Opus mehr, ab 95 % nur noch Haiku, bei 100 % hält er an.</p>
+
+            <h3 class="section">Berechtigungen</h3>
+            <div class="group">
+              <div class="row">
+                <span class="row-label two">Niedriges Risiko<small>Lesen, Programme öffnen, Bildschirmfotos</small></span>
+                <span class="row-value">Immer erlaubt</span>
+              </div>
+              <label class="row">
+                <span class="row-label two">Mittleres Risiko<small>Dateien verschieben, App-Einstellungen, Software installieren</small></span>
+                <select id="permMedium" class="row-select">
+                  <option value="ask">Pro Aufgabe fragen</option>
+                  <option value="allow">Ohne Nachfrage</option>
+                </select>
+              </label>
+              <label class="row">
+                <span class="row-label two">Hohes Risiko<small>Löschen, Admin-Befehle, System und Sicherheit</small></span>
+                <select id="permHigh" class="row-select">
+                  <option value="ask">Jedes Mal fragen</option>
+                  <option value="block">Nie erlauben</option>
+                </select>
+              </label>
+            </div>
+            <p class="footer">Buddy läuft ohne Administratorrechte, arbeitet mit Dateien nur in deinen Benutzerordnern, löscht nur in den Papierkorb und schaltet Windows-Sicherheitsfunktionen nie ab.</p>
+
+            <h3 class="section">Ausführungsverlauf</h3>
+            <div class="group">
+              <label class="row">
+                <span class="row-label">Verlauf speichern</span>
+                <span class="switch"><input type="checkbox" id="historyToggle"><span></span></span>
+              </label>
+              <div id="historyList" class="history"></div>
+              <button type="button" class="row row-button left danger" id="historyClear">Verlauf löschen</button>
+            </div>
+            <p class="footer">Bleibt auf diesem PC. Gespeichert werden ein kurzer Titel, die Schritte, Modelle und Kosten, aber keine Antworten.</p>
 
             <h3 class="section">PC-Steuerung</h3>
             <div class="group">
@@ -302,6 +383,7 @@
                 <span class="row-value" id="updateStatus">–</span>
                 <button type="button" class="button small" id="updateBtn">Prüfen</button>
               </div>
+              <button type="button" class="row row-button left" id="rollbackBtn" hidden>Vorherige Version wiederherstellen</button>
               <button type="button" class="row row-button left" id="diagBtn">Selbsttest starten</button>
               <div id="diagList" class="diag" hidden></div>
               <button type="button" class="row row-button left" id="logsBtn">Log-Ordner öffnen</button>
