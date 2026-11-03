@@ -28,8 +28,8 @@ const FALLBACK_MODELS = [
 
 // Gemeinsamer Fehlertyp aller Anbieter (Name bleibt für ältere Stellen erhalten)
 class ClaudeError extends ProviderError {
-  constructor(status, raw, type) {
-    super(status, raw, type, 'Claude');
+  constructor(status, raw, type, ctx = {}) {
+    super(status, raw, type, 'Claude', { providerId: 'anthropic', endpoint: 'https://api.anthropic.com/v1/messages', apiVersion: '2023-06-01', ...ctx });
   }
 }
 
@@ -74,6 +74,19 @@ function wait(ms, signal) {
 }
 
 // Liest einen Server-Sent-Events-Stream und liefert { event, data } Objekte.
+// Blöcke so weitergeben, wie die Messages API sie kennt: «meta» (Gemini-Signaturen u. Ä.)
+// und interne Markierungen weg, alles andere (auch Denk-Blöcke mit Signatur) unverändert.
+function cleanMessages(messages) {
+  return (messages || []).map((m) => {
+    if (!Array.isArray(m.content)) return m;
+    return { ...m, content: m.content.map((b) => {
+      if (!b || typeof b !== 'object' || !('meta' in b)) return b;
+      const { meta, ...rest } = b;
+      return rest;
+    }) };
+  });
+}
+
 async function* parseSSE(body, onChunk) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -192,8 +205,9 @@ function createClient(fetchImpl = globalThis.fetch) {
   // Gibt zusätzlich alle Content-Blöcke zurück (Text, Denk-Blöcke mit Signatur,
   // Tool-Aufrufe), damit sie in einer Tool-Schleife unverändert zurückgehen können.
   // format: JSON-Schema für strukturierte Antworten (z. B. für den Router).
-  async function streamMessage({ apiKey, workspaceId, model, system, messages, tools, maxTokens, effort, format, signal, onText, onRetry }) {
-    const body = { model, max_tokens: maxTokens, messages, stream: true };
+  async function streamMessage({ apiKey, workspaceId, model, system, messages, tools, maxTokens, effort, format, signal, onText, onRetry, stream = true }) {
+    // Nur Felder, die die Messages API kennt (Metadaten anderer Anbieter weglassen)
+    const body = { model, max_tokens: maxTokens, messages: cleanMessages(messages), stream: stream !== false };
     if (system && system.trim()) body.system = system.trim();
     if (tools && tools.length) body.tools = tools;
     const outputConfig = {};
@@ -247,6 +261,19 @@ function createClient(fetchImpl = globalThis.fetch) {
     }
 
     const { response, local } = attempt;
+    if (body.stream === false) {
+      let data;
+      try { data = await response.json(); } catch { attempt.cleanup(); throw new ClaudeError(response.status, 'Antwort ist kein JSON', 'parse_error', { stage: 'parse' }); }
+      attempt.cleanup();
+      const content = Array.isArray(data?.content) ? data.content : [];
+      for (const b of content) if (b.type === 'text' && b.text) onText?.(b.text);
+      const u = data?.usage || {};
+      return {
+        stopReason: data?.stop_reason || null,
+        usage: { input_tokens: u.input_tokens || 0, output_tokens: u.output_tokens || 0, cache_creation_input_tokens: u.cache_creation_input_tokens || 0, cache_read_input_tokens: u.cache_read_input_tokens || 0 },
+        content, droppedComputer, droppedFormat,
+      };
+    }
     let stopReason = null;
     const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
     const takeUsage = (u) => {
@@ -301,14 +328,14 @@ function createClient(fetchImpl = globalThis.fetch) {
           stopReason = data.delta?.stop_reason || stopReason;
           takeUsage(data.usage);
         } else if (event === 'error') {
-          throw new ClaudeError(0, data.error?.message || 'Stream-Fehler', data.error?.type);
+          throw new ClaudeError(0, data.error?.message || 'Stream-Fehler', data.error?.type, { stage: 'stream' });
         }
       }
     } catch (err) {
-      if (idleHit) throw new ClaudeError(0, '', 'timeout_error');
+      if (idleHit) throw new ClaudeError(0, '', 'timeout_error', { stage: 'stream' });
       if (signal?.aborted || err?.name === 'AbortError') throw abortError();
       if (err instanceof ProviderError) throw err;
-      throw new ClaudeError(0, '');
+      throw new ClaudeError(0, '', '', { stage: 'stream' });
     } finally {
       clearTimeout(idle);
       attempt.cleanup();

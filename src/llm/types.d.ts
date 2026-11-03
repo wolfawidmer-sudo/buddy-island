@@ -7,7 +7,7 @@
 // Agent, Router und Verlauf vom Anbieter unabhängig.
 
 export type ProviderId = 'anthropic' | 'openai' | 'xai' | 'gemini' | 'huggingface';
-export type ProviderKind = 'anthropic' | 'openai' | 'huggingface';
+export type ProviderKind = 'anthropic' | 'openai' | 'gemini' | 'huggingface';
 export type Tier = 'haiku' | 'sonnet' | 'opus';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -67,10 +67,12 @@ export interface Usage {
   cache_read_input_tokens: number;
 }
 
-export interface TextBlock { type: 'text'; text: string }
+export interface TextBlock { type: 'text'; text: string; meta?: ProviderMeta }
 export interface ImageBlock { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
 export interface ThinkingBlock { type: 'thinking'; thinking: string; signature?: string }
-export interface ToolUseBlock { type: 'tool_use'; id: string; name: string; input: Record<string, unknown>; toolset_name?: string }
+/** Anbieter-eigene Fortsetzungsdaten (z. B. Gemini thoughtSignature), nur für denselben Anbieter */
+export interface ProviderMeta { provider?: string; thoughtSignature?: string; callId?: string }
+export interface ToolUseBlock { type: 'tool_use'; id: string; name: string; input: Record<string, unknown>; toolset_name?: string; meta?: ProviderMeta }
 export interface ToolResultBlock {
   type: 'tool_result';
   tool_use_id: string;
@@ -108,6 +110,8 @@ export interface StreamRequest {
   signal?: AbortSignal;
   onText?: (text: string) => void;
   onRetry?: (attempt: number, error: Error) => void;
+  /** false: ohne Streaming (eine Antwort am Stück). Standard: Streaming */
+  stream?: boolean;
 }
 
 export interface StreamResult {

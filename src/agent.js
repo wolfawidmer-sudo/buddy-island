@@ -4,6 +4,7 @@
 
 const crypto = require('crypto');
 const { t, language } = require('./i18n');
+const { publicError, diagnosticLine } = require('./llm/errors');
 
 // Anfragen, die den Bildschirm brauchen (für die Rückmeldung bei Modellen ohne Bildverarbeitung)
 const SCREEN_REQUEST = /\b(bildschirm|screenshot|bildschirmfoto|klick\w*|steuer\w*|maus|screen|click|écran|cliqu\w*|schermo|clicc\w*)\b/i;
@@ -816,10 +817,12 @@ function createAgent(deps) {
         task?.finish('aborted');
         send('chat:done', { id, stopReason: 'aborted', usage: summaryUsage() });
       } else {
-        log(`Agent-Fehler: ${err.status || ''} ${err.type || ''} ${err.raw || err.message || err}`);
-        if (err?.status === 401 || err?.type === 'authentication_error') onAuthError?.();
+        const info = publicError(err);
+        log(`Agent-Fehler: ${diagnosticLine(err)}`);
+        // Nur den Key des Anbieters sperren, der ihn wirklich abgelehnt hat
+        if (info.category === 'auth') onAuthError?.(info.providerId || providerId);
         task?.finish('error', { error: err.message });
-        send('chat:error', { id, message: err.message || String(err), code: err?.status === 401 ? 'key' : undefined });
+        send('chat:error', { id, message: err.message || String(err), code: info.category === 'auth' ? 'key' : undefined, error: info });
       }
     } finally {
       endControl();

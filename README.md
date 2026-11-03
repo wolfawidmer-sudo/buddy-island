@@ -18,6 +18,7 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 - **Notch-Modus**: Island mit der Maus nach oben ziehen, und es wird zu einem winzigen Notch am Bildschirmrand. Nach unten ziehen holt es zurück.
 - **Mehrere KI-Anbieter**: Anthropic Claude, OpenAI, xAI Grok, Google Gemini oder ein lokales Modell über Hugging Face Transformers. Alle hängen an einer gemeinsamen Schnittstelle (`LlmClient`), jeder Anbieter hat eine Fähigkeitsmatrix (Bilder, Werkzeuge, PC-Steuerung, strukturierte Ausgabe). Kann ein Modell etwas nicht, sagt Buddy das im Island, statt abzustürzen.
 - **Lokal zuerst**: Ohne API-Key wählt Buddy automatisch ein lokales Modell. Er misst Arbeitsspeicher, Prozessor und Grafikkarte, empfiehlt das schnellste und das beste Modell und richtet Python, PyTorch, Transformers und das Modell mit einem Klick ein (nur für deinen Benutzer, ohne Administratorrechte). Einen API-Key kannst du jederzeit in den Einstellungen ergänzen.
+- **Verbindungstest**: Einstellungen → «Provider & API-Keys» → «Verbindung testen» prüft jeden verbundenen Anbieter Schritt für Schritt (Key und Modellliste, einfache Antwort ohne Streaming, Streaming, Verlauf, Werkzeug mit Fortsetzung, parallele Werkzeuge, Router). Fehler nennen Anbieter, Modell, HTTP-Status und Stufe; der kopierbare Bericht enthält keine Keys.
 - **Spricht deine Sprache**: Oberfläche, Meldungen und Anweisungen an die KI folgen beim Start der Windows-Sprache (Deutsch, Englisch, Französisch; sonst englische Oberfläche, Antworten trotzdem in deiner Sprache).
 - **Erkennt deine Tools**: Claude Code, Codex, Gemini CLI, Grok CLI, ChatGPT, Hugging Face und mehr werden im Hintergrund erkannt. Was nicht installiert ist, erscheint nirgends.
 - **Musik-Visualizer**: Die Balken im Island folgen dem echten Pegel der Windows-Tonausgabe (WASAPI-Pegelanzeige, nichts wird aufgenommen).
@@ -127,7 +128,7 @@ Im Leerlauf läuft keine einzige Endlos-Animation: Das Fenster ist dann nur so g
 | Datei | Aufgabe |
 | --- | --- |
 | `src/main.js` | Fenster, Tastenkürzel, Updates, Verbindung der Teile |
-| `src/llm/` | Anbieter-Schnittstelle (`types.d.ts`), OpenAI-kompatibler Adapter (OpenAI, xAI, Gemini), lokaler Hugging-Face-Adapter, gemeinsame Fehler |
+| `src/llm/` | Anbieter-Schnittstelle (`types.d.ts`), Adapter mit dem jeweils eigenen Protokoll: OpenAI/xAI (Chat Completions), Gemini (nativ `generateContent` mit `thoughtSignature`), lokal (Transformers); gemeinsame Fehlerklassen und Verbindungstest (`health.js`) |
 | `src/claude.js` | Claude Messages API (Streaming, Prompt-Caching, Wiederholungen, Zeitlimits) |
 | `src/discovery.js` | Erkennt installierte KI-Tools und Laufzeiten |
 | `src/system-specs.js` | Liest die Hardware und empfiehlt lokale Modelle |

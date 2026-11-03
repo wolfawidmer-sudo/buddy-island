@@ -1,4 +1,4 @@
-// Tests für die Multi-Provider-Schicht: OpenAI-kompatibler Adapter (OpenAI, Grok, Gemini),
+// Tests für die Multi-Provider-Schicht: OpenAI-kompatibler Adapter (OpenAI, Grok; Gemini nativ in matrix.test.js),
 // Fähigkeiten, Agent mit Anbietern ohne Computer Use oder ohne Werkzeuge, Router, Hardware-Empfehlung, Sprache.
 const assert = require('assert');
 const models = require('../src/models');
@@ -55,7 +55,7 @@ function sse(chunks, status = 200) {
   const calls = [];
   const fetchImpl = async (url, init) => {
     calls.push({ url, body: init.body ? JSON.parse(init.body) : null, auth: init.headers.authorization });
-    if (url.endsWith('/models')) return new Response(JSON.stringify({ data: [{ id: 'models/gemini-2.5-flash' }, { id: 'models/text-embedding-004' }] }));
+    if (url.endsWith('/models')) return new Response(JSON.stringify({ data: [{ id: 'gpt-4o-mini' }, { id: 'text-embedding-3-small' }] }));
     if (calls.filter((c) => c.url.endsWith('/chat/completions')).length === 1) {
       return new Response(JSON.stringify({ error: { message: 'Invalid parameter: response_format json_schema not supported', type: 'invalid_request_error' } }), { status: 400 });
     }
@@ -69,12 +69,12 @@ function sse(chunks, status = 200) {
       '[DONE]',
     ]);
   };
-  const gemini = createOpenAiCompatClient({ provider: models.PROVIDERS.gemini, fetchImpl });
-  const list = await gemini.listModels('AIza-test');
-  assert.deepStrictEqual(list.map((m) => m.id), ['gemini-2.5-flash', 'text-embedding-004'], 'Präfix models/ entfernt');
+  const oac = createOpenAiCompatClient({ provider: models.PROVIDERS.openai, fetchImpl });
+  const list = await oac.listModels('sk-test');
+  assert.deepStrictEqual(list.map((m) => m.id), ['gpt-4o-mini', 'text-embedding-3-small']);
   let out = '';
-  const res = await gemini.streamMessage({
-    apiKey: 'AIza-test', model: 'gemini-2.5-flash', system: 'S', messages: [{ role: 'user', content: 'hi' }], maxTokens: 500, // pragma: allowlist secret
+  const res = await oac.streamMessage({
+    apiKey: 'sk-test', model: 'gpt-4o-mini', system: 'S', messages: [{ role: 'user', content: 'hi' }], maxTokens: 500, // pragma: allowlist secret
     tools: [{ name: 'list_files', description: '', input_schema: { type: 'object' } }, { type: 'computer_toolset_20260801' }],
     format: { type: 'object' }, onText: (x) => { out += x; },
   });
@@ -85,9 +85,9 @@ function sse(chunks, status = 200) {
   assert.strictEqual(res.droppedComputer, true);
   const chatCalls = calls.filter((c) => c.url.endsWith('/chat/completions'));
   assert.ok(chatCalls[0].body.response_format && !chatCalls[1].body.response_format, 'ohne response_format nochmals');
-  assert.strictEqual(chatCalls[1].body.max_tokens, 500, 'Gemini bekommt max_tokens');
-  assert.ok(chatCalls[0].url.startsWith('https://generativelanguage.googleapis.com/v1beta/openai/'));
-  assert.strictEqual(chatCalls[0].auth, 'Bearer AIza-test');
+  assert.strictEqual(chatCalls[1].body.max_completion_tokens, 500, 'OpenAI bekommt max_completion_tokens');
+  assert.ok(chatCalls[0].url.startsWith('https://api.openai.com/v1/'));
+  assert.strictEqual(chatCalls[0].auth, 'Bearer sk-test');
 
   // OpenAI: max_completion_tokens, reasoning_effort nur bei Modellen, die es kennen
   const oaCalls = [];
@@ -100,7 +100,7 @@ function sse(chunks, status = 200) {
 
   // Fehler sind verständlich und nennen den Anbieter
   const bad = createOpenAiCompatClient({ provider: models.PROVIDERS.xai, fetchImpl: async () => new Response(JSON.stringify({ error: { message: 'Incorrect API key provided', code: 'invalid_api_key' } }), { status: 401 }) });
-  await assert.rejects(bad.streamMessage({ apiKey: 'xai-x', model: 'grok-4.6', messages: [{ role: 'user', content: 'x' }], maxTokens: 10 }), /API-Key ist ungültig/); // pragma: allowlist secret
+  await assert.rejects(bad.streamMessage({ apiKey: 'xai-x', model: 'grok-4.6', messages: [{ role: 'user', content: 'x' }], maxTokens: 10 }), /hat den API-Key abgelehnt/); // pragma: allowlist secret
   let n529 = 0;
   const busy = createOpenAiCompatClient({ provider: models.PROVIDERS.xai, fetchImpl: async () => { n529 += 1; return new Response('{}', { status: 503 }); } });
   const realSetTimeout = global.setTimeout;

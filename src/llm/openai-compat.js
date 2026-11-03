@@ -1,6 +1,6 @@
 // @ts-check
 // Adapter für Anbieter mit OpenAI-kompatibler Chat-Completions-API:
-// OpenAI, xAI Grok (api.x.ai/v1) und Google Gemini (…/v1beta/openai).
+// OpenAI und xAI Grok (Chat Completions). Gemini hat einen eigenen, nativen Adapter (gemini.js).
 // Übersetzt Buddys Content-Block-Format (wie Claude) in Chat Completions und zurück,
 // inklusive Streaming, Function Calling, Bildern und strukturierten Antworten.
 
@@ -112,18 +112,18 @@ function mapStop(reason) {
 }
 
 /**
- * @param {{ provider: ProviderInfo, fetchImpl?: typeof fetch }} opts
+ * @param {{ provider: ProviderInfo, fetchImpl?: typeof fetch, connectTimeoutMs?: number, idleTimeoutMs?: number }} opts
  * @returns {LlmClient}
  */
-function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch }) {
+function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch, connectTimeoutMs = CONNECT_TIMEOUT_MS, idleTimeoutMs = IDLE_TIMEOUT_MS }) {
   const name = provider.name.replace(/^Google |^xAI /, '');
   const base = () => baseUrl(provider);
 
   /** @param {string} apiKey */
   const headers = (apiKey) => ({ authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' });
 
-  /** @param {Response} response */
-  async function toError(response) {
+  /** @param {Response} response @param {any} [ctx] */
+  async function toError(response, ctx = {}) {
     let raw = '';
     let type = '';
     try {
@@ -132,7 +132,7 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch }) {
       raw = e?.message || '';
       type = e?.type || e?.code || e?.status || '';
     } catch { /* kein JSON */ }
-    const err = new ProviderError(response.status, raw, String(type), name);
+    const err = new ProviderError(response.status, raw, String(type), name, { providerId: provider.id, endpoint: `${base()}/chat/completions`, ...ctx });
     const after = Number(response.headers?.get?.('retry-after'));
     if (Number.isFinite(after) && after > 0) err.retryAfterMs = Math.min(20000, after * 1000);
     return err;
@@ -146,11 +146,11 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch }) {
     try {
       response = await fetchImpl(`${base()}/models`, { headers: headers(apiKey), signal: local.signal });
     } catch {
-      throw new ProviderError(0, '', local.signal.aborted ? 'timeout_error' : '', name);
+      throw new ProviderError(0, '', local.signal.aborted ? 'timeout_error' : '', name, { providerId: provider.id, endpoint: `${base()}/models`, stage: 'models' });
     } finally {
       clearTimeout(timer);
     }
-    if (!response.ok) throw await toError(response);
+    if (!response.ok) throw await toError(response, { endpoint: `${base()}/models`, stage: 'models' });
     const json = await response.json();
     return (json.data || []).map((/** @type {any} */ m) => {
       const id = String(m.id || '').replace(/^models\//, '');
@@ -168,15 +168,15 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch }) {
     if (signal?.aborted) throw abortError();
     signal?.addEventListener('abort', onAbort, { once: true });
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; local.abort(); }, CONNECT_TIMEOUT_MS);
+    const timer = setTimeout(() => { timedOut = true; local.abort(); }, connectTimeoutMs);
     try {
       const response = await fetchImpl(`${base()}/chat/completions`, { method: 'POST', headers: headers(apiKey), body: JSON.stringify(body), signal: local.signal });
       return { response, local, cleanup: () => signal?.removeEventListener('abort', onAbort) };
     } catch (err) {
       signal?.removeEventListener('abort', onAbort);
-      if (timedOut) throw new ProviderError(0, '', 'timeout_error', name);
+      if (timedOut) throw new ProviderError(0, '', 'timeout_error', name, { providerId: provider.id, model: body.model, endpoint: `${base()}/chat/completions`, stage: 'connect' });
       if (signal?.aborted || /** @type {any} */ (err)?.name === 'AbortError') throw abortError();
-      throw new ProviderError(0, '', '', name);
+      throw new ProviderError(0, '', '', name, { providerId: provider.id, model: body.model, endpoint: `${base()}/chat/completions`, stage: 'connect' });
     } finally {
       clearTimeout(timer);
     }
@@ -196,8 +196,9 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch }) {
       }
       const { response } = result;
       if (response.ok || !RETRY_STATUS.has(response.status) || attempt >= RETRY_DELAYS.length) return result;
-      const err = await toError(response);
+      const err = await toError(response, { model: body.model });
       result.cleanup();
+      if (err.category === 'quota') throw err; // Warten hilft bei leerem Guthaben nicht
       onRetry?.(attempt + 1, err);
       await wait(err.retryAfterMs || RETRY_DELAYS[attempt], signal);
     }
@@ -210,12 +211,13 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch }) {
     const caps = info.caps;
     const converted = toChatTools(caps.tools ? tools : []);
     /** @type {any} */
+    let streaming = req.stream !== false;
     const body = {
       model,
       messages: toChatMessages(messages, system, caps),
-      stream: true,
-      stream_options: { include_usage: true },
+      stream: streaming,
     };
+    if (streaming) body.stream_options = { include_usage: true };
     // OpenAI möchte max_completion_tokens, die anderen kennen max_tokens
     if (provider.id === 'openai') body.max_completion_tokens = maxTokens;
     else body.max_tokens = maxTokens;
@@ -228,6 +230,8 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch }) {
     const optional = [
       { test: /response_format|json_schema|structured/i, drop: () => (body.response_format ? (delete body.response_format, droppedFormat = true, true) : false) },
       { test: /stream_options/i, drop: () => (body.stream_options ? (delete body.stream_options, true) : false) },
+      // z. B. «Your organization must be verified to stream this model»: dann ohne Streaming
+      { test: /stream/i, drop: () => (streaming ? (streaming = false, body.stream = false, delete body.stream_options, true) : false) },
       { test: /reasoning_effort/i, drop: () => (body.reasoning_effort ? (delete body.reasoning_effort, true) : false) },
       { test: /max_completion_tokens/i, drop: () => (body.max_completion_tokens ? (body.max_tokens = body.max_completion_tokens, delete body.max_completion_tokens, true) : false) },
       { test: /max_tokens/i, drop: () => (body.max_tokens ? (body.max_completion_tokens = body.max_tokens, delete body.max_tokens, true) : false) },
@@ -236,7 +240,7 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch }) {
     const used = new Set();
     let attempt = await post(apiKey, body, signal, onRetry);
     while (attempt.response.status === 400) {
-      const err = await toError(attempt.response);
+      const err = await toError(attempt.response, { model });
       attempt.cleanup();
       const i = optional.findIndex((o, n) => !used.has(n) && o.test.test(err.raw));
       if (i < 0 || !optional[i].drop()) throw err;
@@ -245,8 +249,9 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch }) {
     }
     if (!attempt.response.ok) {
       attempt.cleanup();
-      throw await toError(attempt.response);
+      throw await toError(attempt.response, { model });
     }
+    const ctx = { providerId: provider.id, model, endpoint: `${base()}/chat/completions` };
 
     const { response, local } = attempt;
     let text = '';
@@ -262,12 +267,28 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch }) {
     let idleHit = false;
     const kick = () => {
       clearTimeout(idle);
-      idle = setTimeout(() => { idleHit = true; local.abort(); }, IDLE_TIMEOUT_MS);
+      idle = setTimeout(() => { idleHit = true; local.abort(); }, idleTimeoutMs);
     };
+    /** Antwort am Stück (ohne Streaming) in dieselbe Form bringen wie die Stream-Stücke */
+    const fromMessage = (/** @type {any} */ data) => {
+      const choice = data?.choices?.[0] || {};
+      const msg = choice.message || {};
+      return [{ usage: data?.usage, choices: [{ delta: { content: msg.content || '', tool_calls: (msg.tool_calls || []).map((/** @type {any} */ tc, i) => ({ ...tc, index: i })) }, finish_reason: choice.finish_reason }] }];
+    };
+    async function* chunks() {
+      if (streaming) {
+        for await (const { data } of parseSSE(/** @type {any} */ (response.body), kick)) yield data;
+        return;
+      }
+      let data;
+      try { data = await response.json(); } catch { throw new ProviderError(response.status, 'Antwort ist kein JSON', 'parse_error', name, { ...ctx, stage: 'parse' }); }
+      if (data?.error) throw new ProviderError(response.status, data.error.message || '', data.error.type || data.error.code || '', name, { ...ctx, stage: 'request' });
+      yield* fromMessage(data);
+    }
     kick();
     try {
-      for await (const { data } of parseSSE(/** @type {any} */ (response.body), kick)) {
-        if (data?.error) throw new ProviderError(0, data.error.message || 'Stream-Fehler', data.error.type || '', name);
+      for await (const data of chunks()) {
+        if (data?.error) throw new ProviderError(0, data.error.message || 'Stream-Fehler', data.error.type || '', name, { ...ctx, stage: 'stream' });
         if (data?.usage) {
           const cached = Number(data.usage.prompt_tokens_details?.cached_tokens) || 0;
           usage.input_tokens = Math.max(0, (Number(data.usage.prompt_tokens) || 0) - cached);
@@ -292,10 +313,10 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch }) {
         if (choice.finish_reason) finish = choice.finish_reason;
       }
     } catch (err) {
-      if (idleHit) throw new ProviderError(0, '', 'timeout_error', name);
+      if (idleHit) throw new ProviderError(0, '', 'timeout_error', name, { ...ctx, stage: 'stream' });
       if (signal?.aborted || /** @type {any} */ (err)?.name === 'AbortError') throw abortError();
       if (err instanceof ProviderError) throw err;
-      throw new ProviderError(0, '', '', name);
+      throw new ProviderError(0, '', '', name, { ...ctx, stage: 'stream' });
     } finally {
       clearTimeout(idle);
       attempt.cleanup();

@@ -108,9 +108,9 @@ const PROVIDERS = {
     host: 'api.x.ai', baseUrl: 'https://api.x.ai/v1', needsKey: true, family: /^grok/i,
   },
   gemini: {
-    id: 'gemini', kind: 'openai', name: 'Google Gemini', keyPrefix: 'AIza',
+    id: 'gemini', kind: 'gemini', name: 'Google Gemini', keyPrefix: 'AIza',
     keyHint: 'Ein Gemini-API-Key beginnt mit «AIza».', consoleUrl: 'https://aistudio.google.com/apikey',
-    host: 'generativelanguage.googleapis.com', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', needsKey: true, family: /^(models\/)?gemini/i,
+    host: 'generativelanguage.googleapis.com', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', needsKey: true, family: /^(models\/)?gemini/i,
   },
   huggingface: {
     id: 'huggingface', kind: 'huggingface', name: 'Hugging Face (lokal)', keyPrefix: 'hf_',

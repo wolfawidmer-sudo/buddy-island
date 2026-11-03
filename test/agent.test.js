@@ -353,7 +353,7 @@ function setup({ steps, analysis, settings = {}, computer = false, files = null,
     });
     await agent.run({ id: 'k1', messages: [{ role: 'user', content: 'Analysiere bitte meine Ordnerstruktur und plane eine neue' }], send: (c, p) => events.push({ c, p }), signal: new AbortController().signal });
     const err = events.find((e) => e.c === 'chat:error');
-    assert.match(err.p.message, /API-Key ist ungültig/);
+    assert.match(err.p.message, /hat den API-Key abgelehnt/);
     assert.strictEqual(err.p.code, 'key');
     assert.strictEqual(authErrors, 1);
   }

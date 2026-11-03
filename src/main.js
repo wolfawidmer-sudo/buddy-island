@@ -1161,7 +1161,7 @@ function createAgentRuntime() {
     askControl: askToControl,
     askPermission,
     onControl: setControlling,
-    onAuthError: () => markKeyInvalid(currentProvider()),
+    onAuthError: (pid) => markKeyInvalid(pid || currentProvider()),
   });
 }
 
@@ -1839,6 +1839,50 @@ function setupIpc() {
   ipcMain.handle('history:clear', () => {
     history.clear();
     return [];
+  });
+
+  // Verbindungstest: jeder Anbieter mit Key (und das lokale Modell) einzeln, Schritt für Schritt
+  let healthRunning = null;
+  ipcMain.handle('llm:health', async (_e, { scope = 'all' } = {}) => {
+    if (healthRunning) return healthRunning;
+    healthRunning = (async () => {
+      const { runHealth, healthReport } = require('./llm/health');
+      const ids = scope === 'current' ? [currentProvider()] : Object.keys(models.PROVIDERS).filter((pid) => (pid === 'huggingface'
+        ? Boolean(getSecret('hfModel') && discovery?.peek()?.python)
+        : Boolean(getApiKey(pid))));
+      if (!ids.length) ids.push(currentProvider());
+      const results = [];
+      for (const pid of ids) {
+        const provider = models.PROVIDERS[pid];
+        const name = pid === 'huggingface' ? t('Lokal (Hugging Face)') : provider.name;
+        win?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'running' });
+        modelCache.delete(pid); // frisch fragen, nicht aus dem Zwischenspeicher
+        let modelIds = [];
+        try {
+          const tiers = models.resolveTiers(await availableModels(pid), pid);
+          if (settings.autoModel === false && models.providerOf(settings.model) === pid) modelIds = [settings.model];
+          else modelIds = [...new Set([tiers.sonnet || tiers.haiku || tiers.opus, tiers.haiku].filter(Boolean))];
+        } catch (err) {
+          log(`Verbindungstest ${pid}: Modelle nicht ermittelbar: ${err.message}`);
+        }
+        const key = pid === 'huggingface' ? 'lokal' : getApiKey(pid);
+        const r = await runHealth({
+          client: llm.client(pid), providerId: pid, apiKey: key, workspaceId: pid === 'anthropic' ? settings.workspaceId : undefined, models: modelIds,
+          onStep: (step) => win?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'step', step }),
+        });
+        const result = { ...r, providerName: name };
+        results.push(result);
+        log(`Verbindungstest ${pid}: ${r.ok ? 'ok' : 'FEHLER'} (${r.steps.map((x) => `${x.id}=${x.ok === null ? 'skip' : x.ok ? 'ok' : x.error?.category || 'fail'}`).join(', ')})`);
+        win?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'done', result });
+      }
+      const report = healthReport(results, { version: app.getVersion(), os: `${os.type()} ${os.release()}`, language: i18n.language() });
+      return { results, report };
+    })();
+    try {
+      return await healthRunning;
+    } finally {
+      healthRunning = null;
+    }
   });
 
   ipcMain.handle('models:list', async () => {

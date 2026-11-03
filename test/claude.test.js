@@ -42,7 +42,7 @@ function sseResponse(events, status = 200) {
 
   // Fehler-Mapping
   const bad = createClient(async () => new Response(JSON.stringify({ error: { type: 'authentication_error', message: 'invalid x-api-key' } }), { status: 401 }));
-  await assert.rejects(bad.listModels('k'), /API-Key ist ungültig/);
+  await assert.rejects(bad.listModels('k'), /hat den API-Key abgelehnt/);
   const off = createClient(async () => { throw new TypeError('fetch failed'); });
   await assert.rejects(off.listModels('k'), /Keine Verbindung/);
   const ws = createClient(async () => new Response(JSON.stringify({ error: { type: 'invalid_request_error', message: 'Please add the anthropic-workspace-id header' } }), { status: 400 }));
@@ -133,7 +133,7 @@ function sseResponse(events, status = 200) {
   // 401 wird nicht wiederholt
   let n3 = 0;
   const c3 = createClient(async () => { n3 += 1; return new Response(JSON.stringify({ error: { type: 'authentication_error', message: 'invalid' } }), { status: 401 }); });
-  await assert.rejects(c3.streamMessage({ apiKey: 'k', messages: [] }), /ungültig/);
+  await assert.rejects(c3.streamMessage({ apiKey: 'k', messages: [] }), /abgelehnt/);
   assert.strictEqual(n3, 1);
   console.log('Wiederholungs-Tests ok');
 })().catch((e) => { console.error(e); process.exit(1); });

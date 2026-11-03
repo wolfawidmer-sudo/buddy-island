@@ -693,12 +693,19 @@
     return node;
   }
 
-  function noticeNode(text, soft) {
+  function noticeNode(text, soft, detail) {
     const node = document.createElement('div');
     node.className = 'notice' + (soft ? ' soft' : '');
     const span = document.createElement('span');
     span.textContent = text;
     node.appendChild(span);
+    // Welcher Anbieter, welches Modell, welche Stufe: damit klar ist, wo es hakt
+    if (detail) {
+      const small = document.createElement('small');
+      small.className = 'notice-detail';
+      small.textContent = detail;
+      node.appendChild(small);
+    }
     return node;
   }
 
@@ -865,7 +872,7 @@
     scrollToBottom(false);
   }
 
-  function finishStream({ error, stopReason, usage }) {
+  function finishStream({ error, errorDetail, stopReason, usage }) {
     const s = state.stream;
     if (!s) return;
     if (s.raf) cancelAnimationFrame(s.raf);
@@ -895,7 +902,7 @@
     if (stopReason === 'refusal' && !text) el.messages.appendChild(noticeNode(t('Dabei kann ich leider nicht helfen.'), true));
 
     if (error) {
-      el.messages.appendChild(noticeNode(error));
+      el.messages.appendChild(noticeNode(error, false, errorDetail));
       state.status = 'error';
     } else if (stopReason === 'aborted') {
       state.status = 'idle';
@@ -922,9 +929,9 @@
     if (state.stream?.id === id) finishStream({ stopReason, usage });
   });
 
-  api.onError(({ id, message, code }) => {
+  api.onError(({ id, message, code, error }) => {
     if (state.stream?.id !== id) return;
-    finishStream({ error: message });
+    finishStream({ error: message, errorDetail: error?.detail || '' });
     if (code === 'key' && state.settings) {
       state.settings.keyStatus = 'invalid';
       renderEmpty();
@@ -1407,6 +1414,76 @@
 
   el.micBtn.addEventListener('click', startVoice);
 
+  // ---------- Verbindungstest ----------
+  const health = { running: false, groups: new Map(), report: '' };
+  function renderHealth() {
+    const list = $('healthList');
+    list.hidden = !health.groups.size;
+    list.textContent = '';
+    for (const g of health.groups.values()) {
+      const head = document.createElement('div');
+      head.className = 'health-head';
+      const name = document.createElement('b');
+      name.textContent = g.name;
+      const state = document.createElement('span');
+      state.className = 'health-state ' + (g.state === 'done' ? (g.ok ? 'ok' : 'bad') : '');
+      state.textContent = g.state === 'done' ? (g.ok ? t('alles in Ordnung') : t('Fehler gefunden')) : t('prüft …');
+      head.append(name, state);
+      list.appendChild(head);
+      for (const st of g.steps) {
+        const row = document.createElement('div');
+        row.className = 'health-step ' + (st.ok === true ? 'ok' : st.ok === false ? 'bad' : 'skip');
+        const mark = document.createElement('i');
+        mark.textContent = st.ok === true ? '✓' : st.ok === false ? '✕' : '–';
+        const body = document.createElement('span');
+        const label = document.createElement('span');
+        label.textContent = st.label + (st.id.startsWith('basic:') && st.model ? ` (${st.model})` : '') + (st.ms ? ` · ${st.ms < 1000 ? `${st.ms} ms` : `${(st.ms / 1000).toFixed(1)} s`}` : '');
+        body.appendChild(label);
+        const note = st.error ? st.error.message : st.note;
+        if (note) {
+          const small = document.createElement('small');
+          small.textContent = note;
+          body.appendChild(small);
+        }
+        if (st.error?.detail) {
+          const small = document.createElement('small');
+          small.className = 'health-detail';
+          small.textContent = st.error.detail + (st.error.providerMessage ? ` · ${st.error.providerMessage}` : '');
+          body.appendChild(small);
+        }
+        row.append(mark, body);
+        list.appendChild(row);
+      }
+    }
+    $('healthBtn').disabled = health.running;
+    $('healthBtn').textContent = health.running ? t('Prüft …') : t('Testen');
+    $('healthCopy').hidden = !health.report;
+  }
+  api.onHealth((ev) => {
+    const g = health.groups.get(ev.providerId) || { name: ev.providerName, steps: [], state: 'running', ok: false };
+    if (ev.state === 'step') g.steps.push(ev.step);
+    if (ev.state === 'done') { g.state = 'done'; g.ok = ev.result.ok; g.steps = ev.result.steps; }
+    health.groups.set(ev.providerId, g);
+    if (state.view === 'settings') renderHealth();
+  });
+  $('healthBtn').addEventListener('click', async () => {
+    if (health.running) return;
+    health.running = true;
+    health.groups.clear();
+    health.report = '';
+    renderHealth();
+    try {
+      const r = await api.runHealth('all');
+      health.report = r?.report || '';
+    } catch (err) {
+      health.report = String(err?.message || err);
+    } finally {
+      health.running = false;
+      renderHealth();
+    }
+  });
+  $('healthCopy').addEventListener('click', () => copyText(health.report, $('healthCopy')));
+
   api.onVoice((msg) => {
     switch (msg.kind) {
       case 'starting':
@@ -1779,6 +1856,7 @@
   }
 
   function fillSettings() {
+    if (typeof renderHealth === "function" && health.groups.size) renderHealth();
     const s = state.settings;
     if (!s) return;
     fillProvider();
