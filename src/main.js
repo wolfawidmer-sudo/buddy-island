@@ -1,6 +1,6 @@
 const {
   app, BrowserWindow, globalShortcut, ipcMain, screen, Tray, Menu,
-  nativeImage, safeStorage, shell, net,
+  nativeImage, safeStorage, shell, net, clipboard,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -1689,6 +1689,13 @@ function setupIpc() {
 
   ipcMain.handle('settings:get', () => publicSettings());
   ipcMain.handle('i18n:get', () => i18n.dictionary());
+  // Zwischenablage über den Hauptprozess: navigator.clipboard scheitert im Island oft,
+  // weil das Fenster nicht den Fokus hat.
+  ipcMain.handle('clipboard:write', (_e, text) => {
+    if (typeof text !== 'string' || text.length > 2_000_000) return false;
+    clipboard.writeText(text);
+    return true;
+  });
   ipcMain.on('i18n:sync', (event) => { event.returnValue = i18n.dictionary(); });
 
   ipcMain.handle('settings:set', (_e, patch = {}) => {

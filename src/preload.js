@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('buddy', {
   clearCalendar: () => ipcRenderer.invoke('calendar:clear'),
   upcomingEvents: () => ipcRenderer.invoke('calendar:upcoming'),
   voiceListen: () => ipcRenderer.send('voice:listen'),
+  writeClipboard: (text) => ipcRenderer.invoke('clipboard:write', String(text ?? '')),
   runHealth: (scope) => ipcRenderer.invoke('llm:health', { scope }),
   listMemory: () => ipcRenderer.invoke('memory:list'),
   deleteMemory: (id) => ipcRenderer.invoke('memory:delete', id),

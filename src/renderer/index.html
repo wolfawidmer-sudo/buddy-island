@@ -229,11 +229,14 @@
             <div class="group">
               <div class="row">
                 <span class="row-label two">Alle KI-Anbieter prüfen<small>Schritt für Schritt: einfache Antwort, Streaming, Verlauf, Werkzeuge, Router</small></span>
-                <button type="button" class="button small" id="healthBtn">Testen</button>
+                <span class="health-actions">
+                  <button type="button" class="button small" id="healthCopy" hidden>Ergebnisse kopieren</button>
+                  <button type="button" class="button small" id="healthBtn">Testen</button>
+                </span>
               </div>
               <div id="healthList" hidden></div>
             </div>
-            <p class="footer" id="healthFoot">Kostet pro Anbieter nur ein paar wenige Tokens. Der Bericht enthält keine Keys und keine Inhalte. <button type="button" class="link-btn" id="healthCopy" hidden>Bericht kopieren</button></p>
+            <p class="footer" id="healthFoot">Kostet pro Anbieter nur ein paar wenige Tokens. Der Bericht enthält keine Keys und keine Inhalte.</p>
 
             <h3 class="section">Modell und Denktiefe</h3>
             <div class="group">

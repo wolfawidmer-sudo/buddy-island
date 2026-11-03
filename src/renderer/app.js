@@ -793,15 +793,23 @@
   }
 
   async function copyText(text, button) {
-    try {
-      await navigator.clipboard.writeText(text);
-      const old = button.textContent;
-      button.textContent = t('Kopiert');
-      button.classList.add('ok');
-      setTimeout(() => { button.textContent = old; button.classList.remove('ok'); }, 1400);
-    } catch {
-      /* Zwischenablage nicht verfügbar */
+    let ok = false;
+    try { ok = await api.writeClipboard(text); } catch { ok = false; }
+    if (!ok) {
+      try { await navigator.clipboard.writeText(text); ok = true; } catch { ok = false; }
     }
+    if (!button) return ok;
+    clearTimeout(button._copyTimer);
+    if (button._copyLabel == null) button._copyLabel = button.textContent;
+    button.textContent = ok ? t('Kopiert') : t('Kopieren fehlgeschlagen');
+    button.classList.toggle('ok', ok);
+    button.classList.toggle('bad', !ok);
+    button._copyTimer = setTimeout(() => {
+      button.textContent = button._copyLabel;
+      button._copyLabel = null;
+      button.classList.remove('ok', 'bad');
+    }, 1600);
+    return ok;
   }
 
   el.messages.addEventListener('click', (event) => {
@@ -1464,7 +1472,32 @@
     }
     $('healthBtn').disabled = health.running;
     $('healthBtn').textContent = health.running ? t('Prüft …') : t('Testen');
-    $('healthCopy').hidden = !health.report;
+    const copyLabel = health.running ? t('Bisherige kopieren') : t('Ergebnisse kopieren');
+    // Zeigt der Knopf gerade «Kopiert», erst danach umbeschriften
+    if ($('healthCopy')._copyLabel != null) $('healthCopy')._copyLabel = copyLabel;
+    else $('healthCopy').textContent = copyLabel;
+    $('healthCopy').hidden = !health.groups.size && !health.report;
+  }
+  // Bericht aus dem, was schon angezeigt wird (auch mitten im Test). Ohne Keys und Inhalte.
+  function healthText() {
+    if (health.report && !health.running) return health.report;
+    const lines = [`Buddy Island · ${new Date().toISOString()}${health.running ? ' · Test läuft noch' : ''}`];
+    for (const g of health.groups.values()) {
+      lines.push('', `## ${g.name}: ${g.state === 'done' ? (g.ok ? 'OK' : 'FEHLER') : 'läuft …'}`);
+      for (const st of g.steps) {
+        const mark = st.ok === true ? '✓' : st.ok === false ? '✗' : '–';
+        lines.push(`${mark} ${st.label}${st.model ? ` [${st.model}]` : ''}${st.ms ? ` ${st.ms} ms` : ''}${st.note ? ` · ${st.note}` : ''}`);
+        const e = st.error;
+        if (e) {
+          lines.push(`    ${e.message}`);
+          const meta = [e.provider, e.model, e.status ? `HTTP ${e.status}` : '', e.code, e.category, e.stage, e.origin, e.endpoint].filter(Boolean).join(' | ');
+          if (meta) lines.push(`    ${meta}`);
+          if (e.detail) lines.push(`    ${e.detail}`);
+          if (e.providerMessage) lines.push(`    Anbieter: ${e.providerMessage}`);
+        }
+      }
+    }
+    return lines.join('\n');
   }
   api.onHealth((ev) => {
     const g = health.groups.get(ev.providerId) || { name: ev.providerName, steps: [], state: 'running', ok: false };
@@ -1489,7 +1522,7 @@
       renderHealth();
     }
   });
-  $('healthCopy').addEventListener('click', () => copyText(health.report, $('healthCopy')));
+  $('healthCopy').addEventListener('click', () => copyText(healthText(), $('healthCopy')));
 
   api.onVoice((msg) => {
     switch (msg.kind) {
