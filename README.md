@@ -2,7 +2,7 @@
 
 Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windows-Bildschirms wohnt. Buddy läuft mit deinem eigenen Claude-API-Key: Er beantwortet Fragen, stellt Timer, zeigt Musik, Termine und Windows-Mitteilungen, hört auf «Hey Buddy» und kann auf Wunsch den ganzen PC mit Maus und Tastatur bedienen.
 
-**Website:** https://wolfawidmer-sudo.github.io/buddy-island/
+**Website:** https://wolfawidmer-sudo.github.io/buddy-island-website/ ([Quellcode der Website](https://github.com/wolfawidmer-sudo/buddy-island-website))
 
 > **Status:** Testversion (0.2). Getestet mit einer simulierten Claude-API unter Linux. Auf echten Windows-PCs bitte den Selbsttest in den Einstellungen laufen lassen.
 
@@ -68,6 +68,12 @@ npm test           # Tests für die Claude-Anbindung und die Werkzeuge
 npm run dist:win   # baut den Installer nach dist/
 npm run pack:win   # nur die entpackte Windows-App (ohne Installer)
 ```
+
+### Neue Version veröffentlichen
+
+1. `version` in `package.json` erhöhen (z. B. `0.3.0`) und committen.
+2. `git tag v0.3.0 && git push --tags`
+3. GitHub Actions baut den Installer auf Windows und hängt ihn an das Release. Alle installierten Buddys holen sich das Update automatisch, und der Download-Knopf auf der Website zeigt auf die neue Version.
 
 ## Bedienung
 

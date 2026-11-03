@@ -1,0 +1,31 @@
+name: Release
+
+# Neue Version veröffentlichen:
+#   1. "version" in package.json erhöhen
+#   2. git tag v0.3.0 && git push --tags
+# GitHub baut dann den Windows-Installer und hängt ihn ans Release.
+# Buddy Island holt sich das Update danach automatisch.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Installer bauen und veröffentlichen
+        run: npx electron-builder --win nsis --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
