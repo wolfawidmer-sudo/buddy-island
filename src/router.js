@@ -6,6 +6,8 @@ const models = require('./models');
 const { t, language, LANGS } = require('./i18n');
 
 const CACHE_MS = 10 * 60 * 1000;
+// Länger wartet Buddy nicht auf den Dispatcher; danach entscheidet die Regel (die Antwort soll nicht warten)
+const DISPATCH_TIMEOUT_MS = 6000;
 const CACHE_MAX = 60;
 
 // Antwortformat des Dispatchers (strukturierte Ausgabe)
@@ -54,6 +56,8 @@ function dispatchSystem() {
 // Eindeutig einfache Anfragen ohne API-Aufruf erkennen
 const SIMPLE_RULES = [
   { test: /^(hallo|hoi|hey|hi|salü|sali|grüezi|guten (morgen|tag|abend)|gute nacht|danke( dir| schön| vielmal)?|merci( vielmal)?|ok(ay)?|super|cool|perfekt|tschüss|ciao|bis später)[\s!.,?]*$/i, reason: 'Kurzes Gespräch', caps: ['gespraech'] },
+  // Begrüssung plus Smalltalk («Hallo! Wie geht es dir heute?», «na, alles gut?», «how are you?»)
+  { test: /^((hallo|hoi|hey|hi|hello|salü|sali|grüezi|grüss dich|servus|moin|yo|bonjour|salut|guten (morgen|tag|abend))\s*(buddy)?[\s!.,]*)?(na[\s,]*)?(wie geht'?s|wie geht es (dir|ihnen|euch)|wie läuft'?s|wie war dein tag|alles (gut|klar|fit|easy|okay|ok)|was geht( ab)?|was machst du( so| gerade)?|wer bist du|was kannst du|how are you( doing)?|how'?s it going|what'?s up|ça va|comment (ça va|vas-tu|allez-vous))(\s+(dir|denn|so|heute|bei dir|today|so far))*[\s!.,?]*$/i, reason: 'Kurzes Gespräch', caps: ['gespraech'] },
   { test: /\b(timer|wecker|countdown|erinner mich in)\b/i, reason: 'Timer stellen', caps: ['werkzeuge'] },
   { test: /\b(pausier\w*|musik (an|aus|weiter)|nächste[sn]? (lied|song|titel)|vorherige[sn]? (lied|song|titel)|lauter|leiser|stumm|was läuft (gerade)?)\b/i, reason: 'Musik steuern', caps: ['werkzeuge'] },
   { test: /^(bitte )?(öffne|starte|mach)\s+(mir\s+)?(den |die |das )?[\wäöü.-]+( auf| an)?( bitte)?[\s!.]*$/i, reason: 'Programm öffnen', caps: ['werkzeuge'] },
@@ -176,7 +180,21 @@ function createRouter({ claude, usage, log = () => {} }) {
 
   async function askDispatcher({ text, messages, withComputer, apiKey, workspaceId, haiku, signal, task, client }) {
     const prompt = `${contextFor(messages)}PC-Steuerung ist ${withComputer ? 'erlaubt' : 'ausgeschaltet'}.\n\nNeue Anfrage: «${String(text).slice(0, 3000)}»`;
-    const result = await (client || claude).json({ apiKey, workspaceId, model: haiku, system: dispatchSystem(), prompt, schema: SCHEMA, maxTokens: 700, effort: 'low', signal });
+    const local = new AbortController();
+    const onAbort = () => local.abort();
+    signal?.addEventListener('abort', onAbort, { once: true });
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; local.abort(); }, DISPATCH_TIMEOUT_MS);
+    let result;
+    try {
+      result = await (client || claude).json({ apiKey, workspaceId, model: haiku, system: dispatchSystem(), prompt, schema: SCHEMA, maxTokens: 700, effort: 'low', signal: local.signal });
+    } catch (err) {
+      if (timedOut && !signal?.aborted) throw Object.assign(new Error(`Dispatcher langsamer als ${DISPATCH_TIMEOUT_MS / 1000} s`), { status: 0 });
+      throw err;
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    }
     const cost = usage ? usage.record({ model: haiku, usage: result.usage, purpose: 'Router', task }) : 0;
     const a = result.data;
     if (!a || typeof a !== 'object' || !a.komplexitaet) throw new Error('Router-Antwort unlesbar');
@@ -201,7 +219,10 @@ function createRouter({ claude, usage, log = () => {} }) {
     // Manuell: genau das gewählte Modell (falls es zum Anbieter passt)
     if (!auto) {
       const model = (settings.model && models.providerOf(settings.model) === providerId ? settings.model : null) || tiers.sonnet || models.CATALOG[1].id;
-      const effort = models.supportedEffort(model, manualEffort) || null;
+      // Aufwand «Auto»: Smalltalk schnell (low), sonst medium. Ohne Angabe nehmen manche Anbieter
+      // ihre höchste Stufe (Gemini 3: high, Sonnet: high) und brauchen dann sehr lange.
+      const autoEffort = quickRule(text) ? 'low' : 'medium';
+      const effort = models.supportedEffort(model, manualEffort || autoEffort) || null;
       return decision({
         source: 'manuell', tier: models.tierOf(model), model, effort,
         reason: t('Manuell gewählt'), analysis: null, allowOpus: true, needsPlan: false,
@@ -305,4 +326,4 @@ function tierForStep(difficulty, { decision, budget, tiers }) {
   return availableTier(tier, tiers) || decision.tier;
 }
 
-module.exports = { createRouter, tierForStep, budgetCap, availableTier, estimateCost, policy, STEP_TIER, STEP_EFFORT, SCHEMA };
+module.exports = { createRouter, tierForStep, budgetCap, availableTier, estimateCost, policy, STEP_TIER, STEP_EFFORT, SCHEMA, SIMPLE_RULES, DISPATCH_TIMEOUT_MS };

@@ -44,7 +44,7 @@ function agentFor(provider, client, settings = {}, extra = {}) {
     getComputer: () => ({ describe: (n) => n, run: async () => [], warmUp() {}, stop() {} }), getFiles: () => null,
     isComputerAvailable: () => false, getAvailableModels: async (pid) => (await client.listModels(GOOD_KEY[pid] || 'x').catch(() => [])),
     getGame: () => ({ active: false }),
-    systemPrompt: () => 'Du bist Buddy.',
+    systemPrompt: (withComputer, opts) => `Du bist Buddy.${opts?.extra || ''}`, // wie main.js: Zusatz (Regeln, Gedächtnis) vor der Uhrzeit
     askControl: async () => true, askPermission: async () => true,
     onAuthError: (pid) => authErrors.push(pid),
     getMemoryContext: extra.memory ? (text) => extra.memory.context(text) : undefined,

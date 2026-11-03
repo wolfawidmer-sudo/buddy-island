@@ -592,7 +592,10 @@ function createAgent(deps) {
       let pending = '';
       let emitted = 0;
       let firstInRound = true;
+      const started = Date.now();
+      let firstTokenMs = 0;
       const onText = (text) => {
+        if (!firstTokenMs) firstTokenMs = Date.now() - started;
         const prefix = firstInRound && st.wroteText ? '\n\n' : '';
         firstInRound = false;
         if (holdText) {
@@ -613,6 +616,7 @@ function createAgent(deps) {
               task?.step('retry', `API-Wiederholung ${n}: ${err.message}`, 'warn');
             },
           });
+          log(`Zeit: ${model} (${effort || 'Standard'}) erste Ausgabe nach ${firstTokenMs || '-'} ms, fertig nach ${Date.now() - started} ms`);
           return { result, pending, flush: () => { if (pending) { st.wroteText = true; send('chat:delta', { id, text: pending }); pending = ''; } } };
         } catch (err) {
           if (err?.name === 'AbortError' || signal.aborted) throw abortError();
@@ -636,6 +640,7 @@ function createAgent(deps) {
 
     try {
       send('agent:action', { id, label: t('wählt Modell') });
+      const routeStart = Date.now();
       decision = await router.route({
         text: userText, messages: conversation, withComputer, tiers, budget, settings, meta, apiKey, signal, task: id, client, providerId,
       });
@@ -662,7 +667,9 @@ function createAgent(deps) {
         st.cost += decision.routerCost;
         task.addCost(decision.routerCost, decision.routerUsage || {});
       }
-      task.step('route', `${decision.modelName} · ${decision.effort || 'Standard'} · ${decision.reason}`, 'ok', { source: decision.source });
+      const routeMs = Date.now() - routeStart;
+      task.step('route', `${decision.modelName} · ${decision.effort || 'Standard'} · ${decision.reason} · ${(routeMs / 1000).toFixed(1)} s`, 'ok', { source: decision.source, ms: routeMs });
+      log(`Zeit: Modellwahl ${routeMs} ms (${decision.source})`);
 
       // Hinweis an das Modell, wenn die Aufgabe mehrstufig ist
       if (decision.needsPlan) {
@@ -671,8 +678,9 @@ function createAgent(deps) {
         last.content = typeof last.content === 'string' ? [{ type: 'text', text: last.content }, hint] : [...last.content, hint];
       }
 
-      // Gedächtnis: nur Einträge, die zu dieser Anfrage passen
-      const system = systemPrompt(withComputer, { tools: toolsAllowed, provider: providerId, model: decision.model }) + (toolsAllowed ? AGENT_RULES_TEXT() : '') + (getMemoryContext?.(userText) || '');
+      // Regeln und Gedächtnis (nur Einträge, die zu dieser Anfrage passen) vor die Uhrzeit,
+      // damit der Prompt-Cache der Anbieter den festen Teil weiter nutzen kann
+      const system = systemPrompt(withComputer, { tools: toolsAllowed, provider: providerId, model: decision.model, extra: (toolsAllowed ? AGENT_RULES_TEXT() : '') + (getMemoryContext?.(userText) || '') });
       const baseTools = () => {
         if (!toolsAllowed) return [];
         const list = [...tools.definitions, ...(files?.definitions || []), ...AGENT_TOOLS];

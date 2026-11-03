@@ -12,6 +12,7 @@ function apiBase() {
 const API_BASE = apiBase();
 const API_VERSION = '2023-06-01';
 
+const learned = require('./llm/learned');
 const { ProviderError, friendlyMessage, RETRY_STATUS } = require('./llm/errors');
 
 // Zuverlässigkeit: Wiederholungen bei vorübergehenden Fehlern, Zeitlimits
@@ -135,6 +136,18 @@ function parseEvent(chunk) {
   }
 }
 
+/**
+ * Denk-Einstellung für schnelle Antworten (nur bei Aufwand «low»).
+ * Haiku 5.x: Denken aus; Sonnet 5.x: nur zwischen Werkzeugaufrufen; sonst nichts ändern.
+ * @param {string} model @param {string|null|undefined} effort
+ */
+function fastThinking(model, effort) {
+  if (effort !== 'low') return null;
+  if (/haiku-[5-9]/i.test(model)) return { type: 'disabled' };
+  if (/sonnet-[5-9]/i.test(model)) return { type: 'between_tools' };
+  return null;
+}
+
 function createClient(fetchImpl = globalThis.fetch) {
   async function listModels(apiKey, workspaceId) {
     let response;
@@ -214,6 +227,10 @@ function createClient(fetchImpl = globalThis.fetch) {
     if (effort && effort !== 'auto') outputConfig.effort = effort;
     if (format) outputConfig.format = { type: 'json_schema', schema: format };
     if (Object.keys(outputConfig).length) body.output_config = outputConfig;
+    // Schnelle Antworten: bei «low» denkt Haiku gar nicht, Sonnet nur zwischen Werkzeugaufrufen.
+    // Opus lässt sich nicht abschalten (dort regelt allein der Aufwand das Denken).
+    const fast = fastThinking(model, effort);
+    if (fast && !learned.get('anthropic', model, 'noFastThinking')) body.thinking = fast;
     // Automatisches Prompt-Caching: spart viel Geld bei langen Steuerungs-Aufgaben
     body.cache_control = { type: 'ephemeral' };
 
@@ -231,6 +248,7 @@ function createClient(fetchImpl = globalThis.fetch) {
           return true;
         },
       },
+      { test: /thinking/i, drop: () => (body.thinking ? (delete body.thinking, learned.set('anthropic', model, 'noFastThinking', true), true) : false) },
       { test: /output_config|effort/i, drop: () => (body.output_config ? (delete body.output_config, true) : false) },
       { test: /cache_control/i, drop: () => (body.cache_control ? (delete body.cache_control, true) : false) },
       {
