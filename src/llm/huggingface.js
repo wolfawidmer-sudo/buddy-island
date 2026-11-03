@@ -66,15 +66,17 @@ class Stop(StoppingCriteria):
     def __call__(self, input_ids, scores, **kw):
         return self.rid in cancels
 def encode(msgs):
+    # enable_thinking=False: Modelle wie Qwen3 denken sonst laut nach (auf dem Prozessor sehr langsam);
+    # Vorlagen ohne diese Variable ignorieren sie
     try:
-        return tok.apply_chat_template(msgs, add_generation_prompt=True, return_tensors="pt", return_dict=True)
+        return tok.apply_chat_template(msgs, add_generation_prompt=True, return_tensors="pt", return_dict=True, enable_thinking=False)
     except Exception:
         # Vorlagen ohne System-Rolle: System-Text in die erste Nutzer-Nachricht
         sys_txt = "\n".join(m["content"] for m in msgs if m["role"] == "system")
         rest = [dict(m) for m in msgs if m["role"] != "system"]
         if sys_txt and rest:
             rest[0]["content"] = sys_txt + "\n\n" + rest[0]["content"]
-        return tok.apply_chat_template(rest, add_generation_prompt=True, return_tensors="pt", return_dict=True)
+        return tok.apply_chat_template(rest, add_generation_prompt=True, return_tensors="pt", return_dict=True, enable_thinking=False)
 def run(req):
     rid = req["id"]
     with gen_lock:

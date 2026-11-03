@@ -6,6 +6,7 @@
 
 const { parseSSE } = require('../claude');
 const { ProviderError, isRetryable, abortError, wait, RETRY_STATUS } = require('./errors');
+const learned = require('./learned');
 const models = require('../models');
 
 /** @typedef {import('./types').LlmClient} LlmClient */
@@ -109,6 +110,20 @@ function mapStop(reason) {
     case 'stop': return 'end_turn';
     default: return reason || 'end_turn';
   }
+}
+
+// Von schnell nach gründlich
+const REASONING_ORDER = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+
+/**
+ * Welche reasoning_effort-Werte für Buddys Aufwand in Frage kommen, der erste zuerst.
+ * @param {string} effort
+ */
+function reasoningCandidates(effort) {
+  if (effort === 'low') return ['minimal', 'none', 'low'];
+  if (effort === 'medium') return ['medium'];
+  if (effort === 'high' || effort === 'xhigh' || effort === 'max') return ['high'];
+  return ['low'];
 }
 
 /**
@@ -222,7 +237,12 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch, conn
     if (provider.id === 'openai') body.max_completion_tokens = maxTokens;
     else body.max_tokens = maxTokens;
     if (converted.tools.length) body.tools = converted.tools;
-    if (effort && info.effortParam === 'reasoning_effort') body.reasoning_effort = effort;
+    // Denkmodelle (GPT-5, o-Serie, Grok-Mini): ohne Angabe denken sie auf «medium» und antworten spürbar
+    // später. Bei «low» die schnellste Stufe, die das Modell kennt (minimal, sonst none, sonst low).
+    const reasoningChain = info.effortParam === 'reasoning_effort' && !learned.get(provider.id, model, 'noReasoningEffort')
+      ? reasoningCandidates(effort || 'default').filter((v) => !(learned.get(provider.id, model, 'badEffort') || []).includes(v))
+      : [];
+    if (reasoningChain.length) body.reasoning_effort = reasoningChain.shift();
     if (format) body.response_format = { type: 'json_schema', json_schema: { name: 'antwort', schema: format, strict: true } };
 
     let droppedFormat = false;
@@ -232,7 +252,26 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch, conn
       { test: /stream_options/i, drop: () => (body.stream_options ? (delete body.stream_options, true) : false) },
       // z. B. «Your organization must be verified to stream this model»: dann ohne Streaming
       { test: /stream/i, drop: () => (streaming ? (streaming = false, body.stream = false, delete body.stream_options, true) : false) },
-      { test: /reasoning_effort/i, drop: () => (body.reasoning_effort ? (delete body.reasoning_effort, true) : false) },
+      {
+        test: /reasoning_effort|reasoning\.effort|reasoning effort/i,
+        repeat: true,
+        drop: (/** @type {string} */ raw) => {
+          if (!body.reasoning_effort) return false;
+          const bad = learned.get(provider.id, model, 'badEffort') || [];
+          learned.set(provider.id, model, 'badEffort', [...bad, body.reasoning_effort]);
+          // «Supported values are: 'low', 'medium', 'high'»: direkt die schnellste erlaubte nehmen
+          const allowed = (String(raw).match(/\bsupported values?\b[^:.]*:([^.]*)/i)?.[1] || '').match(/[a-z]+/gi)?.map((v) => v.toLowerCase()) || [];
+          const next = allowed.length ? REASONING_ORDER.find((v) => allowed.includes(v) && reasoningChain.includes(v)) : reasoningChain.shift();
+          if (next) {
+            reasoningChain.splice(0, reasoningChain.indexOf(next) + 1);
+            body.reasoning_effort = next;
+            return true;
+          }
+          delete body.reasoning_effort;
+          learned.set(provider.id, model, 'noReasoningEffort', true);
+          return true;
+        },
+      },
       { test: /max_completion_tokens/i, drop: () => (body.max_completion_tokens ? (body.max_tokens = body.max_completion_tokens, delete body.max_completion_tokens, true) : false) },
       { test: /max_tokens/i, drop: () => (body.max_tokens ? (body.max_completion_tokens = body.max_tokens, delete body.max_tokens, true) : false) },
     ];
@@ -243,8 +282,8 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch, conn
       const err = await toError(attempt.response, { model });
       attempt.cleanup();
       const i = optional.findIndex((o, n) => !used.has(n) && o.test.test(err.raw));
-      if (i < 0 || !optional[i].drop()) throw err;
-      used.add(i);
+      if (i < 0 || !optional[i].drop(err.raw)) throw err;
+      if (!(/** @type {any} */ (optional[i]).repeat)) used.add(i);
       attempt = await post(apiKey, body, signal, onRetry);
     }
     if (!attempt.response.ok) {
@@ -362,4 +401,4 @@ function createOpenAiCompatClient({ provider, fetchImpl = globalThis.fetch, conn
   return { provider: provider.id, listModels, streamMessage, json };
 }
 
-module.exports = { createOpenAiCompatClient, toChatMessages, toChatTools, mapStop };
+module.exports = { reasoningCandidates, REASONING_ORDER, createOpenAiCompatClient, toChatMessages, toChatTools, mapStop };

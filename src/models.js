@@ -143,6 +143,17 @@ function tierOf(modelId) {
   return 'sonnet';
 }
 
+/**
+ * Denkmodelle mit reasoning_effort: GPT-5.x, o-Serie, Grok-Mini. «chat»- und «non-reasoning»-Varianten denken nicht.
+ * @param {string|undefined} provider @param {string} id
+ */
+function isReasoningModel(provider, id) {
+  if (/non-reasoning|chat-latest|-chat\b/i.test(id)) return false;
+  if (provider === 'openai') return /^(gpt-[5-9]|o[1-9])/i.test(id);
+  if (provider === 'xai') return /^grok-3-mini/i.test(id);
+  return false;
+}
+
 /** @param {string} modelId @returns {ModelInfo} */
 function info(modelId) {
   const known = CATALOG.find((m) => m.id === modelId);
@@ -164,6 +175,7 @@ function info(modelId) {
     .replace(/-/g, ' ')
     .replace(/^\w/, (c) => c.toUpperCase());
   const isClaude = provider === 'anthropic';
+  const reasoning = isReasoningModel(provider, String(modelId || ''));
   return {
     id: modelId,
     provider,
@@ -172,8 +184,10 @@ function info(modelId) {
     short: pretty,
     price: TIER_FALLBACK_PRICE[tier] || TIER_FALLBACK_PRICE.sonnet,
     priceEstimated: true,
-    // Gemini ab Version 3 steuert das Denken über thinkingLevel (der Adapter übersetzt low/medium/high)
-    efforts: isClaude || (provider === 'gemini' && /gemini-([3-9]|\d{2})/i.test(String(modelId))) ? ['low', 'medium', 'high'] : [],
+    // Gemini ab Version 3 steuert das Denken über thinkingLevel (der Adapter übersetzt low/medium/high),
+    // Denkmodelle von OpenAI und xAI über reasoning_effort
+    efforts: isClaude || (provider === 'gemini' && /gemini-([3-9]|\d{2})/i.test(String(modelId))) || reasoning ? ['low', 'medium', 'high'] : [],
+    ...(reasoning ? { effortParam: /** @type {'reasoning_effort'} */ ('reasoning_effort') } : {}),
     caps: { vision: true, tools: true, computerUse: isClaude, structured: true },
     estimated: true,
   };
@@ -226,7 +240,10 @@ function resolveTiers(available, providerId = 'anthropic') {
     }
     // Neuestes Modell dieser Stufe nehmen (die Listen sind meist neu → alt sortiert)
     const usable = ids.filter((id) => !/(embedding|tts|whisper|dall-e|image|audio|realtime|moderation|transcribe|search|veo|imagen)/i.test(id));
-    const other = usable.find((id) => tierOf(id) === tier && !/\d{8}$/.test(id)) || usable.find((id) => tierOf(id) === tier);
+    const candidates = usable.filter((id) => tierOf(id) === tier);
+    // Für die schnelle Stufe Varianten ohne Denken bevorzugen (z. B. «…-fast-non-reasoning»)
+    const ordered = tier === 'haiku' ? [...candidates.filter((id) => /non-reasoning/i.test(id)), ...candidates.filter((id) => !/non-reasoning/i.test(id))] : candidates;
+    const other = ordered.find((id) => !/\d{8}$/.test(id)) || ordered[0];
     if (other) result[tier] = other;
   }
   // Fehlende Stufen bleiben leer: der Router nimmt dann die nächste vorhandene,

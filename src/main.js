@@ -661,7 +661,6 @@ function systemPrompt(withComputer, opts = {}) {
   if (lang === 'de') {
     let text = `${settings.systemPrompt || ''}
 
-Jetzt ist ${now}.
 ${withTools
     ? 'Mit deinen Werkzeugen kannst du Timer stellen, Apps, Websites und Windows-Einstellungsseiten öffnen, Musik/Lautstärke steuern, sehen was gerade läuft, Termine im Kalender nachschauen, Systeminfos lesen, Dateien in den Benutzerordnern auflisten, Duplikate finden, ordnen und in den Papierkorb legen und die letzten Windows-Mitteilungen lesen (nur wenn der Nutzer danach fragt). Nutze sie, wenn der Nutzer das will, und bestätige danach kurz, was du gemacht hast.'
     : 'Mit diesem Modell hast du keine Werkzeuge: Du kannst nur antworten, aber keine Timer stellen, nichts öffnen und den PC nicht steuern. Sag das ehrlich, wenn der Nutzer so etwas möchte, und erkläre, wie er es selbst tun kann.'}`;
@@ -680,13 +679,15 @@ Regeln für die PC-Steuerung:
 - Fenster mit Administratorrechten kann Windows für dich sperren. Sag das, wenn Klicks dort nichts bewirken.
 - Fasse am Ende in einem Satz zusammen, was du gemacht hast.`;
     }
-    return text;
+    // Die Uhrzeit ändert sich jede Minute: darum ganz ans Ende, sonst greift der Prompt-Cache
+    // der Anbieter für alles danach nicht mehr (langsamere erste Antwort, höhere Kosten).
+    const clock = lang === 'de' ? `Jetzt ist ${now}.` : `It is now ${now}.`;
+    return `${text}${opts.extra || ''}\n\n${clock}`;
   }
   const langName = languageName(answerLanguage);
   let text = `${custom || `You are ${settings.name || 'Buddy'}, a small, friendly assistant living in an island at the top of the user's Windows PC. Answer briefly and directly. Use Markdown sparingly: code in code blocks, lists only when they really help.`}
 
 Always reply in ${langName}, unless the user writes in another language; then reply in that language.
-It is now ${now}.
 ${withTools
     ? 'With your tools you can set timers, open apps, websites and Windows settings pages, control music and volume, see what is playing, check calendar events, read system info, list files in the user folders, find duplicates, organize them and move them to the recycle bin, and read recent Windows notifications (only when the user asks). Use them when the user wants that, then briefly confirm what you did.'
     : 'With this model you have no tools: you can only answer, but you cannot set timers, open anything or control the PC. Say so honestly if the user asks for such things and explain how they can do it themselves.'}`;
@@ -705,7 +706,10 @@ Rules for PC control:
 - Windows may block you from windows with administrator rights. Say so if clicks have no effect there.
 - Finish with one sentence summarizing what you did.`;
   }
-  return text;
+  // Die Uhrzeit ändert sich jede Minute: darum ganz ans Ende, sonst greift der Prompt-Cache
+  // der Anbieter für alles danach nicht mehr (langsamere erste Antwort, höhere Kosten).
+  const clock = lang === 'de' ? `Jetzt ist ${now}.` : `It is now ${now}.`;
+  return `${text}${opts.extra || ''}\n\n${clock}`;
 }
 
 // ---------- Island-Fenster ----------

@@ -7,6 +7,7 @@
 const { parseSSE } = require('../claude');
 const { ProviderError, isRetryable, abortError, wait, RETRY_STATUS } = require('./errors');
 const models = require('../models');
+const learned = require('./learned');
 
 /** @typedef {import('./types').LlmClient} LlmClient */
 /** @typedef {import('./types').ProviderInfo} ProviderInfo */
@@ -293,9 +294,11 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
     /** @type {any} */
     const generationConfig = { maxOutputTokens: isPro ? maxTokens + 4096 : maxTokens };
     const gen3 = isGemini3(model);
-    if (gen3) {
+    if (gen3 && !learned.get('gemini', model, 'noThinkingLevel')) {
       // Ohne Angabe denkt Gemini 3 auf «high» und braucht dann für ein «Hallo» schnell 30 Sekunden.
-      generationConfig.thinkingConfig = { thinkingLevel: thinkingLevelFor(model, effort) };
+      let level = thinkingLevelFor(model, effort);
+      if (level === 'minimal' && learned.get('gemini', model, 'noMinimal')) level = 'low';
+      generationConfig.thinkingConfig = { thinkingLevel: level };
     } else if (effort === 'low' && /flash/i.test(model)) {
       generationConfig.thinkingConfig = { thinkingBudget: 0 };
     }
@@ -321,7 +324,8 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
           const tc = generationConfig.thinkingConfig;
           if (!tc) return false;
           // «minimal» kennt nicht jedes Modell (z. B. Pro): eine Stufe höher versuchen, erst dann weglassen
-          if (tc.thinkingLevel === 'minimal') { tc.thinkingLevel = 'low'; return true; }
+          if (tc.thinkingLevel === 'minimal') { tc.thinkingLevel = 'low'; learned.set('gemini', model, 'noMinimal', true); return true; }
+          if (tc.thinkingLevel) learned.set('gemini', model, 'noThinkingLevel', true);
           delete generationConfig.thinkingConfig;
           return true;
         },

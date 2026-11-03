@@ -652,7 +652,7 @@ function createAgent(deps) {
         last.content = typeof last.content === 'string' ? [{ type: 'text', text: last.content }, hint] : [...last.content, hint];
       }
 
-      const system = systemPrompt(withComputer, { tools: toolsAllowed, provider: providerId, model: decision.model }) + (toolsAllowed ? AGENT_RULES_TEXT() : '');
+      const system = systemPrompt(withComputer, { tools: toolsAllowed, provider: providerId, model: decision.model, extra: toolsAllowed ? AGENT_RULES_TEXT() : '' });
       const baseTools = () => {
         if (!toolsAllowed) return [];
         const list = [...tools.definitions, ...(files?.definitions || []), ...AGENT_TOOLS];

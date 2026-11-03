@@ -219,7 +219,10 @@ function createRouter({ claude, usage, log = () => {} }) {
     // Manuell: genau das gewählte Modell (falls es zum Anbieter passt)
     if (!auto) {
       const model = (settings.model && models.providerOf(settings.model) === providerId ? settings.model : null) || tiers.sonnet || models.CATALOG[1].id;
-      const effort = models.supportedEffort(model, manualEffort) || null;
+      // Aufwand «Auto»: Smalltalk schnell (low), sonst medium. Ohne Angabe nehmen manche Anbieter
+      // ihre höchste Stufe (Gemini 3: high, Sonnet: high) und brauchen dann sehr lange.
+      const autoEffort = quickRule(text) ? 'low' : 'medium';
+      const effort = models.supportedEffort(model, manualEffort || autoEffort) || null;
       return decision({
         source: 'manuell', tier: models.tierOf(model), model, effort,
         reason: t('Manuell gewählt'), analysis: null, allowOpus: true, needsPlan: false,

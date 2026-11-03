@@ -5,6 +5,9 @@ const { createRouter, DISPATCH_TIMEOUT_MS } = require('../src/router');
 const { createUsage } = require('../src/usage');
 const { createGeminiClient, thinkingLevelFor } = require('../src/llm/gemini');
 const models = require('../src/models');
+const { createClient } = require('../src/claude');
+const { createOpenAiCompatClient } = require('../src/llm/openai-compat');
+const learned = require('../src/llm/learned');
 
 const tiers = { haiku: 'gemini-3.1-flash-lite', sonnet: 'gemini-3-flash', opus: 'gemini-3.1-pro' };
 
@@ -70,6 +73,80 @@ const tiers = { haiku: 'gemini-3.1-flash-lite', sonnet: 'gemini-3-flash', opus: 
   // Gemini 2.5 Flash bei «low»: weiterhin thinkingBudget 0, kein thinkingLevel
   await gemini.streamMessage({ apiKey: 'AIza-test', model: 'gemini-2.5-flash', system: 'S', messages: [{ role: 'user', content: 'Hallo!' }], maxTokens: 4096, effort: 'low', stream: false });
   assert.deepStrictEqual(bodies[bodies.length - 1].generationConfig.thinkingConfig, { thinkingBudget: 0 });
+
+  // Gemini merkt sich, dass «minimal» nicht geht: nächste Anfrage direkt mit «low»
+  const before = bodies.length;
+  await gemini.streamMessage({ apiKey: 'AIza-test', model: 'gemini-3.1-flash-lite', system: 'S', messages: [{ role: 'user', content: 'Hallo!' }], maxTokens: 4096, effort: 'low', stream: false });
+  assert.strictEqual(bodies.length, before + 1, 'kein zweiter Fehlversuch');
+  assert.strictEqual(bodies[bodies.length - 1].generationConfig.thinkingConfig.thinkingLevel, 'low');
+
+  // 5) Manuell gewähltes Modell mit Aufwand «Auto»: Smalltalk low, sonst medium (nie die Anbieter-Vorgabe «high»)
+  const manual = { autoModel: false, model: 'gemini-3.1-flash-lite', effort: 'auto' };
+  const r1 = await createRouter({ claude: client, usage }).route({ text: 'Hallo! Wie geht es dir heute?', tiers, settings: manual, apiKey: 'k', client, providerId: 'gemini' });
+  assert.strictEqual(r1.effort, 'low');
+  const r2 = await createRouter({ claude: client, usage }).route({ text: 'Schreib mir ein Gedicht über Bern', tiers, settings: manual, apiKey: 'k', client, providerId: 'gemini' });
+  assert.strictEqual(r2.effort, 'medium');
+
+  // 6) Claude: bei «low» denkt Haiku nicht, Sonnet nur zwischen Werkzeugen, Opus unverändert
+  const sse = (events) => new Response(events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join(''), { headers: { 'content-type': 'text/event-stream' } });
+  const okStream = () => sse([
+    { type: 'message_start', message: { usage: { input_tokens: 5, output_tokens: 0 } } },
+    { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+    { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hoi!' } },
+    { type: 'content_block_stop', index: 0 },
+    { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 2 } },
+    { type: 'message_stop' },
+  ]);
+  const cBodies = [];
+  let rejectThinking = false;
+  const claude = createClient(async (url, init) => {
+    const body = JSON.parse(init.body);
+    cBodies.push(body);
+    if (rejectThinking && body.thinking) return new Response(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'thinking.type: disabled is not supported for this model' } }), { status: 400 });
+    return okStream();
+  });
+  const ask = (model, effort) => claude.streamMessage({ apiKey: 'sk-ant-x', model, system: 'S', messages: [{ role: 'user', content: 'Hallo!' }], maxTokens: 4096, effort, onText: () => {} });
+  await ask('claude-haiku-5-5', 'low');
+  assert.deepStrictEqual(cBodies.at(-1).thinking, { type: 'disabled' });
+  assert.strictEqual(cBodies.at(-1).output_config.effort, 'low');
+  await ask('claude-sonnet-5-5', 'low');
+  assert.deepStrictEqual(cBodies.at(-1).thinking, { type: 'between_tools' });
+  await ask('claude-opus-5-5', 'low');
+  assert.strictEqual(cBodies.at(-1).thinking, undefined, 'Opus: Denken nicht abschaltbar');
+  await ask('claude-haiku-5-5', 'medium');
+  assert.strictEqual(cBodies.at(-1).thinking, undefined, 'nur bei low');
+  rejectThinking = true;
+  const nBefore = cBodies.length;
+  await ask('claude-sonnet-5-5', 'low');
+  assert.strictEqual(cBodies.length, nBefore + 2, 'ein Fehlversuch, dann ohne thinking');
+  assert.strictEqual(cBodies.at(-1).thinking, undefined);
+  await ask('claude-sonnet-5-5', 'low');
+  assert.strictEqual(cBodies.length, nBefore + 3, 'gemerkt: kein zweiter Fehlversuch');
+
+  // 7) OpenAI-Denkmodelle: bei «low» die schnellste erlaubte Stufe, Ablehnung wird gemerkt
+  learned.clear();
+  const oBodies = [];
+  const oaSse = () => new Response(['data: ' + JSON.stringify({ choices: [{ delta: { content: 'Hi' }, finish_reason: 'stop' }] }), 'data: [DONE]', ''].join('\n\n'), { headers: { 'content-type': 'text/event-stream' } });
+  const openai = createOpenAiCompatClient({ provider: models.PROVIDERS.openai, fetchImpl: async (url, init) => {
+    const body = JSON.parse(init.body);
+    oBodies.push(body);
+    if (body.reasoning_effort === 'minimal') {
+      return new Response(JSON.stringify({ error: { message: "Unsupported value: 'reasoning_effort' does not support 'minimal' with this model. Supported values are: 'none', 'low', 'medium', and 'high'.", type: 'invalid_request_error', param: 'reasoning_effort' } }), { status: 400 });
+    }
+    return oaSse();
+  } });
+  const oAsk = (model, effort) => openai.streamMessage({ apiKey: 'sk-x', model, system: 'S', messages: [{ role: 'user', content: 'Hallo!' }], maxTokens: 4096, effort, onText: () => {} });
+  await oAsk('gpt-5.4-mini', 'low');
+  assert.strictEqual(oBodies[0].reasoning_effort, 'minimal');
+  assert.strictEqual(oBodies[1].reasoning_effort, 'none', 'schnellste erlaubte Stufe aus der Fehlermeldung');
+  await oAsk('gpt-5.4-mini', 'low');
+  assert.strictEqual(oBodies.length, 3);
+  assert.strictEqual(oBodies[2].reasoning_effort, 'none', 'gemerkt');
+  await oAsk('gpt-5.4-mini', null);
+  assert.strictEqual(oBodies.at(-1).reasoning_effort, 'low', 'ohne Aufwand: low statt Standard medium');
+  await oAsk('gpt-4.1', 'low');
+  assert.strictEqual(oBodies.at(-1).reasoning_effort, undefined, 'Nicht-Denkmodell: kein reasoning_effort');
+  learned.clear();
 
   console.log('Tempo-Tests ok');
 })().catch((err) => {
