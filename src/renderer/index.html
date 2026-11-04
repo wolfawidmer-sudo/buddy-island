@@ -551,11 +551,24 @@
                   <label class="custom-color" title="Eigene Farbe"><input type="color" id="customColor" aria-label="Eigene Farbe"></label>
                 </div>
               </div>
+            </div>
+
+            <h3 class="section">So antwortet Buddy</h3>
+            <div class="group">
+              <label class="row">
+                <span class="row-label">Antwortlänge</span>
+                <select id="prefLength" class="row-select"><option value="short">Kurz</option><option value="normal">Normal</option><option value="detailed">Ausführlich</option></select>
+              </label>
+              <label class="row">
+                <span class="row-label">Tonfall</span>
+                <select id="prefStyle" class="row-select"><option value="friendly">Freundlich</option><option value="neutral">Sachlich</option><option value="casual">Locker</option></select>
+              </label>
               <div class="row stacked">
-                <span class="row-label">Persönlichkeit</span>
-                <textarea id="promptInput" rows="4" aria-label="Persönlichkeit"></textarea>
+                <span class="row-label two">Hinweise für Buddy<small>z. B. «Ich programmiere in Python» oder «Erklär mir Fachbegriffe»</small></span>
+                <textarea id="promptInput" rows="3" maxlength="600" aria-label="Hinweise für Buddy"></textarea>
               </div>
             </div>
+            <p class="footer">Das ändert nur, wie Buddy antwortet. Wer Buddy ist und seine Grundregeln (ehrlich, fragt vor Unumkehrbarem, schützt deine Daten) bleiben immer gleich, bei jedem Anbieter und Modell.</p>
 
             <h2 class="category" id="cat-system">System &amp; Sprache</h2>
             <h3 class="section">Sprache der Oberfläche</h3>

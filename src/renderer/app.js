@@ -76,6 +76,8 @@
     dndBtn: $('dndBtn'),
     nameInput: $('nameInput'),
     promptInput: $('promptInput'),
+    prefLength: $('prefLength'),
+    prefStyle: $('prefStyle'),
     swatches: $('swatches'),
     customColor: $('customColor'),
     shortcutGroup: $('shortcutGroup'),
@@ -2869,7 +2871,9 @@
     renderStats();
     el.workspaceInput.value = s.workspaceId || '';
     el.nameInput.value = s.name || '';
-    el.promptInput.value = s.systemPrompt || '';
+    if (document.activeElement !== el.promptInput) el.promptInput.value = s.promptPrefs?.notes || '';
+    el.prefLength.value = s.promptPrefs?.length || 'normal';
+    el.prefStyle.value = s.promptPrefs?.style || 'friendly';
     el.soundToggle.checked = Boolean(s.sound);
     el.autostartToggle.checked = Boolean(s.autostart);
     el.computerToggle.checked = Boolean(s.computerUse);
@@ -3432,7 +3436,9 @@
     fillSettings();
   });
   el.nameInput.addEventListener('change', () => save({ name: el.nameInput.value.trim() || t('Buddy') }));
-  el.promptInput.addEventListener('change', () => save({ systemPrompt: el.promptInput.value }));
+  el.promptInput.addEventListener('change', () => save({ promptPrefs: { notes: el.promptInput.value } }));
+  el.prefLength.addEventListener('change', () => save({ promptPrefs: { length: el.prefLength.value } }));
+  el.prefStyle.addEventListener('change', () => save({ promptPrefs: { style: el.prefStyle.value } }));
   el.swatches.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
