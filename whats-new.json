@@ -1,0 +1,20 @@
+{
+  "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Kurz und für normale Nutzer geschrieben.",
+  "versions": [
+    {
+      "version": "0.7.1",
+      "highlights": [
+        { "title": "Gemini wieder startklar", "text": "Buddy nimmt automatisch die neuste Gemini-Version, die dein Konto anbietet. Modelle, die Google nicht mehr anbietet, überspringt er selbst." }
+      ]
+    },
+    {
+      "version": "0.7.0",
+      "highlights": [
+        { "title": "Visualizer, der wirklich zuhört", "text": "Die Balken folgen Bass, Mitten und Höhen des echten Tons. Ist Spotify nur offen oder pausiert, bleibt alles ruhig." },
+        { "title": "Leuchtender Rand im Takt", "text": "Der Bildschirmrand leuchtet in deiner Akzentfarbe um den ganzen Bildschirm, auch über der Taskleiste, und pulsiert zur Musik." },
+        { "title": "Eingabefeld immer sichtbar", "text": "Egal wie lang die Unterhaltung wird: Das Eingabefeld bleibt unten, alles darüber scrollt für sich." },
+        { "title": "Weniger Technik", "text": "Modellnamen und Fehlercodes erscheinen nur noch auf Wunsch. Der Rand leuchtet nur, wenn Buddy wirklich länger deinen PC bedient." }
+      ]
+    }
+  ]
+}
