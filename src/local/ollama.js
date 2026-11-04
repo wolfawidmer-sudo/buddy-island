@@ -553,13 +553,15 @@ function createOllama(opts = {}) {
    * @param {string} file
    */
   async function verifySignature(file) {
-    const ps = `$s = Get-AuthenticodeSignature -LiteralPath '${file.replace(/'/g, "''")}'; @{ status = [string]$s.Status; subject = [string]$s.SignerCertificate.Subject } | ConvertTo-Json -Compress`;
-    const r = await exec('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', ps], 30000);
+    // Windows prüft die Signatur über die ganze Datei (über 1 GB): darum grosszügige Zeitgrenze
+    const ps = `$ErrorActionPreference = 'Stop'; try { $s = Get-AuthenticodeSignature -LiteralPath '${file.replace(/'/g, "''")}'; @{ status = [string]$s.Status; subject = [string]$s.SignerCertificate.Subject } | ConvertTo-Json -Compress } catch { @{ status = 'Error'; subject = ''; error = [string]$_.Exception.Message } | ConvertTo-Json -Compress }`;
+    const r = await exec('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', ps], 5 * 60 * 1000);
     let data = null;
-    try { data = JSON.parse(r.out.slice(r.out.indexOf('{'))); } catch { data = null; }
-    const status = String(data?.status || '');
+    try { data = JSON.parse(r.out.slice(r.out.indexOf('{'), r.out.lastIndexOf('}') + 1)); } catch { data = null; }
+    const status = String(data?.status || (r.code ? `exit ${r.code}` : 'no_output'));
     const subject = String(data?.subject || '');
-    return { ok: status === 'Valid' && /(O|CN)=["]?Ollama/i.test(subject), status, subject };
+    const detail = data?.error ? String(data.error).slice(0, 200) : !data ? r.out.slice(-200) : '';
+    return { ok: status === 'Valid' && /(O|CN)=["]?Ollama/i.test(subject), status, subject, detail };
   }
 
   /**
@@ -604,8 +606,8 @@ function createOllama(opts = {}) {
       const sig = await verifySignature(file);
       if (!sig.ok) {
         cleanup(dir);
-        log(`Lokale KI: Signatur ungültig (${sig.status}, ${sig.subject})`);
-        throw new LocalError('signature_invalid', 'Das Installationsprogramm ist nicht gültig signiert. Buddy hat es nicht ausgeführt.', { raw: `${sig.status} ${sig.subject}` });
+        log(`Lokale KI: Signatur ungültig (${sig.status}, ${sig.subject}, ${sig.detail})`);
+        throw new LocalError('signature_invalid', 'Das Installationsprogramm ist nicht gültig signiert. Buddy hat es nicht ausgeführt.', { raw: `status=${sig.status} subject=${sig.subject} ${sig.detail}`.trim() });
       }
       onProgress({ phase: 'install' });
       const code = await new Promise((resolve) => {
