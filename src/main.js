@@ -43,7 +43,7 @@ const TOP_GAP = 6; // wie die Dynamic Island: knapp unter dem oberen Rand (im Fe
 const OPEN_H = 660 + TOP_GAP;
 const CLOSED_H = 36 + TOP_GAP;
 const NOTCH_H = 12 + TOP_GAP;
-const SETTINGS_VERSION = 3;
+const SETTINGS_VERSION = 4;
 const MODELS_CACHE_MS = 6 * 3600 * 1000;
 
 const DEFAULTS = {
@@ -52,7 +52,7 @@ const DEFAULTS = {
   model: 'claude-sonnet-5-5', // manuelle Wahl und Rückfall
   autoModel: true, // Router wählt Modell und Denkaufwand
   effort: 'auto', // auto | low | medium | high
-  showRouting: true, // Modell, Aufwand, Grund und Kosten im Chat zeigen
+  showRouting: false, // Modell, Aufwand, Grund und Kosten im Chat zeigen (für Fortgeschrittene)
   monthlyLimit: 5, // US-Dollar pro Monat, 0 = kein Limit
   permissions: { medium: 'ask', high: 'ask' },
   historyEnabled: true,
@@ -219,9 +219,14 @@ function loadSettings() {
   if (!settings.keyHints) settings.keyHints = {};
   if (!models.PROVIDERS[settings.provider]) settings.provider = 'anthropic';
   // Ältere Versionen: neu gibt es die automatische Modellwahl
-  if (saved && (Number(saved.settingsVersion) || 0) < SETTINGS_VERSION) {
-    settings.autoModel = true;
-    settings.effort = 'auto';
+  const savedVersion = Number(saved?.settingsVersion) || 0;
+  if (saved && savedVersion < SETTINGS_VERSION) {
+    if (savedVersion < 3) {
+      settings.autoModel = true;
+      settings.effort = 'auto';
+    }
+    // 0.7: technische Modell-Zeile im Chat nur noch auf Wunsch
+    if (savedVersion < 4) settings.showRouting = false;
     settings.settingsVersion = SETTINGS_VERSION;
     migrateKey();
     saveSettings();

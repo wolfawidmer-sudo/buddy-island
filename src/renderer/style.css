@@ -427,6 +427,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
   font-size: 13px;
   user-select: text;
 }
+.notice { flex-wrap: wrap; }
 .notice span { flex: 1; }
 .notice.soft { background: var(--group); color: var(--label-2); }
 
@@ -1296,7 +1297,12 @@ body { padding-top: var(--gap); }
 #emptyBar { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 2px; transition: width 0.4s ease; }
 
 /* Fehler-Detail: Anbieter · Modell · HTTP-Status · Stufe */
-.notice .notice-detail { display: block; margin-top: 3px; font-size: 11px; opacity: 0.6; font-variant-numeric: tabular-nums; }
+.notice .notice-more { flex-basis: 100%; margin-top: 2px; font-size: 11.5px; }
+.notice .notice-more summary { cursor: pointer; opacity: 0.65; list-style: none; width: max-content; }
+.notice .notice-more summary::-webkit-details-marker { display: none; }
+.notice .notice-more summary::after { content: ' ›'; }
+.notice .notice-more[open] summary::after { content: ' ⌄'; }
+.notice .notice-detail { display: block; margin-top: 3px; font-size: 11px; opacity: 0.6; font-variant-numeric: tabular-nums; user-select: text; overflow-wrap: anywhere; }
 
 /* ---------- Verbindungstest ---------- */
 #healthList { user-select: text; cursor: text; padding: 4px 0 8px; border-top: 1px solid var(--separator, rgba(255,255,255,0.08)); }
@@ -1357,15 +1363,59 @@ body { padding-top: var(--gap); }
 .island:not(.open) { touch-action: none; }
 
 /* ---------- Fensterhöhe: höchstens 75 % des Bildschirms ----------
-   Typografie und Abstände bleiben gleich; nur die Listen werden kürzer und scrollen. */
+   Das Fenster selbst ist schon auf 75 % begrenzt (main.js, echte Bildschirmhöhe inkl. Skalierung).
+   Das offene Island ist eine Spalte mit fester Obergrenze: Kopf oben, Eingabe unten fest,
+   dazwischen teilen sich Musik, Termine, Mitteilungen, Timer und Unterhaltung den Platz und
+   scrollen selbst. Das Eingabefeld liegt nie im scrollenden Bereich und wird nie abgeschnitten. */
 :root { --win-h: 666px; }
-.messages { max-height: min(380px, max(140px, calc(var(--win-h) - 286px))); }
-.settings-scroll { max-height: min(520px, max(180px, calc(var(--win-h) - 146px))); }
 .island.open { max-height: calc(var(--win-h) - var(--gap)); }
-/* Chat als Spalte: nur die Nachrichten scrollen, Eingabefeld bleibt immer sichtbar */
-#chatView:not([hidden]) { display: flex; flex-direction: column; max-height: calc(var(--win-h) - var(--gap) - 58px); }
-#chatView > * { flex: none; }
-#chatView > .messages { flex: 0 1 auto; min-height: 48px; max-height: 380px; }
+.settings-scroll { max-height: min(520px, max(180px, calc(var(--win-h) - 146px))); }
+
+/* Höhe für den Inhalt unter dem Kopf (54 px) plus Rahmen */
+.island.open #chatView:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  max-height: calc(var(--win-h) - var(--gap) - 58px);
+  min-height: 0;
+}
+/* Karten oben: nehmen höchstens gut ein Drittel der Höhe und scrollen dann selbst.
+   Unterhaltung: bekommt den Rest und scrollt selbst. Eingabe und Fusszeile: nie verkleinert. */
+#chatView > .chat-cards {
+  flex: 0 0.08 auto;   /* gibt nur nach, wenn es wirklich eng wird; vorher schrumpft die Unterhaltung */
+  min-height: 0;
+  max-height: 32vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* weicher Übergang statt harter Schnittkante, wenn die Karten scrollen (unten liegt ohnehin der Kartenabstand) */
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent);
+}
+#chatView > .chat-cards:not(:has(> :not([hidden]))) { display: none; }
+#chatView > .messages { flex: 1 1 auto; min-height: 64px; max-height: none; overflow-x: hidden; overscroll-behavior: contain; }
+/* Lange Wörter, Links und Pfade umbrechen statt seitlich zu scrollen (Code scrollt in seinem Block) */
+.messages > * { min-width: 0; overflow-wrap: anywhere; }
+#chatView > .messages:empty { display: none; }
+#chatView > .empty    { flex: 0 1 auto; min-height: 0; overflow-y: auto; }
+#chatView > .composer,
+#chatView > .footnote { flex: none; }
+/* Mehrzeilige Eingabe wächst, aber nie so weit, dass die Unterhaltung verschwindet */
+.composer textarea { max-height: clamp(54px, 22vh, 150px); overflow-y: auto; }
+
+/* Wenig Höhe (kleine Bildschirme, hohe Skalierung): zuerst Abstände verkleinern */
+@media (max-height: 560px) {
+  .view { padding-bottom: 10px; }
+  .now, .inbox, .timers { margin-bottom: 8px; }
+  .now { padding: 6px 8px; }
+  .now-cover { width: 36px; height: 36px; }
+  .composer { margin-top: 8px; }
+  .footnote { margin-top: 5px; }
+  .messages { gap: 10px; }
+  .chips { margin-top: 8px; }
+}
+@media (max-height: 440px) {
+  .footnote { display: none; }
+  .inbox-list { max-height: 96px; }
+}
 
 /* Nutzung: Gruppen Abo / API / lokal */
 .ugroup { display: flex; flex-direction: column; gap: 2px; margin: 14px 4px 6px; }
@@ -1381,3 +1431,11 @@ body { padding-top: var(--gap); }
 .health-actions { display: flex; gap: 6px; flex: none; }
 #healthCopy.ok { color: var(--green, #30d158); }
 #healthCopy.bad { color: var(--red, #ff453a); }
+
+/* Einheitliche, schmale Scrollbalken ohne Pfeile in allen scrollenden Bereichen */
+.island * { scrollbar-width: auto !important; scrollbar-color: auto !important; }
+.island ::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }
+.island ::-webkit-scrollbar-thumb { background: var(--fill-2); border-radius: 3px; }
+.island ::-webkit-scrollbar-thumb:hover { background: var(--label-3); }
+.island ::-webkit-scrollbar-button,
+.island ::-webkit-scrollbar-corner { display: none; background: transparent; }

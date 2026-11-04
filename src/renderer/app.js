@@ -681,7 +681,7 @@
   }
 
   function showRouting() {
-    return state.settings?.showRouting !== false;
+    return state.settings?.showRouting === true;
   }
 
   function assistantBubble(text, toolList, extra = {}) {
@@ -722,12 +722,17 @@
     const span = document.createElement('span');
     span.textContent = text;
     node.appendChild(span);
-    // Welcher Anbieter, welches Modell, welche Stufe: damit klar ist, wo es hakt
+    // Technische Angaben (Anbieter, Modell, Fehlercode) nur auf Wunsch: eingeklappt unter «Details»
     if (detail) {
+      const more = document.createElement('details');
+      more.className = 'notice-more';
+      const summary = document.createElement('summary');
+      summary.textContent = t('Details');
       const small = document.createElement('small');
       small.className = 'notice-detail';
       small.textContent = detail;
-      node.appendChild(small);
+      more.append(summary, small);
+      node.appendChild(more);
     }
     return node;
   }
@@ -780,7 +785,6 @@
       el.connectBtn.hidden = true;
     }
     el.composer.hidden = !hasKey;
-    el.footnote.hidden = !hasKey;
     updateFootnote();
   }
 
@@ -797,15 +801,15 @@
     return short ? `${t('Lokal')}: ${name}${what ? ` · ${what}` : ''}` : (st.state === 'loading' ? t('Ich lade gerade {name} auf deinem PC ({what}). Du kannst schon schreiben.', { name, what }) : '');
   }
 
+  // Fusszeile nur, wenn sie etwas Neues sagt: das lokale Modell lädt noch oder hat ein Problem.
+  // (Modellname und Tastenkürzel stehen in den Einstellungen.)
   function updateFootnote() {
     const s = state.settings;
     if (!s) return;
-    el.footnote.textContent = '';
-    const left = document.createElement('span');
-    left.textContent = s.provider === 'huggingface' ? localLine(true) : s.autoModel !== false ? t('Modell: automatisch') : modelLabel(s.model);
-    const right = document.createElement('span');
-    right.textContent = t('{keys} öffnet', { keys: prettyHotkey(s.hotkey) });
-    el.footnote.append(left, right);
+    const st = state.local || s.hfStatus || {};
+    const text = s.provider === 'huggingface' && s.hasKey && ['loading', 'error'].includes(st.state) ? localLine(true) : '';
+    el.footnote.textContent = text;
+    el.footnote.hidden = !text;
   }
 
   async function copyText(text, button) {
@@ -1924,7 +1928,7 @@
     el.autoToggle.checked = auto;
     el.modelSelect.disabled = auto;
     el.modelLabel.textContent = auto ? t('Modell (wird gewählt)') : t('Modell');
-    el.routeToggle.checked = s.showRouting !== false;
+    el.routeToggle.checked = s.showRouting === true;
     el.routeHint.textContent = auto
       ? t('Haiku prüft jede Anfrage und nimmt das günstigste Modell, das reicht: Haiku für Einfaches, Sonnet für mehrstufige Aufgaben, Opus nur für sehr Schwieriges. Einzelne Schritte einer Aufgabe können verschiedene Modelle übernehmen. Hakt es, wechselt Buddy selbst auf ein stärkeres Modell.')
       : t('Buddy nimmt immer das gewählte Modell und wechselt nicht selbst. «Auto» bei der Denktiefe lässt das Modell selbst entscheiden.');
