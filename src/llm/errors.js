@@ -35,6 +35,13 @@ class ProviderError extends Error {
     this.stage = ctx.stage || (category === 'local' ? 'local' : status ? 'request' : 'connect');
     /** @type {number|undefined} */
     this.retryAfterMs = undefined;
+    /** Wie oft Buddy diese Anfrage schon automatisch wiederholt hat */
+    this.retries = 0;
+  }
+
+  /** Vorübergehend (Überlastung, Rate-Limit, Serverfehler, Netz): später oder mit anderem Modell kann es klappen */
+  get transient() {
+    return isTransient(this);
   }
 
   /** Lokal entstanden (Buddy, Netzwerk) oder vom Anbieter gemeldet */
@@ -59,6 +66,10 @@ function classify(status, raw = '', type = '') {
   if (type === 'local_error') return 'local';
   if (type === 'parse_error') return 'parse';
   if (type === 'timeout_error') return 'timeout';
+  if (type === 'stream_incomplete') return 'network';
+  // Gemini meldet auch Minuten- und Tageslimits pro Modell mit «exceeded your current quota».
+  // Der Adapter erkennt sie an der quotaId; ein anderes Modell oder etwas Warten hilft dort.
+  if (type === 'rate_limit_minute' || type === 'rate_limit_day') return 'rate_limit';
   // Status 0 ohne Angaben = keine Antwort; mit Angaben = Fehler mitten im Stream
   if (status === 0 && !raw && !type) return 'network';
   if (/must be verified to stream|stream(ing)? is not supported|does not support stream/.test(text)) return 'capability';
@@ -96,11 +107,15 @@ function friendlyMessage(status, raw = '', type = '', name = 'Claude', category 
       return t('{name} hat die Anfrage abgelehnt (ungültiges Format).', { name });
     case 'capability': return t('Dieses Modell von {name} kann das nicht (z. B. Streaming, Werkzeuge oder Bilder).', { name });
     case 'continuation': return t('{name} hat die Fortsetzung nach einem Werkzeug-Aufruf abgelehnt.', { name });
-    case 'rate_limit': return t('Zu viele Anfragen an {name}. Warte kurz und versuch es nochmals.', { name });
-    case 'overloaded': return t('{name} ist gerade überlastet. Versuch es gleich nochmals.', { name });
+    case 'rate_limit':
+      if (type === 'rate_limit_day') return t('Das Tageslimit deines {name}-Kontos für dieses Modell ist erreicht. Ein anderes Modell geht eventuell noch.', { name });
+      return t('Zu viele Anfragen an {name}. Warte kurz und versuch es nochmals.', { name });
+    case 'overloaded': return t('{name} ist gerade überlastet (das liegt beim Anbieter, nicht an deinem Key). Versuch es gleich nochmals oder wähle ein anderes Modell.', { name });
     case 'server': return t('Bei {name} ist ein Fehler aufgetreten. Versuch es nochmals.', { name });
     case 'timeout': return t('{name} antwortet gerade nicht (Zeitüberschreitung). Versuch es gleich nochmals.', { name });
-    case 'network': return t('Keine Verbindung zu {name}. Bist du online?', { name });
+    case 'network':
+      if (type === 'stream_incomplete') return t('Die Verbindung zu {name} ist mitten in der Antwort abgebrochen. Versuch es nochmals.', { name });
+      return t('Keine Verbindung zu {name}. Bist du online?', { name });
     case 'parse': return t('Buddy konnte die Antwort von {name} nicht lesen.', { name });
     case 'local': return raw || t('Lokaler Fehler.');
     default: return t('Unbekannter Fehler bei {name} ({status}).', { name, status });
@@ -114,6 +129,46 @@ function isRetryable(err) {
   if (!(err instanceof ProviderError)) return false;
   if (['auth', 'permission', 'model', 'endpoint', 'request', 'capability', 'quota', 'continuation', 'local', 'parse'].includes(err.category)) return false;
   return err.status === 0 || RETRY_STATUS.has(err.status) || err.type === 'overloaded_error' || err.type === 'api_error' || err.category === 'timeout' || err.category === 'network';
+}
+
+// Fehler, die nicht am Key, am Modell oder an Buddy liegen, sondern vorübergehend beim Anbieter
+// oder im Netz. Nur bei diesen lohnt sich Warten oder ein Ausweichmodell. Aufgebrauchtes
+// Guthaben (quota) gehört nicht dazu: ein anderes Modell desselben Kontos hilft da nicht.
+const TRANSIENT = new Set(['rate_limit', 'overloaded', 'server', 'timeout', 'network']);
+
+/** @param {unknown} err */
+function isTransient(err) {
+  return err instanceof ProviderError && TRANSIENT.has(err.category);
+}
+
+/**
+ * Wartezeit vor Wiederholung `attempt` (0 = erste Wiederholung): exponentiell mit Jitter,
+ * damit viele Buddys nach einer Störung nicht im Gleichtakt wieder anfragen.
+ * Nennt der Anbieter eine Wartezeit (Retry-After), gilt mindestens diese.
+ * @param {number} attempt
+ * @param {{ baseMs?: number, maxMs?: number, retryAfterMs?: number, random?: () => number }} [opts]
+ */
+function backoffDelay(attempt, { baseMs = 1000, maxMs = 12000, retryAfterMs, random = Math.random } = {}) {
+  const exp = Math.min(maxMs, baseMs * 2 ** Math.max(0, attempt));
+  // «Equal jitter»: halbe Zeit fest, halbe Zeit zufällig
+  const jittered = exp / 2 + random() * (exp / 2);
+  if (retryAfterMs && retryAfterMs > 0) return Math.min(Math.max(retryAfterMs, jittered), Math.max(maxMs, retryAfterMs));
+  return Math.round(jittered);
+}
+
+/**
+ * Wie ein Fehler im Verbindungstest erscheint:
+ * unavailable = vorübergehend beim Anbieter, config = Key/Konto/Modellwahl,
+ * unsupported = das Modell kann das nicht, error = Fehler in Buddy oder im Protokoll.
+ * @param {any} err
+ * @returns {'unavailable'|'config'|'unsupported'|'error'}
+ */
+function testStatusOf(err) {
+  const category = err instanceof ProviderError ? err.category : err?.category;
+  if (TRANSIENT.has(category)) return 'unavailable';
+  if (['auth', 'permission', 'quota', 'model'].includes(category)) return 'config';
+  if (category === 'capability') return 'unsupported';
+  return 'error';
 }
 
 function abortError() {
@@ -176,6 +231,9 @@ function publicError(err) {
     stage: e?.stage || '',
     origin: e?.origin || 'local',
     retryable: Boolean(e?.retryable),
+    transient: Boolean(e?.transient),
+    retries: e?.retries || 0,
+    apiVersion: e?.apiVersion || '',
     endpoint: e ? safeEndpoint(e.endpoint) : '',
     detail: e ? errorDetail(e) : '',
     providerMessage: e ? redact(e.raw).slice(0, 300) : '',
@@ -191,10 +249,10 @@ function errorDetail(e) {
 /** Eine Logzeile ohne Keys und ohne Inhalte @param {any} err */
 function diagnosticLine(err) {
   const p = publicError(err);
-  return `KI-Fehler provider=${p.providerId || p.provider} model=${p.model} endpoint=${p.endpoint} status=${p.status} code=${p.code} category=${p.category} stage=${p.stage} origin=${p.origin} retry=${p.retryable} msg="${p.providerMessage || redact(p.message).slice(0, 200)}"`;
+  return `KI-Fehler provider=${p.providerId || p.provider} model=${p.model} endpoint=${p.endpoint} status=${p.status} code=${p.code} category=${p.category} stage=${p.stage} origin=${p.origin} retry=${p.retryable} retries=${p.retries} msg="${p.providerMessage || redact(p.message).slice(0, 200)}"`;
 }
 
 module.exports = {
-  ProviderError, friendlyMessage, classify, isRetryable, abortError, wait, RETRY_STATUS,
+  ProviderError, friendlyMessage, classify, isRetryable, isTransient, backoffDelay, testStatusOf, TRANSIENT, abortError, wait, RETRY_STATUS,
   publicError, diagnosticLine, errorDetail, redact, safeEndpoint,
 };

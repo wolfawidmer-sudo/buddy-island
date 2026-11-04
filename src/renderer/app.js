@@ -118,6 +118,7 @@
     autoToggle: $('autoToggle'),
     modelLabel: $('modelLabel'),
     routeToggle: $('routeToggle'),
+    fallbackToggle: $('fallbackToggle'),
     routeHint: $('routeHint'),
     costMonth: $('costMonth'),
     costBar: $('costBar'),
@@ -1461,6 +1462,15 @@
 
   // ---------- Verbindungstest ----------
   const health = { running: false, groups: new Map(), report: '' };
+  // Status eines Schritts bzw. Anbieters (siehe src/llm/health.js)
+  const HEALTH_LABEL = {
+    ok: 'Funktioniert', limited: 'Eingeschränkt', unavailable: 'Temporär nicht verfügbar', unsupported: 'Nicht unterstützt',
+    config: 'Konfigurationsfehler', error: 'Fehler in der Integration', skipped: 'Nicht geprüft',
+  };
+  const HEALTH_MARK = { ok: '✓', limited: '~', unavailable: '⏳', unsupported: '–', config: '✕', error: '✕', skipped: '–' };
+  const HEALTH_CLASS = { ok: 'ok', limited: 'warn', unavailable: 'warn', unsupported: 'skip', config: 'bad', error: 'bad', skipped: 'skip' };
+  const stepStatus = (st) => st.status || (st.ok === true ? 'ok' : st.ok === false ? 'error' : 'skipped');
+  const groupStatus = (g) => g.status || (g.ok ? 'ok' : 'error');
   function renderHealth() {
     const list = $('healthList');
     list.hidden = !health.groups.size;
@@ -1471,22 +1481,31 @@
       const name = document.createElement('b');
       name.textContent = g.name;
       const state = document.createElement('span');
-      const warned = g.steps.some((x) => x.temporary);
-      state.className = 'health-state ' + (g.state === 'done' ? (g.ok ? (warned ? 'warn' : 'ok') : 'bad') : '');
-      state.textContent = g.state === 'done' ? (g.ok ? (warned ? t('funktioniert, mit Hinweis') : t('alles in Ordnung')) : t('Fehler gefunden')) : t('prüft …');
+      state.className = 'health-state ' + (g.state === 'done' ? HEALTH_CLASS[groupStatus(g)] || '' : '');
+      state.textContent = g.state === 'done' ? t(HEALTH_LABEL[groupStatus(g)] || groupStatus(g)) : t('prüft …');
       head.append(name, state);
       list.appendChild(head);
       for (const st of g.steps) {
         const row = document.createElement('div');
-        row.className = 'health-step ' + (st.ok === true ? 'ok' : st.ok === false ? (st.temporary ? 'warn' : 'bad') : 'skip');
+        const status = stepStatus(st);
+        row.className = 'health-step ' + (HEALTH_CLASS[status] || 'skip');
+        row.title = t(HEALTH_LABEL[status] || status);
         const mark = document.createElement('i');
-        mark.textContent = st.ok === true ? '✓' : st.ok === false ? (st.temporary ? '!' : '✕') : '–';
+        mark.textContent = HEALTH_MARK[status] || '?';
         const body = document.createElement('span');
         const label = document.createElement('span');
-        label.textContent = st.label + (st.id.startsWith('basic:') && st.model ? ` (${st.model})` : '') + (st.ms ? ` · ${st.ms < 1000 ? `${st.ms} ms` : `${(st.ms / 1000).toFixed(1)} s`}` : '');
+        label.textContent = st.label + ((st.id.startsWith('basic:') || st.fallbackModel || st.id === 'fallback') && st.model ? ` (${st.model})` : '') + (st.ms ? ` · ${st.ms < 1000 ? `${st.ms} ms` : `${(st.ms / 1000).toFixed(1)} s`}` : '');
         body.appendChild(label);
-        // Vorübergehende Störung: Meldung des Anbieters plus was Buddy tut
-        const note = st.error ? [st.error.message, st.temporary ? st.note : ''].filter(Boolean).join(' ') : st.note;
+        // Status nur ausschreiben, wenn es nicht einfach «funktioniert» (das sagt das Häkchen)
+        const retries = st.diag?.retries || 0;
+        if (status !== 'ok' || retries) {
+          const badge = document.createElement('small');
+          badge.className = 'health-badge ' + (HEALTH_CLASS[status] || 'skip');
+          const again = retries === 1 ? t('1 Wiederholung') : retries ? t('{n} Wiederholungen', { n: retries }) : '';
+          badge.textContent = [status !== 'ok' ? t(HEALTH_LABEL[status] || status) : '', again].filter(Boolean).join(' · ');
+          body.appendChild(badge);
+        }
+        const note = [st.error ? st.error.message : '', st.note].filter(Boolean).join(' · ');
         if (note) {
           const small = document.createElement('small');
           small.textContent = note;
@@ -1500,7 +1519,7 @@
           summary.textContent = t('Details');
           const small = document.createElement('small');
           small.className = 'health-detail';
-          small.textContent = st.error.detail + (st.error.providerMessage ? ` · ${st.error.providerMessage}` : '');
+          small.textContent = st.error.detail + (st.error.providerMessage ? ` · ${st.error.providerMessage}` : '') + (st.diag ? ` · API ${st.diag.apiVersion || '-'} · ${st.diag.requestType}` : '');
           more.append(summary, small);
           body.appendChild(more);
         }
@@ -1521,10 +1540,11 @@
     if (health.report && !health.running) return health.report;
     const lines = [`Buddy Island · ${new Date().toISOString()}${health.running ? ' · Test läuft noch' : ''}`];
     for (const g of health.groups.values()) {
-      lines.push('', `## ${g.name}: ${g.state === 'done' ? (g.ok ? 'OK' : 'FEHLER') : 'läuft …'}`);
+      lines.push('', `## ${g.name}: ${g.state === 'done' ? HEALTH_LABEL[groupStatus(g)] || groupStatus(g) : 'läuft …'}`);
       for (const st of g.steps) {
-        const mark = st.ok === true ? '✓' : st.ok === false ? '✗' : '–';
-        lines.push(`${mark} ${st.label}${st.model ? ` [${st.model}]` : ''}${st.ms ? ` ${st.ms} ms` : ''}${st.note ? ` · ${st.note}` : ''}`);
+        const status = stepStatus(st);
+        const mark = HEALTH_MARK[status] || '?';
+        lines.push(`${mark} ${st.label}${st.model ? ` [${st.model}]` : ''}${st.ms ? ` ${st.ms} ms` : ''} · ${HEALTH_LABEL[status] || status}${st.note ? ` · ${st.note}` : ''}`);
         const e = st.error;
         if (e) {
           lines.push(`    ${e.message}`);
@@ -1542,11 +1562,11 @@
     // Neuer Durchlauf (z. B. mit einem anderen Modell, weil das alte nicht mehr angeboten wird)
     if (ev.state === 'running') { g.state = 'running'; g.steps = []; }
     if (ev.state === 'step') {
-      // Ein Schritt kann nachträglich aktualisiert werden (z. B. «vorübergehend, Buddy weicht aus»)
+      // Ein Schritt kann nachträglich aktualisiert werden
       const at = g.steps.findIndex((x) => x.id === ev.step.id);
       if (at >= 0) g.steps[at] = ev.step; else g.steps.push(ev.step);
     }
-    if (ev.state === 'done') { g.state = 'done'; g.ok = ev.result.ok; g.steps = ev.result.steps; }
+    if (ev.state === 'done') { g.state = 'done'; g.ok = ev.result.ok; g.status = ev.result.status; g.steps = ev.result.steps; }
     health.groups.set(ev.providerId, g);
     if (state.view === 'settings') renderHealth();
   });
@@ -1953,6 +1973,7 @@
     el.modelSelect.disabled = auto;
     el.modelLabel.textContent = auto ? t('Modell (wird gewählt)') : t('Modell');
     el.routeToggle.checked = s.showRouting === true;
+    el.fallbackToggle.checked = s.modelFallback !== false;
     el.routeHint.textContent = auto
       ? t('Haiku prüft jede Anfrage und nimmt das günstigste Modell, das reicht: Haiku für Einfaches, Sonnet für mehrstufige Aufgaben, Opus nur für sehr Schwieriges. Einzelne Schritte einer Aufgabe können verschiedene Modelle übernehmen. Hakt es, wechselt Buddy selbst auf ein stärkeres Modell.')
       : t('Buddy nimmt immer das gewählte Modell und wechselt nicht selbst. «Auto» bei der Denktiefe lässt das Modell selbst entscheiden.');
@@ -2477,6 +2498,7 @@
   for (const h of el.settingsView.querySelectorAll('.category')) catObserver.observe(h);
   el.autoToggle.addEventListener('change', async () => { await save({ autoModel: el.autoToggle.checked }); fillSettings(); });
   el.routeToggle.addEventListener('change', async () => { await save({ showRouting: el.routeToggle.checked }); renderHistory(); });
+  el.fallbackToggle.addEventListener('change', () => save({ modelFallback: el.fallbackToggle.checked }));
   el.limitSelect.addEventListener('change', async () => { await save({ monthlyLimit: Number(el.limitSelect.value) }); loadAiStats(); });
   el.permMedium.addEventListener('change', () => save({ permissions: { medium: el.permMedium.value } }));
   el.permHigh.addEventListener('change', () => save({ permissions: { high: el.permHigh.value } }));

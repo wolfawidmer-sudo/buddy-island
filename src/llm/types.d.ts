@@ -28,6 +28,37 @@ export interface Capabilities {
   computerUse: boolean;
   /** Kann strukturierte JSON-Antworten nach Schema liefern */
   structured: boolean;
+  /** Antwort stückweise (Streaming). Fehlt die Angabe: ja */
+  streaming?: boolean;
+  /** Mehrere Werkzeug-Aufrufe in einer Antwort. Fehlt die Angabe: ja, wenn tools */
+  parallelTools?: boolean;
+  /** JSON-Modus (nur gültiges JSON, ohne Schema). Fehlt die Angabe: wie structured */
+  json?: boolean;
+  /** Denkt vor der Antwort (Reasoning). Fehlt die Angabe: aus Aufwand-Stufen bzw. Modellliste */
+  reasoning?: boolean;
+}
+
+/** Alle Fähigkeiten eines Modells, aufgelöst (models.capabilities) */
+export interface FullCapabilities {
+  chat: boolean;
+  streaming: boolean;
+  history: boolean;
+  vision: boolean;
+  tools: boolean;
+  parallelTools: boolean;
+  computerUse: boolean;
+  structured: boolean;
+  json: boolean;
+  reasoning: boolean;
+}
+
+/** Angaben aus der Modellliste des Anbieters */
+export interface ModelMeta {
+  thinking?: boolean;
+  inputTokenLimit?: number;
+  outputTokenLimit?: number;
+  version?: string;
+  methods?: string[];
 }
 
 export interface ModelInfo {
@@ -112,6 +143,11 @@ export interface StreamRequest {
   onRetry?: (attempt: number, error: Error) => void;
   /** false: ohne Streaming (eine Antwort am Stück). Standard: Streaming */
   stream?: boolean;
+  /**
+   * Höchstzahl automatischer Wiederholungen bei vorübergehenden Fehlern (Standard: Adapter, meist 3).
+   * Der Agent setzt sie tiefer, wenn ein Ausweichmodell bereitsteht.
+   */
+  maxRetries?: number;
 }
 
 export interface StreamResult {
@@ -120,6 +156,12 @@ export interface StreamResult {
   content: ContentBlock[];
   droppedComputer?: boolean;
   droppedFormat?: boolean;
+  /** Tatsächlich benutztes Modell (falls der Adapter es kennt) */
+  model?: string;
+  /** Anzahl automatischer Wiederholungen dieser Anfrage */
+  retries?: number;
+  /** Ausweichmodell: ursprünglich gewähltes Modell, das nicht verfügbar war */
+  fallbackFrom?: string;
 }
 
 export interface JsonRequest {
@@ -132,6 +174,8 @@ export interface JsonRequest {
   maxTokens?: number;
   effort?: string;
   signal?: AbortSignal;
+  maxRetries?: number;
+  onRetry?: (attempt: number, error: Error) => void;
 }
 
 export interface JsonResult {
@@ -141,7 +185,7 @@ export interface JsonResult {
   stopReason: string | null;
 }
 
-export interface ModelEntry { id: string; name: string }
+export interface ModelEntry { id: string; name: string; meta?: ModelMeta }
 
 /** Gemeinsame Schnittstelle aller Anbieter (Strategy). */
 export interface LlmClient {

@@ -5,7 +5,7 @@
 // Die Signatur wird darum am Block gespeichert (meta.thoughtSignature) und wieder mitgeschickt.
 
 const { parseSSE } = require('../claude');
-const { ProviderError, isRetryable, abortError, wait, RETRY_STATUS } = require('./errors');
+const { ProviderError, isRetryable, abortError, wait, backoffDelay, RETRY_STATUS } = require('./errors');
 const models = require('../models');
 const learned = require('./learned');
 
@@ -19,7 +19,11 @@ const learned = require('./learned');
 /** @typedef {import('./types').Usage} Usage */
 
 const NAME = 'Gemini';
-const RETRY_DELAYS = [1500, 4000, 10000];
+const API_VERSION = 'v1beta';
+// Wiederholungen bei vorübergehenden Fehlern: höchstens so viele, mit wachsender Pause und Jitter
+const MAX_RETRIES = 3;
+// Länger als so lange wartet Buddy nicht auf ein Rate-Limit, dann lieber Ausweichmodell oder Meldung
+const MAX_WAIT_MS = 20000;
 // Für Aufrufe, die nicht von Gemini selbst stammen (z. B. nach einem Anbieterwechsel), laut Google erlaubt
 const SKIP_SIGNATURE = 'skip_thought_signature_validator';
 
@@ -63,9 +67,16 @@ function toOpenApiSchema(schema) {
 function toContents(messages, caps, { dummySignature = true } = {}) {
   /** @type {Map<string, string>} */
   const nameById = new Map();
+  // Von Gemini vergebene Aufruf-IDs: die Antwort nennt dieselbe ID (wichtig bei parallelen Aufrufen)
+  /** @type {Map<string, string>} */
+  const callIdById = new Map();
   for (const m of messages) {
     if (m.role === 'assistant' && Array.isArray(m.content)) {
-      for (const b of m.content) if (b.type === 'tool_use') nameById.set(b.id, b.name);
+      for (const b of m.content) {
+        if (b.type !== 'tool_use') continue;
+        nameById.set(b.id, b.name);
+        if (b.meta?.provider === 'gemini' && b.meta.callId) callIdById.set(b.id, b.meta.callId);
+      }
     }
   }
   /** @type {{role: 'user'|'model', parts: any[]}[]} */
@@ -125,6 +136,8 @@ function toContents(messages, caps, { dummySignature = true } = {}) {
         const name = nameById.get(b.tool_use_id) || 'tool';
         /** @type {any} */
         const fr = { name, response: b.is_error ? { error: text || 'Fehler' } : { result: text || 'OK' } };
+        const callId = callIdById.get(b.tool_use_id);
+        if (callId) fr.id = callId;
         responses.push({ functionResponse: fr });
         for (const img of blocks.filter((x) => x.type === 'image')) rest.push(imagePart(img));
       } else if (b.type === 'text' && b.text) {
@@ -159,6 +172,14 @@ function toFunctionDeclarations(tools, jsonSchema) {
 const isGemini3 = (model) => /gemini-([3-9]|\d{2})/i.test(model);
 
 /**
+ * Offizielles Alias wie «gemini-flash-latest»: zeigt auf die jeweils neueste Version. Seit
+ * Gemini 3 ist das ein Modell mit thinkingLevel. Kennt es die Einstellung doch nicht (älteres
+ * Ziel), merkt sich der Adapter das nach der ersten 400-Antwort (learned «noThinkingLevel»).
+ * @param {string} model
+ */
+const isLatestAlias = (model) => /^gemini-[a-z-]+-latest$/i.test(model);
+
+/**
  * Buddys Aufwand → Gemini-3-Denkstufe. Flash und Flash-Lite können «minimal» (am schnellsten),
  * Pro beginnt bei «low». Ohne Aufwand (Auto bei manueller Modellwahl): «low».
  * @param {string} model @param {string|null|undefined} effort
@@ -182,10 +203,10 @@ function mapFinish(reason, hasCalls) {
 }
 
 /**
- * @param {{ provider: ProviderInfo, fetchImpl?: typeof fetch, connectTimeoutMs?: number, idleTimeoutMs?: number }} opts
+ * @param {{ provider: ProviderInfo, fetchImpl?: typeof fetch, connectTimeoutMs?: number, requestTimeoutMs?: number, idleTimeoutMs?: number }} opts
  * @returns {LlmClient}
  */
-function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTimeoutMs = 45000, idleTimeoutMs = 90000 }) {
+function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTimeoutMs = 45000, requestTimeoutMs = 120000, idleTimeoutMs = 90000 }) {
   const base = () => baseUrl(provider);
   /** @param {string} apiKey */
   const headers = (apiKey) => ({ 'x-goog-api-key': apiKey, 'content-type': 'application/json' });
@@ -194,16 +215,30 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
   async function toError(response, ctx) {
     let raw = '';
     let type = '';
+    /** @type {number|undefined} */
+    let retryDelayMs;
     try {
       const json = await response.json();
       const e = Array.isArray(json) ? json[0]?.error : json?.error;
       raw = e?.message || '';
-      const reason = (e?.details || []).map((/** @type {any} */ d) => d?.reason).find(Boolean);
+      const details = Array.isArray(e?.details) ? e.details : [];
+      const reason = details.map((/** @type {any} */ d) => d?.reason).find(Boolean);
       type = reason || e?.status || '';
+      // google.rpc.RetryInfo: «retryDelay»: «17s» oder «0.5s»
+      const delay = details.map((/** @type {any} */ d) => d?.retryDelay).find(Boolean);
+      const sec = parseFloat(String(delay || ''));
+      if (Number.isFinite(sec) && sec >= 0) retryDelayMs = sec * 1000;
+      // google.rpc.QuotaFailure: Minuten- oder Tageslimit pro Modell (kein aufgebrauchtes Guthaben)
+      if (response.status === 429) {
+        const ids = details.flatMap((/** @type {any} */ d) => (d?.violations || []).map((/** @type {any} */ v) => String(v?.quotaId || v?.quotaMetric || ''))).join(' ');
+        if (/PerDay/i.test(ids)) type = 'rate_limit_day';
+        else if (/PerMinute|PerSecond/i.test(ids) || retryDelayMs !== undefined || !/billing|prepay|credit/i.test(raw)) type = 'rate_limit_minute';
+      }
     } catch { /* kein JSON */ }
-    const err = new ProviderError(response.status, raw, String(type), NAME, { providerId: 'gemini', apiVersion: 'v1beta', ...ctx });
+    const err = new ProviderError(response.status, raw, String(type), NAME, { providerId: 'gemini', apiVersion: API_VERSION, ...ctx });
     const after = Number(response.headers?.get?.('retry-after'));
-    if (Number.isFinite(after) && after > 0) err.retryAfterMs = Math.min(20000, after * 1000);
+    if (Number.isFinite(after) && after > 0) err.retryAfterMs = after * 1000;
+    else if (retryDelayMs !== undefined) err.retryAfterMs = retryDelayMs;
     return err;
   }
 
@@ -216,7 +251,7 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
     try {
       response = await fetchImpl(url, { headers: headers(apiKey), signal: local.signal });
     } catch {
-      throw new ProviderError(0, '', local.signal.aborted ? 'timeout_error' : '', NAME, { providerId: 'gemini', endpoint: url, stage: 'models' });
+      throw new ProviderError(0, '', local.signal.aborted ? 'timeout_error' : '', NAME, { providerId: 'gemini', apiVersion: API_VERSION, endpoint: url, stage: 'models' });
     } finally {
       clearTimeout(timer);
     }
@@ -227,61 +262,79 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
       .filter((/** @type {any} */ m) => !Array.isArray(m.supportedGenerationMethods) || m.supportedGenerationMethods.includes('generateContent'))
       .map((/** @type {any} */ m) => {
         const id = bareModel(m.name);
-        return { id, name: m.displayName || models.info(id).name };
+        /** @type {import('./types').ModelMeta} */
+        const meta = {};
+        if (typeof m.thinking === 'boolean') meta.thinking = m.thinking;
+        if (Number(m.inputTokenLimit)) meta.inputTokenLimit = Number(m.inputTokenLimit);
+        if (Number(m.outputTokenLimit)) meta.outputTokenLimit = Number(m.outputTokenLimit);
+        if (m.version) meta.version = String(m.version);
+        if (Array.isArray(m.supportedGenerationMethods)) meta.methods = m.supportedGenerationMethods.map(String);
+        if (id) models.rememberMeta('gemini', id, meta);
+        return { id, name: m.displayName || models.info(id).name, meta };
       })
       .filter((/** @type {{id: string}} */ m) => m.id);
   }
 
   /**
    * Ein Versuch mit Zeitlimit bis zur ersten Antwort.
-   * @param {string} url @param {string} apiKey @param {any} body @param {AbortSignal|undefined} signal @param {string} model
+   * @param {string} url @param {string} apiKey @param {any} body @param {AbortSignal|undefined} signal @param {string} model @param {number} timeoutMs
    */
-  async function postOnce(url, apiKey, body, signal, model) {
+  async function postOnce(url, apiKey, body, signal, model, timeoutMs) {
     const local = new AbortController();
     const onAbort = () => local.abort();
     if (signal?.aborted) throw abortError();
     signal?.addEventListener('abort', onAbort, { once: true });
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; local.abort(); }, connectTimeoutMs);
+    const timer = setTimeout(() => { timedOut = true; local.abort(); }, timeoutMs);
     try {
       const response = await fetchImpl(url, { method: 'POST', headers: headers(apiKey), body: JSON.stringify(body), signal: local.signal });
       return { response, local, cleanup: () => signal?.removeEventListener('abort', onAbort) };
     } catch (err) {
       signal?.removeEventListener('abort', onAbort);
-      if (timedOut) throw new ProviderError(0, '', 'timeout_error', NAME, { providerId: 'gemini', model, endpoint: url, stage: 'connect' });
+      if (timedOut) throw new ProviderError(0, '', 'timeout_error', NAME, { providerId: 'gemini', apiVersion: API_VERSION, model, endpoint: url, stage: 'connect' });
       if (signal?.aborted || /** @type {any} */ (err)?.name === 'AbortError') throw abortError();
-      throw new ProviderError(0, '', '', NAME, { providerId: 'gemini', model, endpoint: url, stage: 'connect' });
+      throw new ProviderError(0, '', '', NAME, { providerId: 'gemini', apiVersion: API_VERSION, model, endpoint: url, stage: 'connect' });
     } finally {
       clearTimeout(timer);
     }
   }
 
-  /** @param {string} url @param {string} apiKey @param {any} body @param {AbortSignal|undefined} signal @param {StreamRequest['onRetry']} onRetry @param {string} model */
-  async function post(url, apiKey, body, signal, onRetry, model) {
+  /**
+   * Anfrage mit kontrollierten Wiederholungen bei vorübergehenden Fehlern (429, 5xx, Netz,
+   * Zeitlimit): exponentielle Pause mit Jitter, nie länger als MAX_WAIT_MS am Stück, nie mehr
+   * als `maxRetries` Mal und immer nur eine Anfrage gleichzeitig. Gibt die letzte Antwort zurück
+   * (auch eine fehlerhafte) samt Anzahl Wiederholungen.
+   * @param {{ url: string, apiKey: string, body: any, signal?: AbortSignal, onRetry?: StreamRequest['onRetry'], model: string, maxRetries: number, timeoutMs: number }} o
+   */
+  async function post({ url, apiKey, body, signal, onRetry, model, maxRetries, timeoutMs }) {
     for (let attempt = 0; ; attempt += 1) {
+      /** @param {any} err */
+      const giveUp = (err) => { if (err instanceof ProviderError) err.retries = attempt; return err; };
       let result;
       try {
-        result = await postOnce(url, apiKey, body, signal, model);
+        result = await postOnce(url, apiKey, body, signal, model, timeoutMs);
       } catch (err) {
-        if (/** @type {any} */ (err)?.name === 'AbortError' || !isRetryable(err) || attempt >= RETRY_DELAYS.length) throw err;
+        if (/** @type {any} */ (err)?.name === 'AbortError' || !isRetryable(err) || attempt >= maxRetries) throw giveUp(err);
         onRetry?.(attempt + 1, /** @type {Error} */ (err));
-        await wait(RETRY_DELAYS[attempt], signal);
+        await wait(backoffDelay(attempt, { maxMs: MAX_WAIT_MS }), signal);
         continue;
       }
       const { response } = result;
-      if (response.ok || !RETRY_STATUS.has(response.status) || attempt >= RETRY_DELAYS.length) return result;
+      if (response.ok || !RETRY_STATUS.has(response.status) || attempt >= maxRetries) return { ...result, retries: attempt };
       const err = await toError(response, { model, endpoint: url });
       result.cleanup();
-      // Aufgebrauchtes Kontingent wird durch Warten nicht besser
-      if (err.category === 'quota') throw err;
+      // Aufgebrauchtes Guthaben oder Tageslimit wird durch Warten nicht besser,
+      // eine sehr lange verlangte Pause wartet Buddy nicht ab (lieber Ausweichmodell oder Meldung)
+      if (err.category === 'quota' || err.type === 'rate_limit_day' || (err.retryAfterMs || 0) > MAX_WAIT_MS) throw giveUp(err);
       onRetry?.(attempt + 1, err);
-      await wait(err.retryAfterMs || RETRY_DELAYS[attempt], signal);
+      await wait(backoffDelay(attempt, { maxMs: MAX_WAIT_MS, retryAfterMs: err.retryAfterMs }), signal);
     }
   }
 
   /** @param {StreamRequest} req @returns {Promise<StreamResult>} */
   async function streamMessage(req) {
     const { apiKey, system, messages, tools, maxTokens, effort, format, signal, onText, onRetry } = req;
+    const maxRetries = Number.isInteger(req.maxRetries) && Number(req.maxRetries) >= 0 ? Math.min(Number(req.maxRetries), MAX_RETRIES) : MAX_RETRIES;
     const model = bareModel(req.model);
     const info = models.info(model);
     const caps = info.caps;
@@ -293,7 +346,7 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
     const isPro = /pro/i.test(model);
     /** @type {any} */
     const generationConfig = { maxOutputTokens: isPro ? maxTokens + 4096 : maxTokens };
-    const gen3 = isGemini3(model);
+    const gen3 = isGemini3(model) || (isLatestAlias(model) && models.metaOf(model)?.thinking !== false);
     if (gen3 && !learned.get('gemini', model, 'noThinkingLevel')) {
       // Ohne Angabe denkt Gemini 3 auf «high» und braucht dann für ein «Hallo» schnell 30 Sekunden.
       let level = thinkingLevelFor(model, effort);
@@ -333,18 +386,24 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
     ];
     const url = streaming ? `${base()}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse` : `${base()}/models/${encodeURIComponent(model)}:generateContent`;
     const ctx = { model, endpoint: url };
+    // Ohne Streaming kommt die erste Antwort erst, wenn alles fertig ist: dort länger warten
+    const send = () => post({ url, apiKey, body, signal, onRetry, model, maxRetries, timeoutMs: streaming ? connectTimeoutMs : requestTimeoutMs });
 
-    let attempt = await post(url, apiKey, body, signal, onRetry, model);
+    let attempt = await send();
+    let retries = attempt.retries;
     for (let n = 0; attempt.response.status === 400 && n < optional.length; n += 1) {
       const err = await toError(attempt.response, ctx);
       attempt.cleanup();
       const fix = optional.find((o) => o.test.test(err.raw) && o.apply());
       if (!fix) throw err;
-      attempt = await post(url, apiKey, body, signal, onRetry, model);
+      attempt = await send();
+      retries += attempt.retries;
     }
     if (!attempt.response.ok) {
       attempt.cleanup();
-      throw await toError(attempt.response, ctx);
+      const err = await toError(attempt.response, ctx);
+      err.retries = retries;
+      throw err;
     }
 
     const { response, local } = attempt;
@@ -362,7 +421,7 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
 
     /** Ein Antwortstück (beim Streaming viele, sonst eines) @param {any} data */
     const consume = (data) => {
-      if (data?.error) throw new ProviderError(Number(data.error.code) || 0, data.error.message || 'Stream-Fehler', data.error.status || '', NAME, { providerId: 'gemini', ...ctx, stage: 'stream' });
+      if (data?.error) throw new ProviderError(Number(data.error.code) || 0, data.error.message || 'Stream-Fehler', data.error.status || '', NAME, { providerId: 'gemini', apiVersion: API_VERSION, ...ctx, stage: 'stream' });
       if (data?.promptFeedback?.blockReason) blocked = data.promptFeedback.blockReason;
       if (data?.usageMetadata) {
         const u = data.usageMetadata;
@@ -402,18 +461,23 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
       try {
         for await (const { data } of parseSSE(/** @type {any} */ (response.body), kick)) consume(data);
       } catch (err) {
-        if (idleHit) throw new ProviderError(0, '', 'timeout_error', NAME, { providerId: 'gemini', ...ctx, stage: 'stream' });
+        if (idleHit) throw new ProviderError(0, '', 'timeout_error', NAME, { providerId: 'gemini', apiVersion: API_VERSION, ...ctx, stage: 'stream' });
         if (signal?.aborted || /** @type {any} */ (err)?.name === 'AbortError') throw abortError();
         if (err instanceof ProviderError) throw err;
-        throw new ProviderError(0, '', '', NAME, { providerId: 'gemini', ...ctx, stage: 'stream' });
+        throw new ProviderError(0, '', '', NAME, { providerId: 'gemini', apiVersion: API_VERSION, ...ctx, stage: 'stream' });
       } finally {
         clearTimeout(idle);
         attempt.cleanup();
       }
+      // Gemini schliesst jede vollständige Antwort mit finishReason ab. Endet der Stream ohne,
+      // ist die Verbindung abgerissen: nicht als (abgeschnittene) fertige Antwort weitergeben.
+      if (!finish && !blocked && !signal?.aborted) {
+        throw new ProviderError(0, 'Stream ohne Abschluss beendet', 'stream_incomplete', NAME, { providerId: 'gemini', apiVersion: API_VERSION, ...ctx, stage: 'stream' });
+      }
     } else {
       try {
         let data;
-        try { data = await response.json(); } catch { throw new ProviderError(response.status, 'Antwort ist kein JSON', 'parse_error', NAME, { providerId: 'gemini', ...ctx, stage: 'parse' }); }
+        try { data = await response.json(); } catch { throw new ProviderError(response.status, 'Antwort ist kein JSON', 'parse_error', NAME, { providerId: 'gemini', apiVersion: API_VERSION, ...ctx, stage: 'parse' }); }
         consume(data);
       } finally {
         attempt.cleanup();
@@ -421,10 +485,10 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
     }
 
     if (blocked && !text && !calls.length) {
-      throw new ProviderError(400, `Anfrage blockiert: ${blocked}`, 'SAFETY', NAME, { providerId: 'gemini', ...ctx, stage: 'request' });
+      throw new ProviderError(400, `Anfrage blockiert: ${blocked}`, 'SAFETY', NAME, { providerId: 'gemini', apiVersion: API_VERSION, ...ctx, stage: 'request' });
     }
     if (finish === 'MALFORMED_FUNCTION_CALL' && !calls.length) {
-      throw new ProviderError(400, 'Gemini hat einen ungültigen Funktionsaufruf erzeugt (MALFORMED_FUNCTION_CALL).', 'MALFORMED_FUNCTION_CALL', NAME, { providerId: 'gemini', ...ctx, stage: 'parse' });
+      throw new ProviderError(400, 'Gemini hat einen ungültigen Funktionsaufruf erzeugt (MALFORMED_FUNCTION_CALL).', 'MALFORMED_FUNCTION_CALL', NAME, { providerId: 'gemini', apiVersion: API_VERSION, ...ctx, stage: 'parse' });
     }
 
     /** @type {ContentBlock[]} */
@@ -440,7 +504,7 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
       block.meta = meta;
       content.push(block);
     });
-    return { stopReason: mapFinish(finish, calls.length > 0), usage, content, droppedComputer: converted.dropped, droppedFormat };
+    return { stopReason: mapFinish(finish, calls.length > 0), usage, content, droppedComputer: converted.dropped, droppedFormat, model, retries };
   }
 
   /** @param {import('./types').JsonRequest} req */
@@ -450,6 +514,8 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
       messages: [{ role: 'user', content: req.prompt }],
       format: req.schema,
       stream: false,
+      maxRetries: req.maxRetries,
+      onRetry: req.onRetry,
     });
     const text = result.content.filter((b) => b.type === 'text').map((b) => /** @type {any} */ (b).text).join('');
     let data = null;
@@ -465,4 +531,4 @@ function createGeminiClient({ provider, fetchImpl = globalThis.fetch, connectTim
   return { provider: 'gemini', listModels, streamMessage, json };
 }
 
-module.exports = { createGeminiClient, toContents, toFunctionDeclarations, toOpenApiSchema, mapFinish, thinkingLevelFor, isGemini3, SKIP_SIGNATURE };
+module.exports = { createGeminiClient, toContents, toFunctionDeclarations, toOpenApiSchema, mapFinish, thinkingLevelFor, isGemini3, isLatestAlias, SKIP_SIGNATURE, API_VERSION, MAX_RETRIES };

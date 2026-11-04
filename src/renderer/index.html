@@ -262,11 +262,16 @@
                 </div>
               </div>
               <label class="row">
+                <span class="row-label">Ausweichmodell bei Überlastung</span>
+                <span class="switch"><input type="checkbox" id="fallbackToggle"><span></span></span>
+              </label>
+              <label class="row">
                 <span class="row-label">Modellwahl im Chat anzeigen</span>
                 <span class="switch"><input type="checkbox" id="routeToggle"><span></span></span>
               </label>
             </div>
             <p class="footer" id="routeHint"></p>
+            <p class="footer" id="fallbackHint">Ist ein Modell gerade überlastet oder am Limit, antwortet Buddy für diese eine Anfrage mit einem anderen verfügbaren Modell desselben Anbieters und sagt dir das im Chat. Deine Modellwahl bleibt unverändert.</p>
 
             <h3 class="section">Kosten</h3>
             <div class="group">

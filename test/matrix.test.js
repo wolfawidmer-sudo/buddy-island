@@ -281,8 +281,8 @@ const errorOf = (events) => events.find((e) => e.c === 'chat:error')?.p;
     const used = mock.state.requests.filter((q) => q.body?.model).map((q) => q.body.model);
     assert.ok(used.includes('gpt-4o-mini') && used[used.length - 1] !== 'gpt-4o-mini', `danach anderes Modell (${used})`);
   }
-  // Gemini «high demand» (503) auf dem Hauptmodell: Test zeigt «funktioniert, mit Hinweis» und testet mit dem
-  // anderen Modell weiter; im Chat weicht Buddy nach einem kurzen Versuch aus und sagt es offen
+  // Gemini «high demand» (503) auf dem Hauptmodell: Test zeigt «Eingeschränkt» (Hauptmodell temporär nicht
+  // verfügbar) und testet mit dem anderen Modell weiter; im Chat weicht Buddy nach einem kurzen Versuch aus und sagt es offen
   {
     require('../src/llm/learned').clear();
     const list = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest'];
@@ -291,7 +291,8 @@ const errorOf = (events) => events.find((e) => e.c === 'chat:error')?.p;
     const first = r.steps.find((x) => x.id === 'basic:gemini-flash-latest');
     assert.ok(r.ok && r.warnings === 1 && first.temporary && first.error.category === 'overloaded', `Test mit Hinweis: ${healthReport([r])}`);
     assert.ok(r.steps.filter((x) => ['stream', 'history', 'tools'].includes(x.id)).every((x) => x.ok && x.model === 'gemini-flash-lite-latest'), 'weiter mit Flash-Lite');
-    assert.ok(/OK mit Hinweis/.test(healthReport([r])) && /^! /m.test(healthReport([r])), 'Bericht markiert den Hinweis');
+    assert.strictEqual(r.status, 'limited');
+    assert.ok(/: Eingeschränkt/.test(healthReport([r])) && /^⏳ .*Temporär nicht verfügbar/m.test(healthReport([r])), 'Bericht markiert den Hinweis');
     require('../src/llm/learned').clear();
     const reg = registry('gemini', { models: list, busy: ['gemini-flash-latest'] });
     const a = agentFor('gemini', reg.client);

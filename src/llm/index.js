@@ -10,9 +10,8 @@ const { createOpenAiCompatClient } = require('./openai-compat');
 const { createGeminiClient } = require('./gemini');
 const { createHuggingFaceClient } = require('./huggingface');
 const learned = require('./learned');
-
-const BUSY_MS = 3 * 60 * 1000;
-const { ProviderError, diagnosticLine } = require('./errors');
+const fallback = require('./fallback');
+const { ProviderError, diagnosticLine, isTransient } = require('./errors');
 const models = require('../models');
 
 /** @typedef {import('./types').LlmClient} LlmClient */
@@ -47,9 +46,10 @@ function annotate(err, provider, model, stage) {
   if (!e.endpoint) e.endpoint = endpointFor(provider, model);
   // Modell gibt es (für diesen Key) nicht mehr: merken, damit die Auswahl es überspringt.
   // Nennt der Anbieter einen Nachfolger («use models/gemini-…»), merkt sich Buddy auch den.
-  // Überlastet oder Limit pro Modell (z. B. Gemini «high demand»): ein paar Minuten lang ein anderes Modell bevorzugen
-  if (model && (e.category === 'overloaded' || e.category === 'rate_limit')) {
-    learned.set(provider.id, model, 'busyUntil', Date.now() + BUSY_MS);
+  // Überlastet oder Limit pro Modell (z. B. Gemini «high demand»): ein paar Minuten lang ein anderes Modell bevorzugen.
+  // Netz- und Zeitfehler zählen nicht: die liegen meist nicht am Modell.
+  if (model && isTransient(e) && (e.category === 'overloaded' || e.category === 'rate_limit' || e.category === 'server')) {
+    fallback.markBusy(provider.id, model);
   }
   if (model && e.category === 'model' && (e.status === 404 || e.status === 400)) {
     learned.set(provider.id, model, 'unavailable', true);

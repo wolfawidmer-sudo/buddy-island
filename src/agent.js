@@ -5,6 +5,7 @@
 const crypto = require('crypto');
 const { t, language } = require('./i18n');
 const { publicError, diagnosticLine } = require('./llm/errors');
+const fallback = require('./llm/fallback');
 
 // Anfragen, die den Bildschirm brauchen (für die Rückmeldung bei Modellen ohne Bildverarbeitung)
 const SCREEN_REQUEST = /\b(bildschirm|screenshot|bildschirmfoto|klick\w*|steuer\w*|maus|screen|click|écran|cliqu\w*|schermo|clicc\w*)\b/i;
@@ -189,6 +190,28 @@ function planText(plan) {
   return plan.map((s, i) => `${i + 1}. [${STATUS_LABEL[s.status] || s.status}] ${s.title}${s.note ? ` – ${s.note}` : ''}`).join('\n');
 }
 
+/** Enthält die Unterhaltung Bilder (Bildschirmfotos, Anhänge)? Dann braucht ein Ausweichmodell Bildverarbeitung. */
+function hasImages(conversation) {
+  for (const m of conversation) {
+    if (!Array.isArray(m.content)) continue;
+    for (const b of m.content) {
+      if (b.type === 'image') return true;
+      if (b.type === 'tool_result' && Array.isArray(b.content) && b.content.some((c) => c.type === 'image')) return true;
+    }
+  }
+  return false;
+}
+
+/** Kurzer Grund für eine vorübergehende Störung, passt in «{Modell} ist gerade …» */
+function transientReason(err) {
+  switch (err?.category) {
+    case 'overloaded': return t('überlastet');
+    case 'rate_limit': return err?.type === 'rate_limit_day' ? t('am Tageslimit') : t('am Anfragelimit');
+    case 'timeout': return t('zu langsam');
+    default: return t('nicht erreichbar');
+  }
+}
+
 function createAgent(deps) {
   const {
     claude, router, usage, history, getKey, getSettings, getTools, getComputer, getFiles, isComputerAvailable,
@@ -206,6 +229,9 @@ function createAgent(deps) {
     }
     const settings = getSettings();
     const auto = settings.autoModel !== false;
+    // Ausweichmodell bei vorübergehenden Störungen (Einstellung «Ausweichmodell bei Überlastung», Standard an)
+    const fallbackEnabled = settings.modelFallback !== false;
+    const fallbackPrefs = Array.isArray(settings.fallbackModels) ? settings.fallbackModels.filter((x) => typeof x === 'string') : [];
     const policy = permissions.cleanPolicy(settings.permissions);
     const limit = Number(settings.monthlyLimit) || 0;
     let budget = usage.budget(limit);
@@ -230,19 +256,6 @@ function createAgent(deps) {
     // Ersatz für ein nicht verfügbares Modell: nur unter den Modellen, die der Anbieter für
     // diesen Key wirklich anbietet, zuerst dieselbe Stufe, Opus nur wenn Opus gefragt war,
     // und nur Modelle mit den nötigen Fähigkeiten.
-    // Überlastung oder Limit pro Modell: ein anderes Modell hilft sofort, Warten oft nicht
-    const isBusyError = (err) => err?.category === 'overloaded' || err?.category === 'rate_limit' || err?.status === 529 || err?.type === 'overloaded_error';
-    function busyAlternative(failed, needTools) {
-      const cap = models.tierRank(budgetCap(usage.budget(limit)));
-      const fresh = models.resolveTiers(available, providerId); // überspringt gerade überlastete Modelle
-      const order = [st.tier || 'sonnet', 'sonnet', 'haiku', 'opus'];
-      for (const k of order) {
-        const m = fresh[k] || tiers[k];
-        if (m && m !== failed && models.tierRank(k) <= cap && (!needTools || models.capabilities(m).tools)) return { model: m, tier: k };
-      }
-      return null;
-    }
-
     function alternativeModel(list, failed, wantTier, needTools) {
       const ids = list.map((m) => m.id).filter((x) => x && x !== failed);
       const alt = models.resolveTiers(ids.map((x) => ({ id: x })), providerId);
@@ -271,6 +284,9 @@ function createAgent(deps) {
       shotBeforeInput: null,
       guards: 0,
       streamRetries: 0,
+      // Ausweichmodelle dieser Aufgabe: gestörtes Modell → Ersatz (gilt nur hier, nie in den Einstellungen)
+      substitutes: new Map(),
+      fallbacks: 0,
       executed: new Map(),
       grants: { control: settings.confirmControl === false ? true : null, medium: false, recent: null },
       actions: 0,
@@ -314,6 +330,13 @@ function createAgent(deps) {
 
     // Welches Modell die nächste Runde macht
     function pick() {
+      const choice = pickPlanned();
+      const sub = st.substitutes.get(choice.model);
+      if (!sub) return choice;
+      return { model: sub.model, tier: sub.tier, effort: models.supportedEffort(sub.model, choice.effort), why: choice.why };
+    }
+
+    function pickPlanned() {
       if (!auto) {
         return { model: decision.model, tier: decision.tier, effort: decision.effort, why: null };
       }
@@ -601,10 +624,12 @@ function createAgent(deps) {
 
     // ---------- Eine Runde mit Claude (mit Wiederholung bei Abbruch im Stream) ----------
 
-    async function callModel({ model, effort, system, toolList, maxTokens, holdText }) {
+    async function callModel({ model, effort, system, toolList, maxTokens, holdText, maxRetries }) {
       let pending = '';
       let emitted = 0;
       let firstInRound = true;
+      // Wurde vor dieser Runde schon Text gezeigt? Nach einem Zurücknehmen gilt wieder dieser Stand
+      const wroteBefore = Boolean(st.wroteText);
       const started = Date.now();
       let firstTokenMs = 0;
       const onText = (text) => {
@@ -622,10 +647,11 @@ function createAgent(deps) {
       for (;;) {
         try {
           const result = await client.streamMessage({
-            apiKey, workspaceId: settings.workspaceId, model, system, messages: conversation, tools: toolList, maxTokens, effort, signal, onText,
+            apiKey, workspaceId: settings.workspaceId, model, system, messages: conversation, tools: toolList, maxTokens, effort, signal, onText, maxRetries,
             onRetry: (n, err) => {
-              // Überlastet und ein anderes Modell steht bereit: nach einem kurzen Versuch ausweichen statt lange zu warten
-              if (auto && isBusyError(err) && n >= 2 && busyAlternative(model, Boolean(toolList && toolList.length))) throw err;
+              // Steht ein Ausweichmodell bereit, nicht länger warten als vorgesehen
+              // (Gemini hält maxRetries selbst ein, die anderen Adapter brechen hier ab)
+              if (maxRetries !== undefined && n > maxRetries) throw Object.assign(err, { retries: n - 1 });
               log(`API-Wiederholung ${n} (${err.status || ''} ${err.type || err.message})`);
               send('agent:action', { id, label: t('Verbindung, Versuch {n}', { n: n + 1 }) });
               task?.step('retry', `API-Wiederholung ${n}: ${err.message}`, 'warn');
@@ -640,11 +666,19 @@ function createAgent(deps) {
             st.streamRetries += 1;
             if (emitted) send('chat:rewind', { id, chars: emitted });
             emitted = 0;
+            st.wroteText = wroteBefore;
             pending = '';
             firstInRound = true;
             task?.step('retry', 'Verbindung unterbrochen, Runde neu gestartet', 'warn');
             await new Promise((r) => setTimeout(r, 1500));
             continue;
+          }
+          // Angefangene Antwort zurücknehmen, damit kein halber Text stehen bleibt (der Verlauf
+          // selbst bekommt nur vollständige Antworten, er bleibt so oder so heil)
+          if (emitted) {
+            send('chat:rewind', { id, chars: emitted });
+            emitted = 0;
+            st.wroteText = wroteBefore;
           }
           throw err;
         }
@@ -752,9 +786,16 @@ function createAgent(deps) {
 
         const holdText = st.unverified && withComputer;
         const maxTokens = models.maxTokensFor(st.effort, settings.maxTokens);
+        // Ausweichmodelle aus der echten Modellliste (leer, wenn ausgeschaltet oder keine Liste)
+        const fallbackFor = (failed) => (fallbackEnabled && st.fallbacks < fallback.MAX_FALLBACKS ? fallback.candidates({
+          providerId, failed, available, tier: models.info(failed).tier,
+          needTools: toolList.length > 0, needVision: hasImages(conversation), needComputer: withComputer,
+          preferred: fallbackPrefs, exclude: [...st.substitutes.keys()], maxTier: budgetCap(usage.budget(limit)),
+        }) : []);
         let call;
         try {
-          call = await callModel({ model: st.model, effort: st.effort, system, toolList, maxTokens, holdText });
+          const maxRetries = fallback.retriesFor({ providerId, model: st.model, hasFallback: fallbackFor(st.model).length > 0 });
+          call = await callModel({ model: st.model, effort: st.effort, system, toolList, maxTokens, holdText, maxRetries });
         } catch (err) {
           // Modell gibt es (für diesen Key) nicht: Liste frisch holen und einmal ein passendes Ersatzmodell nehmen.
           // Ein manuell gewähltes Modell wird nie still ersetzt.
@@ -775,19 +816,38 @@ function createAgent(deps) {
             tiers = alt.tiers;
             send('agent:route', routeInfo({ switched: true, why: t('Ersatz für ein nicht verfügbares Modell') }));
             call = await callModel({ model: st.model, effort: st.effort, system, toolList, maxTokens, holdText });
-          } else if (auto && isBusyError(err) && !st.overloadFallback) {
-            st.overloadFallback = true;
-            const alt = busyAlternative(st.model, toolsAllowed);
-            if (alt) {
-              log(`Modell ${st.model} überlastet (${err.status || ''} ${err.category || ''}), Ausweichmodell: ${alt.model}`);
-              task.step('model', `${models.info(st.model).short} überlastet, weiter mit ${models.info(alt.model).short}`, 'warn');
-              send('chat:notice', { id, text: t('{a} ist gerade überlastet. Buddy antwortet mit {b}.', { a: models.info(st.model).short, b: models.info(alt.model).short }), soft: true });
-              st.model = alt.model;
-              st.tier = alt.tier;
-              st.effort = models.supportedEffort(st.model, st.effort);
-              send('agent:route', routeInfo({ switched: true, why: t('Ausweichmodell wegen Überlastung') }));
-              call = await callModel({ model: st.model, effort: st.effort, system, toolList, maxTokens, holdText });
-            } else throw err;
+          } else if (fallback.canFallback(err) && fallbackFor(st.model).length) {
+            // Vorübergehende Störung (Überlastung, Rate-Limit, Serverfehler): einmalig für diese
+            // Aufgabe ein anderes verfügbares Modell nehmen und das offen sagen. Die Einstellung bleibt.
+            const failed = st.model;
+            let lastErr = err;
+            call = null;
+            for (const alt of fallbackFor(failed)) {
+              const from = st.model;
+              fallback.markBusy(providerId, from);
+              st.fallbacks += 1;
+              const altTier = models.info(alt).tier;
+              const why = transientReason(lastErr);
+              log(`Ausweichmodell: ${from} ${lastErr.category} (${lastErr.status || '-'}, ${lastErr.retries || 0} Wiederholungen), weiter mit ${alt}`);
+              task.step('model', `${models.info(from).short} ${why}, weiter mit ${models.info(alt).short}`, 'warn', { fallbackFrom: from, fallbackTo: alt, status: lastErr.status, retries: lastErr.retries || 0 });
+              send('chat:notice', { id, soft: true, text: t('{a} ist gerade {why}. Buddy antwortet diesmal mit {b}. Deine Modellwahl bleibt unverändert.', { a: models.info(failed).short, why, b: models.info(alt).short }) });
+              st.substitutes.set(failed, { model: alt, tier: altTier });
+              if (from !== failed) st.substitutes.set(from, { model: alt, tier: altTier });
+              st.model = alt;
+              st.tier = altTier;
+              st.effort = models.supportedEffort(alt, st.effort);
+              send('agent:route', routeInfo({ switched: true, why: t('Ausweichmodell, {a} ist gerade {why}', { a: models.info(failed).short, why }), fallbackFrom: failed }));
+              try {
+                call = await callModel({ model: alt, effort: st.effort, system, toolList, maxTokens, holdText, maxRetries: 1 });
+                break;
+              } catch (err2) {
+                if (err2?.name === 'AbortError' || signal.aborted) throw abortError();
+                if (!fallback.canFallback(err2)) throw err2;
+                fallback.markBusy(providerId, alt);
+                lastErr = err2;
+              }
+            }
+            if (!call) throw lastErr;
           } else throw err;
         }
         const { result } = call;

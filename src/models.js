@@ -197,9 +197,48 @@ function info(modelId) {
   };
 }
 
-/** Was ein Modell kann. @param {string} modelId */
+// ---------- Metadaten aus der Modellliste des Anbieters ----------
+// Manche Anbieter sagen pro Modell, was es kann (Gemini: «thinking», Tokenlimits).
+// Buddy merkt sich das beim Laden der Liste und richtet die Fähigkeiten danach.
+/** @type {Map<string, import('./llm/types').ModelMeta>} */
+const META = new Map();
+const bare = (/** @type {string} */ id) => String(id || '').replace(/^models\//, '');
+
+/** @param {ProviderId} providerId @param {string} modelId @param {import('./llm/types').ModelMeta} meta */
+function rememberMeta(providerId, modelId, meta) {
+  if (!modelId || !meta) return;
+  META.set(`${providerId}|${bare(modelId)}`, { ...META.get(`${providerId}|${bare(modelId)}`), ...meta });
+}
+
+/** @param {string} modelId @returns {import('./llm/types').ModelMeta|undefined} */
+function metaOf(modelId) {
+  return META.get(`${providerOf(modelId)}|${bare(modelId)}`);
+}
+
+/**
+ * Was ein Modell kann (nicht der Anbieter!). Grundlage ist der Katalog bzw. die Schätzung aus
+ * dem Namen, ergänzt um die Angaben aus der Modellliste. Fehlt eine Fähigkeit, ist das Modell
+ * nicht «kaputt», es kann diese Sache einfach nicht (z. B. lokale Modelle ohne Werkzeuge).
+ * @param {string} modelId
+ * @returns {import('./llm/types').FullCapabilities}
+ */
 function capabilities(modelId) {
-  return info(modelId).caps;
+  const i = info(modelId);
+  const base = i.caps;
+  const meta = metaOf(modelId) || {};
+  const thinks = meta.thinking === true || (meta.thinking !== false && (i.efforts || []).length > 0);
+  return {
+    chat: true,
+    streaming: base.streaming ?? true,
+    history: true,
+    vision: base.vision,
+    tools: base.tools,
+    parallelTools: base.parallelTools ?? (base.tools && i.provider !== 'huggingface'),
+    computerUse: base.computerUse,
+    structured: base.structured,
+    json: base.json ?? base.structured,
+    reasoning: base.reasoning ?? thinks,
+  };
 }
 
 // Kosten einer Anfrage in USD. input_tokens zählt nur die nicht gecachten Tokens.
@@ -347,6 +386,8 @@ module.exports = {
   tierOf,
   info,
   capabilities,
+  rememberMeta,
+  metaOf,
   costOf,
   resolveTiers,
   nextTier,

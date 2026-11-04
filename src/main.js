@@ -51,6 +51,8 @@ const DEFAULTS = {
   provider: 'anthropic',
   model: 'claude-sonnet-5-5', // manuelle Wahl und Rückfall
   autoModel: true, // Router wählt Modell und Denkaufwand
+  modelFallback: true, // bei Überlastung/Rate-Limit einmalig ein anderes verfügbares Modell desselben Anbieters nehmen (mit Hinweis)
+  fallbackModels: [], // optional: bevorzugte Ausweichmodelle (IDs); leer = automatisch aus der Modellliste
   effort: 'auto', // auto | low | medium | high
   showRouting: false, // Modell, Aufwand, Grund und Kosten im Chat zeigen (für Fortgeschrittene)
   monthlyLimit: 5, // US-Dollar pro Monat, 0 = kein Limit
@@ -1856,6 +1858,10 @@ function setupIpc() {
     // KI-Einstellungen mit Prüfung
     if ('effort' in patch && ['auto', 'low', 'medium', 'high'].includes(patch.effort)) settings.effort = patch.effort;
     if ('autoModel' in patch) settings.autoModel = Boolean(patch.autoModel);
+    if ('modelFallback' in patch) settings.modelFallback = Boolean(patch.modelFallback);
+    if ('fallbackModels' in patch && Array.isArray(patch.fallbackModels)) {
+      settings.fallbackModels = patch.fallbackModels.filter((x) => typeof x === 'string' && /^[\w.:/-]{1,120}$/.test(x)).slice(0, 5);
+    }
     if ('showRouting' in patch) settings.showRouting = Boolean(patch.showRouting);
     if ('historyEnabled' in patch) settings.historyEnabled = Boolean(patch.historyEnabled);
     if ('memoryEnabled' in patch) settings.memoryEnabled = Boolean(patch.memoryEnabled);
@@ -2081,7 +2087,11 @@ function setupIpc() {
         let modelIds = [];
         try {
           const tiers = models.resolveTiers(await availableModels(pid), pid);
-          if (settings.autoModel === false && models.providerOf(settings.model) === pid) modelIds = [settings.model];
+          if (settings.autoModel === false && models.providerOf(settings.model) === pid) {
+            // Manuelle Wahl: dieses Modell, plus ein mögliches Ausweichmodell (falls eingeschaltet)
+            const alt = settings.modelFallback !== false ? [tiers.haiku, tiers.sonnet, tiers.opus].find((m) => m && m !== settings.model) : null;
+            modelIds = alt ? [settings.model, alt] : [settings.model];
+          }
           else modelIds = [...new Set([tiers.sonnet || tiers.haiku || tiers.opus, tiers.haiku].filter(Boolean))];
         } catch (err) {
           log(`Verbindungstest ${pid}: Modelle nicht ermittelbar: ${err.message}`);
@@ -2093,6 +2103,7 @@ function setupIpc() {
           r = await runHealth({
             client: llm.client(pid), providerId: pid, apiKey: key, workspaceId: pid === 'anthropic' ? settings.workspaceId : undefined, models: modelIds,
             onStep: (step) => liveWin()?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'step', step }),
+            log,
           });
           // Ein Modell gibt es nicht mehr (z. B. alte Gemini-Version für neue Konten): Buddy hat es sich
           // gemerkt und wählt jetzt ein anderes. Dann den Test einmal mit der neuen Auswahl wiederholen.
@@ -2107,7 +2118,7 @@ function setupIpc() {
         }
         const result = { ...r, providerName: name };
         results.push(result);
-        log(`Verbindungstest ${pid}: ${r.ok ? 'ok' : 'FEHLER'} (${r.steps.map((x) => `${x.id}=${x.ok === null ? 'skip' : x.ok ? 'ok' : x.error?.category || 'fail'}`).join(', ')})`);
+        log(`Verbindungstest ${pid}: ${r.status} (${r.steps.map((x) => `${x.id}=${x.status}${x.error ? `/${x.error.category}` : ''}${x.fallbackModel ? `@${x.fallbackModel}` : ''}`).join(', ')})`);
         liveWin()?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'done', result });
       }
       const report = healthReport(results, { version: app.getVersion(), os: `${os.type()} ${os.release()}`, language: i18n.language() });

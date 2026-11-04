@@ -188,13 +188,25 @@ function createMock(provider, opts = {}) {
   function gemini(u, headers, body) {
     const err = (code, status, message, reason) => json({ error: { code, message, status, details: reason ? [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason }] : [] } }, code);
     if (headers['x-goog-api-key'] !== GOOD_KEY.gemini) return err(400, 'API key not valid. Please pass a valid API key.', 'INVALID_ARGUMENT', 'API_KEY_INVALID');
-    if (u.pathname.endsWith('/models')) return json({ models: [...list.map((id) => ({ name: `models/${id}`, displayName: id, supportedGenerationMethods: ['generateContent', 'countTokens'] })), { name: 'models/text-embedding-004', supportedGenerationMethods: ['embedContent'] }] });
+    if (u.pathname.endsWith('/models')) return json({ models: [...list.map((id) => ({ name: `models/${id}`, displayName: id, supportedGenerationMethods: ['generateContent', 'countTokens'], ...(/gemini-3|-latest$/.test(id) ? { thinking: true } : {}) })), { name: 'models/text-embedding-004', supportedGenerationMethods: ['embedContent'] }] });
     const m = /\/models\/([^:]+):(generateContent|streamGenerateContent)$/.exec(u.pathname);
     if (!m) return err(404, 'Not Found', 'NOT_FOUND');
     const model = decodeURIComponent(m[1]);
     const streaming = m[2] === 'streamGenerateContent';
     if (streaming && u.searchParams.get('alt') !== 'sse') return err(400, 'alt=sse expected in this mock', 'INVALID_ARGUMENT');
     if (!isModel(model)) return err(404, `models/${model} is not found for API version v1beta, or is not supported for generateContent.`, 'NOT_FOUND');
+    // opts.unavailable: Modell ist gerade überlastet (wie Googles HTTP 503 «high demand»)
+    if ((opts.unavailable || []).includes(model)) return err(503, 'UNAVAILABLE', 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.');
+    // opts.quota429: Rate-Limit mit RetryInfo und QuotaFailure, wie Google es schickt
+    if (opts.quota429 && state.failOnce.quota429 !== 0) {
+      if (state.failOnce.quota429 > 0) state.failOnce.quota429 -= 1;
+      return json({ error: { code: 429, message: 'You exceeded your current quota, please check your plan and billing details.', status: 'RESOURCE_EXHAUSTED', details: [
+        { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaMetric: 'generativelanguage.googleapis.com/generate_content_free_tier_requests', quotaId: opts.quota429 }] },
+        { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: opts.retryDelay || '1s' },
+      ] } }, 429);
+    }
+    // opts.noThinkingLevel: älteres Modell hinter einem Alias kennt thinkingLevel nicht
+    if ((opts.noThinkingLevel || []).includes(model) && body.generationConfig?.thinkingConfig?.thinkingLevel) return err(400, 'INVALID_ARGUMENT', 'Unable to submit request because thinking_level is not supported by this model.');
     const gemini3 = /gemini-3/.test(model);
     const contents = body.contents || [];
     const known = new Set(['text', 'inlineData', 'functionCall', 'functionResponse', 'thoughtSignature', 'thought']);
@@ -220,6 +232,12 @@ function createMock(provider, opts = {}) {
         const next = contents[i + 1];
         const responses = (next?.parts || []).filter((p) => p.functionResponse);
         if (responses.length !== calls.length) return err(400, 'Please ensure that the number of function response parts is equal to the number of function call parts of the function call turn.', 'INVALID_ARGUMENT');
+        // Mit Aufruf-IDs muss jede Antwort die ID ihres Aufrufs nennen
+        if (opts.callIds) {
+          const ids = calls.map((p) => p.functionCall.id).sort().join();
+          const got = responses.map((p) => p.functionResponse.id).sort().join();
+          if (ids !== got) return err(400, `functionResponse.id does not match functionCall.id (${got} vs ${ids})`, 'INVALID_ARGUMENT');
+        }
       }
       conv.push({ role: c.role, text: c.parts.filter((p) => typeof p.text === 'string').map((p) => p.text).join(' '), calls, results: c.parts.filter((p) => p.functionResponse).map((p) => ({ text: p.functionResponse.response.result ?? p.functionResponse.response.error })) });
     }
@@ -230,7 +248,10 @@ function createMock(provider, opts = {}) {
     if (out.calls) {
       const sig = `gsig_${++seq}`;
       state.issued.set(sig, true);
-      out.calls.forEach((c, i) => parts.push(i === 0 ? { functionCall: { name: c.name, args: c.args }, thoughtSignature: sig } : { functionCall: { name: c.name, args: c.args } }));
+      out.calls.forEach((c, i) => {
+        const fc = { name: c.name, args: c.args, ...(opts.callIds ? { id: `fc_${++seq}` } : {}) };
+        parts.push(i === 0 ? { functionCall: fc, thoughtSignature: sig } : { functionCall: fc });
+      });
     }
     const usageMetadata = { promptTokenCount: 40, candidatesTokenCount: 6, thoughtsTokenCount: 3, totalTokenCount: 49 };
     if (!streaming) {
@@ -239,6 +260,17 @@ function createMock(provider, opts = {}) {
     }
     const chunks = [];
     if (out.text) for (const piece of out.text.match(/.{1,4}/g)) chunks.push({ candidates: [{ content: { role: 'model', parts: [{ text: piece }] } }] });
+    // opts.midStream: Fehler mitten im Stream (nach den ersten Stücken), einmal pro Modell
+    if ((opts.midStream || []).includes(model) && !state.midStreamDone?.has(model)) {
+      state.midStreamDone = state.midStreamDone || new Set();
+      state.midStreamDone.add(model);
+      return sseData([...chunks.slice(0, 1), { error: { code: 503, message: 'The model is overloaded. Please try again later.', status: 'UNAVAILABLE' } }]);
+    }
+    // opts.truncate: Verbindung reisst ab, bevor Gemini die Antwort abschliesst (kein finishReason)
+    if (opts.truncate && state.failOnce.truncate !== 0) {
+      if (state.failOnce.truncate > 0) state.failOnce.truncate -= 1;
+      return sseData(chunks.slice(0, 1));
+    }
     if (parts.length) chunks.push({ candidates: [{ content: { role: 'model', parts } }] });
     // Signatur kann an einem leeren Textstück am Schluss hängen
     chunks.push({ candidates: [{ content: { role: 'model', parts: [{ text: '', ...(gemini3 && out.text ? { thoughtSignature: `tsig_${++seq}` } : {}) }] }, finishReason: 'STOP' }], usageMetadata });
