@@ -239,6 +239,14 @@ assert.strictEqual(hardware.memAvailableLinux('MemTotal: 16000000 kB\nMemAvailab
 
   // ---------------- Ollama-Laufzeit gegen den nachgebauten Server ----------------
 
+  {
+    const { envFor } = require('../src/local/ollama');
+    const saved = process.env.PSModulePath;
+    process.env.PSModulePath = 'C:\\Program Files\\PowerShell\\7\\Modules';
+    assert.ok(!('PSModulePath' in envFor('powershell.exe')), 'Windows PowerShell ohne geerbten Modulpfad');
+    assert.strictEqual(envFor('nvidia-smi'), process.env);
+    if (saved === undefined) delete process.env.PSModulePath; else process.env.PSModulePath = saved;
+  }
   assert.strictEqual(classify('model requires more system memory (12.0 GiB) than is available (6.1 GiB)'), 'out_of_memory');
   assert.strictEqual(classify('CUDA error: out of memory'), 'out_of_memory');
   assert.strictEqual(classify('llama runner process has terminated: exit status 0xc0000409'), 'gpu_error');

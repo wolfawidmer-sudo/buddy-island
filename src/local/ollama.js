@@ -118,13 +118,25 @@ async function readNdjson(res, onLine, { idleMs = 0 } = {}) {
 }
 
 /**
+ * Windows PowerShell 5.1 darf den Modulpfad von PowerShell 7 nicht erben (wird Buddy aus
+ * PowerShell 7 gestartet, lassen sich sonst Module wie Microsoft.PowerShell.Security nicht laden).
+ * @param {string} cmd
+ */
+function envFor(cmd) {
+  if (!/powershell(\.exe)?$/i.test(cmd)) return process.env;
+  const env = { ...process.env };
+  for (const k of Object.keys(env)) if (k.toLowerCase() === 'psmodulepath') delete env[k];
+  return env;
+}
+
+/**
  * @param {string} cmd @param {string[]} args @param {number} [timeout]
  * @returns {Promise<{ code: number, out: string }>}
  */
 function runCmd(cmd, args, timeout = 20000) {
   return new Promise((resolve) => {
     try {
-      execFile(cmd, args, { timeout, windowsHide: true, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' }, (err, out, errOut) => {
+      execFile(cmd, args, { timeout, windowsHide: true, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8', env: envFor(cmd) }, (err, out, errOut) => {
         resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, out: `${out || ''}${errOut || ''}`.trim() });
       });
     } catch (e) {
@@ -653,4 +665,4 @@ function createOllama(opts = {}) {
   };
 }
 
-module.exports = { createOllama, LocalError, classify, parseComputeLines, readNdjson, DEFAULT_HOST, INSTALLER_URL, DOWNLOAD_PAGE };
+module.exports = { createOllama, LocalError, classify, envFor, parseComputeLines, readNdjson, DEFAULT_HOST, INSTALLER_URL, DOWNLOAD_PAGE };

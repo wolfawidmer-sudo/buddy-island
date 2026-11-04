@@ -52,7 +52,7 @@ const MIN_NVIDIA_DRIVER = 551.61;
 function run(cmd, args, timeout = 15000) {
   return new Promise((resolve) => {
     try {
-      execFile(cmd, args, { timeout, windowsHide: true, maxBuffer: 4 * 1024 * 1024, encoding: 'utf8' }, (err, out) => resolve(err ? null : String(out || '').trim()));
+      execFile(cmd, args, { timeout, windowsHide: true, maxBuffer: 4 * 1024 * 1024, encoding: 'utf8', env: require('./ollama').envFor(cmd) }, (err, out) => resolve(err ? null : String(out || '').trim()));
     } catch {
       resolve(null);
     }
