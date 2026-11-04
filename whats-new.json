@@ -1,19 +1,34 @@
 {
-  "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Kurz und für normale Nutzer geschrieben.",
+  "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Für Kundinnen und Kunden geschrieben: Nutzen statt Technik, keine Fachbegriffe.",
   "versions": [
     {
       "version": "0.7.1",
       "highlights": [
-        { "title": "Gemini wieder startklar", "text": "Buddy nimmt automatisch die neuste Gemini-Version, die dein Konto anbietet. Modelle, die Google nicht mehr anbietet, überspringt er selbst." }
+        {
+          "title": "Gemini wieder voll dabei",
+          "text": "Mit Google Gemini startet Buddy jetzt ohne Umwege. Er wählt von selbst die aktuellste Version, die dir zur Verfügung steht."
+        }
       ]
     },
     {
       "version": "0.7.0",
       "highlights": [
-        { "title": "Visualizer, der wirklich zuhört", "text": "Die Balken folgen Bass, Mitten und Höhen des echten Tons. Ist Spotify nur offen oder pausiert, bleibt alles ruhig." },
-        { "title": "Leuchtender Rand im Takt", "text": "Der Bildschirmrand leuchtet in deiner Akzentfarbe um den ganzen Bildschirm, auch über der Taskleiste, und pulsiert zur Musik." },
-        { "title": "Eingabefeld immer sichtbar", "text": "Egal wie lang die Unterhaltung wird: Das Eingabefeld bleibt unten, alles darüber scrollt für sich." },
-        { "title": "Weniger Technik", "text": "Modellnamen und Fehlercodes erscheinen nur noch auf Wunsch. Der Rand leuchtet nur, wenn Buddy wirklich länger deinen PC bedient." }
+        {
+          "title": "Musik, die man sieht",
+          "text": "Die Balken im Island tanzen zu Bass, Mitten und Höhen deiner Musik. Ist sie pausiert, wird es ruhig."
+        },
+        {
+          "title": "Ein Rand, der mitschwingt",
+          "text": "Der ganze Bildschirm leuchtet sanft in deiner Lieblingsfarbe und pulsiert im Takt."
+        },
+        {
+          "title": "Immer Platz zum Schreiben",
+          "text": "Egal wie lang das Gespräch wird: Das Eingabefeld bleibt unten griffbereit."
+        },
+        {
+          "title": "Einfachere Bedienung",
+          "text": "Aufgeräumter und klarer: Buddy zeigt nur noch, was für dich wichtig ist."
+        }
       ]
     }
   ]
