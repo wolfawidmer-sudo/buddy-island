@@ -105,6 +105,13 @@ function prettyKeys(acc) {
 }
 
 let win = null;
+// Lebensdauer des Island-Fensters: «quitting» verhindert, dass beim Beenden ein neues
+// Fenster entsteht; «started» ist gesetzt, sobald der Start fertig ist (vorher werden
+// Öffnen-Wünsche, z. B. von einem zweiten Programmstart, vorgemerkt).
+let quitting = false;
+let started = false;
+let pendingOpen = null;
+let displayListeners = false;
 let glow = null;
 let glowReady = null;
 let glowMode = 'off';
@@ -359,7 +366,7 @@ async function autoSelectLocal() {
   }
   if (changed) {
     saveSettings();
-    win?.webContents.send('settings:changed', publicSettings());
+    liveWin()?.webContents.send('settings:changed', publicSettings());
   }
   return true;
 }
@@ -385,12 +392,12 @@ function onLocalStatus(st) {
     const expected = expectedBytes(st.model);
     const tick = () => {
       const have = cacheBytes(st.model);
-      win?.webContents.send('hf:status', { ...payload, downloaded: have, expected, percent: expected ? Math.min(99, Math.round((have / expected) * 100)) : null });
+      liveWin()?.webContents.send('hf:status', { ...payload, downloaded: have, expected, percent: expected ? Math.min(99, Math.round((have / expected) * 100)) : null });
     };
     tick();
     localProgressTimer = setInterval(tick, 1500);
   }
-  win?.webContents.send('hf:status', payload);
+  liveWin()?.webContents.send('hf:status', payload);
 }
 
 // Island geht auf: lokales Modell im Hintergrund schon laden
@@ -407,7 +414,7 @@ function warmLocal() {
 let setupRunning = null;
 async function runLocalSetup() {
   const { findPythonExe, which, run } = require('./discovery');
-  const send = (st) => win?.webContents.send('hf:setup', st);
+  const send = (st) => liveWin()?.webContents.send('hf:setup', st);
   const step = (text, extra = {}) => { send({ state: 'running', text, ...extra }); log(`Lokale KI: ${text}`); };
   const fail = (error) => { send({ state: 'error', error }); return { ok: false, error }; };
 
@@ -530,7 +537,7 @@ async function runLocalSetup() {
       log(`Lokale KI: Pakete nicht ladbar: ${found.pythonIssue?.torchError || ''} ${found.pythonIssue?.transformersError || ''}`);
       return fail(t('Die Pakete sind installiert, aber Python findet sie noch nicht. Starte Buddy neu.'));
     }
-    win?.webContents.send('discovery', publicDiscovery(found));
+    liveWin()?.webContents.send('discovery', publicDiscovery(found));
 
     // Empfohlenes Modell wählen und herunterladen (über huggingface_hub)
     const specs = await systemSpecs.detectSpecs({ python: found.python, cudaVramGB: found.python.vramGB });
@@ -561,7 +568,7 @@ async function runLocalSetup() {
     const st = llm.hfStatus();
     if (st.state !== 'ready') return fail(st.error || t('Das Modell startet nicht.'));
     send({ state: 'done', model: pick.id, text: t('Fertig: {name} läuft auf deinem PC.', { name: pick.name }), percent: 100 });
-    win?.webContents.send('settings:changed', publicSettings());
+    liveWin()?.webContents.send('settings:changed', publicSettings());
     return { ok: true, model: pick.id };
   } catch (err) {
     return fail(err.message);
@@ -586,7 +593,7 @@ function applyLanguage() {
   // Die KI antwortet in der echten Systemsprache, auch wenn es dafür (noch) keine
   // übersetzte Oberfläche gibt (dann ist die Oberfläche englisch)
   answerLanguage = wanted ? lang : (preferred[0] || lang);
-  win?.webContents.send('i18n', i18n.dictionary());
+  liveWin()?.webContents.send('i18n', i18n.dictionary());
   return lang;
 }
 
@@ -684,7 +691,7 @@ function markKeyInvalid(provider = currentProvider()) {
   if (settings.keyStatus[provider] === 'invalid') return;
   settings.keyStatus[provider] = 'invalid';
   saveSettings();
-  win?.webContents.send('key:status', { provider, status: 'invalid' });
+  liveWin()?.webContents.send('key:status', { provider, status: 'invalid' });
   log(`API-Key von ${provider} wurde abgelehnt (401)`);
 }
 
@@ -769,7 +776,7 @@ function islandSize(display) {
 }
 
 function placeWindow() {
-  if (!win) return;
+  if (!liveWin()) return;
   const display = targetDisplay();
   const { bounds, workArea } = display;
   const size = islandSize(display);
@@ -780,14 +787,38 @@ function placeWindow() {
 
 // Klicks gehen überall durch, ausser die Maus ist über dem Island (der Renderer meldet das).
 function applyMouseMode() {
-  if (!win) return;
+  if (!liveWin()) return;
   if (agentInput) win.setIgnoreMouseEvents(true);
   else if (mouseCaptured) win.setIgnoreMouseEvents(false);
   else win.setIgnoreMouseEvents(true, { forward: true });
 }
 
+/** Das Fenster, wenn es noch lebt (sonst null) */
+function liveWin() {
+  return win && !win.isDestroyed() ? win : null;
+}
+
+/** Nachricht ans Fenster, bei einem frisch erstellten Fenster erst nach dem Laden */
+function sendWhenReady(channel, payload) {
+  const w = liveWin();
+  if (!w || w.webContents.isDestroyed()) return;
+  const send = () => { if (!w.isDestroyed() && !w.webContents.isDestroyed()) w.webContents.send(channel, payload); };
+  if (w.webContents.isLoading()) w.webContents.once('did-finish-load', send);
+  else send();
+}
+
+/** Fenster holen und bei Bedarf neu erstellen (nie während des Beendens) */
+function ensureWindow() {
+  if (liveWin()) return win;
+  if (quitting || !started) return null;
+  log('Island-Fenster fehlte, wird neu erstellt');
+  createWindow();
+  return liveWin();
+}
+
 function createWindow() {
-  win = new BrowserWindow({
+  if (liveWin()) return win; // nie zwei Island-Fenster
+  const w = new BrowserWindow({
     width: OPEN_W,
     height: OPEN_H,
     frame: false,
@@ -813,42 +844,60 @@ function createWindow() {
     },
   });
 
+  win = w;
+  mouseCaptured = false;
   placeWindow();
   applyMouseMode();
-  win.setAlwaysOnTop(true, 'screen-saver');
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  w.setAlwaysOnTop(true, 'screen-saver');
+  w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  w.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
-  win.once('ready-to-show', () => win.showInactive());
-  win.webContents.on('render-process-gone', (_e, details) => onRenderCrash(details));
-  win.on('blur', () => { if (!capturing) win.webContents.send('island:blur'); });
+  w.once('ready-to-show', () => { if (!w.isDestroyed()) w.showInactive(); });
+  w.webContents.on('render-process-gone', (_e, details) => onRenderCrash(details));
+  w.on('blur', () => { if (!capturing && !w.isDestroyed()) w.webContents.send('island:blur'); });
+  // Das Island ist ein dauerhaftes Overlay: Alt+F4 o. Ä. schliesst es nicht (nur Beenden)
+  w.on('close', (event) => { if (!quitting) event.preventDefault(); });
+  // Zerstört: Verweis entfernen, damit niemand ein totes Objekt benutzt
+  w.on('closed', () => {
+    if (win === w) win = null;
+    mouseCaptured = false;
+  });
 
   // Links aus Antworten im normalen Browser öffnen, nie im Island.
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  w.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  win.webContents.on('will-navigate', (event, url) => {
+  w.webContents.on('will-navigate', (event, url) => {
     event.preventDefault();
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
   });
 
-  const onDisplayChange = () => {
-    placeWindow();
-    if (glow && !glow.isDestroyed()) glow.setBounds(targetDisplay().bounds);
-  };
-  screen.on('display-metrics-changed', onDisplayChange);
-  screen.on('display-added', onDisplayChange);
-  screen.on('display-removed', onDisplayChange);
+  // Bildschirm-Ereignisse nur einmal anmelden (auch wenn das Fenster neu entsteht)
+  if (!displayListeners) {
+    displayListeners = true;
+    const onDisplayChange = () => {
+      placeWindow();
+      if (glow && !glow.isDestroyed()) glow.setBounds(targetDisplay().bounds);
+    };
+    screen.on('display-metrics-changed', onDisplayChange);
+    screen.on('display-added', onDisplayChange);
+    screen.on('display-removed', onDisplayChange);
+  }
+  return w;
 }
 
 // Fenster-Flags nur setzen, wenn sie fehlen: erneutes Setzen während einer Animation
 // lässt Windows das Fenster neu zeichnen (Flackern).
 function openIsland(view) {
-  if (!win) return;
-  if (!win.isVisible()) win.showInactive();
-  if (!win.isAlwaysOnTop()) win.setAlwaysOnTop(true, 'screen-saver');
-  win.webContents.send('island:open', view || null);
+  // Noch im Start (z. B. zweiter Programmstart sehr früh): merken und danach öffnen
+  if (!started) { pendingOpen = { view: view || null }; return; }
+  const w = ensureWindow();
+  if (!w) return;
+  if (!w.isVisible()) w.showInactive();
+  if (!w.isAlwaysOnTop()) w.setAlwaysOnTop(true, 'screen-saver');
+  // Frisch erstelltes Fenster: erst senden, wenn die Oberfläche geladen ist
+  sendWhenReady('island:open', view || null);
 }
 
 // ---------- Leuchtender Rand ----------
@@ -881,7 +930,7 @@ function ensureGlow() {
   glowReady = w.loadFile(path.join(__dirname, 'glow', 'glow.html')).then(() => {
     if (w.isDestroyed()) return;
     w.showInactive();
-    win?.moveTop();
+    liveWin()?.moveTop();
   }).catch(() => {});
   w.on('closed', () => { if (glow === w) { glow = null; glowReady = null; } });
   return glowReady;
@@ -911,7 +960,7 @@ function setGlow(mode) {
 // Island und Rand aus Buddys Bildschirmfotos heraushalten
 function setCaptureHidden(hidden) {
   if (!captureExclusion) return;
-  win?.setContentProtection(hidden);
+  liveWin()?.setContentProtection(hidden);
   if (glow && !glow.isDestroyed()) glow.setContentProtection(hidden);
 }
 
@@ -945,18 +994,18 @@ function shortcutList(source = settings) {
 }
 
 function runShortcut(entry) {
-  if (!win) return;
+  if (!ensureWindow()) return;
   switch (entry.id) {
     case 'toggle':
       // Während Buddy steuert, stoppt das Öffnen-Kürzel die Aufgabe.
       if (controlling) abortAll();
-      else win.webContents.send('island:toggle');
+      else sendWhenReady('island:toggle');
       break;
     case 'stop':
       abortAll();
       break;
     case 'newChat':
-      win.webContents.send('shortcut:action', 'newChat');
+      sendWhenReady('shortcut:action', 'newChat');
       break;
     case 'settings':
       openIsland('settings');
@@ -967,7 +1016,7 @@ function runShortcut(entry) {
       else startListening();
       break;
     default:
-      if (entry.custom) win.webContents.send('shortcut:prompt', { prompt: entry.custom.prompt.trim(), open: Boolean(entry.custom.open) });
+      if (entry.custom) sendWhenReady('shortcut:prompt', { prompt: entry.custom.prompt.trim(), open: Boolean(entry.custom.open) });
   }
 }
 
@@ -1092,14 +1141,14 @@ function setControlling(active) {
   if (active) {
     controlling += 1;
     setCaptureHidden(true);
-    win?.setFocusable(false);
-    win?.blur();
+    liveWin()?.setFocusable(false);
+    liveWin()?.blur();
     setGlow('control');
   } else {
     controlling = Math.max(0, controlling - 1);
     if (!controlling) {
       setCaptureHidden(false);
-      win?.setFocusable(true);
+      liveWin()?.setFocusable(true);
       setGlow(running.size ? 'think' : 'off');
     }
   }
@@ -1235,7 +1284,7 @@ function createAgentRuntime() {
 function startWatcher() {
   if (!settings.notifications) notifyStatus = 'Off';
   else if (process.platform === 'win32') notifyStatus = 'Starting';
-  if (!settings.media) { mediaOk = null; nowPlaying = null; win?.webContents.send('media', null); }
+  if (!settings.media) { mediaOk = null; nowPlaying = null; liveWin()?.webContents.send('media', null); }
   watcher.start({ notify: Boolean(settings.notifications), media: Boolean(settings.media), game: Boolean(settings.gameMode) });
   if (!settings.gameMode && game.active) setGame({ game: false, process: '' });
 }
@@ -1254,14 +1303,14 @@ function setGame(focus) {
   const wasActive = game.active;
   game = { active, name };
   log(`Spielmodus ${active ? `an (${focus.process}, Status ${focus.state})` : 'aus'}`);
-  win?.webContents.send('game', game);
+  liveWin()?.webContents.send('game', game);
   if (active) {
     audioMeter?.stop();
-    if (!layout.open) win?.hide();
+    if (!layout.open) liveWin()?.hide();
     setGlow('off');
     if (settings.voiceWake) voice?.setWake(false);
   } else if (wasActive) {
-    win?.showInactive();
+    liveWin()?.showInactive();
     if (settings.voiceWake) voice?.setWake(true);
   }
 }
@@ -1269,10 +1318,10 @@ function setGame(focus) {
 function startListening() {
   if (!voice) return;
   if (process.platform !== 'win32') {
-    win?.webContents.send('voice', { kind: 'unavailable' });
+    liveWin()?.webContents.send('voice', { kind: 'unavailable' });
     return;
   }
-  win?.webContents.send('voice', { kind: 'starting' });
+  liveWin()?.webContents.send('voice', { kind: 'starting' });
   voice.listen();
 }
 
@@ -1281,7 +1330,7 @@ let listeningNow = false;
 function stopListening() {
   listeningNow = false;
   voice?.cancel();
-  win?.webContents.send('voice', { kind: 'cancelled' });
+  liveWin()?.webContents.send('voice', { kind: 'cancelled' });
 }
 
 // ---------- Updates (electron-updater + Signaturprüfung + Rollback) ----------
@@ -1386,7 +1435,7 @@ function setupUpdater() {
 
   const setState = (st) => {
     updateState = st;
-    win?.webContents.send('update', st);
+    liveWin()?.webContents.send('update', st);
   };
   const reject = (version, error) => {
     manifest = null;
@@ -1475,6 +1524,7 @@ function setupUpdater() {
     install: () => {
       if (!verified) return;
       rememberPending();
+      quitting = true; // Fenster dürfen jetzt schliessen, sonst blockiert die Installation
       autoUpdater.quitAndInstall(true, true);
     },
     rollbackTarget: () => {
@@ -1492,7 +1542,7 @@ function setupUpdater() {
 // Installiert eine ältere, signierte Version (automatischer Rollback oder auf Wunsch)
 async function rollbackTo(version, reason) {
   const current = app.getVersion();
-  const setState = (st) => { updateState = st; win?.webContents.send('update', st); };
+  const setState = (st) => { updateState = st; liveWin()?.webContents.send('update', st); };
   try {
     setState({ state: 'rollback', version });
     log(`Rollback ${current} -> ${version}: ${reason}`);
@@ -1581,7 +1631,7 @@ function onRenderCrash(details) {
     rollbackTo(data.previous, t('Das Fenster der neuen Version ist wiederholt abgestürzt.'));
     return;
   }
-  setTimeout(() => { if (win && !win.isDestroyed()) win.reload(); }, 800);
+  setTimeout(() => { if (liveWin()) win.reload(); else ensureWindow(); }, 800);
 }
 
 // Selbsttest für die Einstellungen («Diagnose»)
@@ -1659,12 +1709,12 @@ function setupIpc() {
   ipcMain.on('layout', (_e, next = {}) => {
     const wasOpen = layout.open;
     layout = { open: Boolean(next.open), width: Number(next.width) || layout.width, height: Number(next.height) || CLOSED_H, notch: Boolean(next.notch) };
-    if (layout.open && game.active && !win?.isVisible()) win?.show();
-    if (!layout.open && game.active && win?.isVisible()) win?.hide();
+    if (layout.open && game.active && !liveWin()?.isVisible()) liveWin()?.show();
+    if (!layout.open && game.active && liveWin()?.isVisible()) liveWin()?.hide();
     if (layout.open && !wasOpen && !controlling) {
       mouseCaptured = true;
       applyMouseMode();
-      win?.focus();
+      liveWin()?.focus();
       warmLocal();
     }
   });
@@ -1677,7 +1727,7 @@ function setupIpc() {
   ipcMain.on('window:release', () => {
     mouseCaptured = false;
     applyMouseMode();
-    if (win?.isFocused()) win.blur();
+    if (liveWin()?.isFocused()) win.blur();
   });
 
   ipcMain.on('app:quit', () => app.quit());
@@ -1928,7 +1978,7 @@ function setupIpc() {
       for (const pid of ids) {
         const provider = models.PROVIDERS[pid];
         const name = pid === 'huggingface' ? t('Lokal (Hugging Face)') : provider.name;
-        win?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'running' });
+        liveWin()?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'running' });
         modelCache.delete(pid); // frisch fragen, nicht aus dem Zwischenspeicher
         let modelIds = [];
         try {
@@ -1941,12 +1991,12 @@ function setupIpc() {
         const key = pid === 'huggingface' ? 'lokal' : getApiKey(pid);
         const r = await runHealth({
           client: llm.client(pid), providerId: pid, apiKey: key, workspaceId: pid === 'anthropic' ? settings.workspaceId : undefined, models: modelIds,
-          onStep: (step) => win?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'step', step }),
+          onStep: (step) => liveWin()?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'step', step }),
         });
         const result = { ...r, providerName: name };
         results.push(result);
         log(`Verbindungstest ${pid}: ${r.ok ? 'ok' : 'FEHLER'} (${r.steps.map((x) => `${x.id}=${x.ok === null ? 'skip' : x.ok ? 'ok' : x.error?.category || 'fail'}`).join(', ')})`);
-        win?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'done', result });
+        liveWin()?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'done', result });
       }
       const report = healthReport(results, { version: app.getVersion(), os: `${os.type()} ${os.release()}`, language: i18n.language() });
       return { results, report };
@@ -2096,6 +2146,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => openIsland());
+  app.on('before-quit', () => { quitting = true; });
 
   app.whenReady().then(() => {
     if (process.platform === 'win32') app.setAppUserModelId('ch.wolfwidmer.buddyisland');
@@ -2118,10 +2169,10 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     // Im Hintergrund prüfen, welche KI-Tools installiert sind (blockiert den Start nicht).
     // Ohne API-Key wählt Buddy danach automatisch das passende lokale Modell.
     setTimeout(() => discovery.get().then(async () => {
-      win?.webContents.send('discovery', publicDiscovery(discovery.peek()));
+      liveWin()?.webContents.send('discovery', publicDiscovery(discovery.peek()));
       await autoSelectLocal().catch((err) => log(`Lokale Auswahl: ${err.message}`));
       // Oberfläche weiss jetzt, ob die lokale KI wirklich bereit ist
-      win?.webContents.send('settings:changed', publicSettings());
+      liveWin()?.webContents.send('settings:changed', publicSettings());
       // Lokales Modell schon beim Start laden, aber nur wenn es zuletzt auch benutzt wurde
       // (sonst belegt es Gigabytes, ohne dass es jemand braucht; geladen wird dann beim Öffnen)
       if (Date.now() - (settings.lastLocalUse || 0) < 7 * 24 * 3600 * 1000) warmLocal();
@@ -2138,13 +2189,13 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
         if (captureExclusion) return;
         capturing = true;
         glow?.hide();
-        win?.hide();
+        liveWin()?.hide();
         await new Promise((r) => setTimeout(r, 120));
       },
       afterCapture: async () => {
         if (captureExclusion) return;
         if (glow && !glow.isDestroyed()) glow.showInactive();
-        if (!game.active || layout.open) win?.showInactive();
+        if (!game.active || layout.open) liveWin()?.showInactive();
         setTimeout(() => { capturing = false; }, 300);
       },
     });
@@ -2156,8 +2207,8 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
 
     // Buddys eigene Meldungen erscheinen nur im Island, nicht unten rechts.
     tools = createTools({
-      onTimersChanged: (list) => win?.webContents.send('timers:update', list),
-      onTimerDone: (timer) => win?.webContents.send('timer:done', { ...timer, text: t('{d} sind um', { d: formatDuration(timer.durationMs) }) }),
+      onTimersChanged: (list) => liveWin()?.webContents.send('timers:update', list),
+      onTimerDone: (timer) => liveWin()?.webContents.send('timer:done', { ...timer, text: t('{d} sind um', { d: formatDuration(timer.durationMs) }) }),
       getNotifications: () => watcher?.recent() || [],
       getNowPlaying: () => nowPlaying,
       mediaCommand: (cmd) => watcher?.media(cmd) || false,
@@ -2168,15 +2219,15 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     watcher = createSystemWatcher({
       scriptDir: app.getPath('userData'),
       log,
-      onNotification: (item) => win?.webContents.send('notify', item),
+      onNotification: (item) => liveWin()?.webContents.send('notify', item),
       onStatus: (status, error) => {
         notifyStatus = status;
         if (error) log(`Mitteilungen: ${error}`);
-        win?.webContents.send('notify:status', status);
+        liveWin()?.webContents.send('notify:status', status);
       },
       onMedia: (np) => {
         nowPlaying = np;
-        win?.webContents.send('media', np);
+        liveWin()?.webContents.send('media', np);
       },
       onMediaStatus: (ok, error) => {
         mediaOk = ok;
@@ -2195,7 +2246,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       getUrl: () => getSecret('calendar'),
       log,
       onReminder: (ev, minutes) => {
-        win?.webContents.send('notify', {
+        liveWin()?.webContents.send('notify', {
           id: `cal-${ev.start}`,
           app: t('Kalender'),
           title: ev.title,
@@ -2203,7 +2254,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
           time: Date.now(),
         });
       },
-      onUpdate: (status) => win?.webContents.send('calendar:status', status),
+      onUpdate: (status) => liveWin()?.webContents.send('calendar:status', status),
     });
     calendar.setLead(settings.calendarLead);
     calendar.refresh();
@@ -2214,7 +2265,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       onEvent: (msg) => {
         if (msg.kind === 'listening' && !running.size) setGlow('think');
         if (['text', 'nothing', 'unavailable'].includes(msg.kind) && !running.size) setGlow('off');
-        win?.webContents.send('voice', msg);
+        liveWin()?.webContents.send('voice', msg);
       },
     });
     if (settings.voiceWake) voice.setWake(true);
@@ -2232,6 +2283,8 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       registerShortcuts();
     }
     applyAutostart();
+    started = true;
+    if (pendingOpen) { const { view } = pendingOpen; pendingOpen = null; openIsland(view); }
   });
 
   app.on('will-quit', () => {
