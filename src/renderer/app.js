@@ -199,6 +199,17 @@
     olBench: $('olBench'),
     olDiagCopy: $('olDiagCopy'),
     olRestart: $('olRestart'),
+    colBox: $('colBox'),
+    colLine: $('colLine'),
+    colSub: $('colSub'),
+    colProgressRow: $('colProgressRow'),
+    colProgressText: $('colProgressText'),
+    colStop: $('colStop'),
+    colBarBox: $('colBarBox'),
+    colBar: $('colBar'),
+    colList: $('colList'),
+    colAction: $('colAction'),
+    colFoot: $('colFoot'),
     emptyProgress: $('emptyProgress'),
     emptyBar: $('emptyBar'),
     keyBlock: $('keyBlock'),
@@ -2072,6 +2083,11 @@
   }
   const modelName = (id) => {
     const ls = state.localState;
+    if (String(id || '').startsWith('@colibri/')) {
+      const c = ls?.colibri;
+      const entry = c?.catalog?.find((m) => m.id === id);
+      return `${entry?.name || (c?.model && `@colibri/${c.model.id}` === id ? c.model.name : String(id).slice(9))} (Colibrì)`;
+    }
     const p = ls?.picks?.all?.find((x) => x.id === id);
     return p?.name || id || '';
   };
@@ -2093,7 +2109,11 @@
       case 'runtime_failed':
       case 'unreachable':
       case 'port_in_use': return t('Ollama startet nicht. Versuch «Ollama neu starten» unter «Diagnose».');
-      case 'runtime_missing': return t('Ollama ist nicht installiert.');
+      case 'runtime_missing': return String(err.model || '').startsWith('@colibri/') ? t('Colibrì ist nicht installiert oder nicht mehr auffindbar.') : t('Ollama ist nicht installiert.');
+      case 'python_missing': return t('Für Colibrì fehlt Python 3.10 oder neuer. Installiere Python (python.org oder Microsoft Store) und versuch es nochmals.');
+      case 'checksum_mismatch': return t('Der Colibrì-Download stimmt nicht mit der veröffentlichten Prüfsumme überein. Buddy hat ihn verworfen und nichts ausgeführt.');
+      case 'manual': return t('Colibrì-Modelle verwaltest du in Colibrì selbst.');
+      case 'no_model': return t('In Colibrì ist noch kein Modell eingerichtet.');
       case 'not_found': return t('«{model}» ist nicht mehr auf diesem PC.', { model: name });
       case 'runtime_too_old': return t('Dieses Modell braucht eine neuere Ollama-Version. Installiere die neuste Version von ollama.com.');
       case 'timeout': return t('Das Modell hat zu lange nicht geantwortet. Versuch es nochmals oder wähle ein kleineres Modell.');
@@ -2112,6 +2132,7 @@
     else if (ls.phase === 'loading') what = t('lädt …');
     else if (ls.phase === 'downloading') what = t('lädt herunter {p} %', { p: Math.floor(ls.download?.percent || 0) });
     else if (ls.phase === 'starting' || ls.phase === 'checking') what = t('startet …');
+    else if (ls.phase === 'ready' && ls.loaded?.runtime === 'colibri') what = t('bereit (Colibrì)');
     else if (ls.phase === 'ready') what = ls.loaded?.device === 'gpu' ? t('bereit (Grafikkarte)') : ls.loaded?.device === 'partial' ? t('bereit (Grafikkarte und Prozessor)') : t('bereit (Prozessor)');
     else if (ls.phase === 'idle') what = t('bereit');
     else if (ls.phase === 'error') what = t('Problem');
@@ -2146,8 +2167,12 @@
     if (ls.phase === 'downloading' && ls.download) {
       const d = ls.download;
       const sub = d.totalBytes ? [`${fmtBytes(d.completedBytes)} / ${fmtBytes(d.totalBytes)}`, d.speedBps ? `${fmtBytes(d.speedBps)}/s` : '', fmtEta(d.etaSec)].filter(Boolean).join(' · ') : t('Verbinde …');
-      const verifying = /verifying|writing|success/i.test(d.status || '');
+      const verifying = /verifying|writing|success|^ready$|^build$/i.test(d.status || '');
       return { step: verifying ? t('Prüfe {name} …', { name: modelName(d.id) }) : t('Lade {name} herunter …', { name: modelName(d.id) }), percent: verifying ? null : d.percent, sub: verifying ? '' : sub, cancel: !verifying };
+    }
+    if (ls.phase === 'loading' && String(ls.install?.phase || '').startsWith('colibri_')) {
+      const sec = Math.round((ls.install.elapsedMs || 0) / 1000);
+      return { step: t('Colibrì lädt {name} …', { name: modelName(ls.config?.model) }), percent: null, sub: t('Grosse Modelle brauchen dafür einige Minuten ({s} s).', { s: sec }), cancel: true, colibri: true };
     }
     if (ls.phase === 'loading') return { step: t('Starte {name} …', { name: modelName(ls.config?.model) }), percent: null, sub: t('Beim ersten Mal kann das einen Moment dauern.'), cancel: false };
     if (ls.phase === 'checking' || ls.phase === 'starting') return { step: t('Prüfe deinen PC …'), percent: null, sub: '', cancel: false };
@@ -2276,6 +2301,7 @@
   el.lcCancel.addEventListener('click', () => { state.localConfirm = null; renderLocalUi(); });
   el.lcGo.addEventListener('click', () => { const c = state.localConfirm; if (c) runLocalSetup(c.id, true); });
   el.lcStop.addEventListener('click', () => {
+    if (state.localState?.download?.runtime === 'colibri' || String(state.localState?.install?.phase || '').startsWith('colibri_')) { api.colibriCancel(); return; }
     if (state.localState?.phase === 'installing_runtime') api.localCancelInstall();
     else api.localCancelPull();
   });
@@ -2309,7 +2335,7 @@
     const good = (p.strengths || []).map((x) => OL_STRENGTH()[x]).filter(Boolean).slice(0, 2);
     const bad = (p.limits || []).map((x) => OL_LIMIT()[x]).filter(Boolean).slice(0, 2);
     const lines = installed
-      ? [fmtBytes(p.sizeBytes || p.downloadBytes), p.speed ? `${OL_SPEED()[p.speed]} ${OL_DEVICE()[p.device] || ''}`.trim() : null, p.usable === false ? t('läuft hier zu langsam') : null]
+      ? [p.runtime === 'colibri' ? t('läuft mit Colibrì') : fmtBytes(p.sizeBytes || p.downloadBytes), p.speed ? `${OL_SPEED()[p.speed]} ${OL_DEVICE()[p.device] || ''}`.trim() : null, p.usable === false ? t('läuft hier zu langsam') : null]
       : [pickMeta(p)];
     small.textContent = lines.filter(Boolean).join(' · ');
     text.append(b, small);
@@ -2339,7 +2365,12 @@
         });
         actions.appendChild(use);
       }
-      if (installed) {
+      if (installed && p.runtime === 'colibri') {
+        const note = document.createElement('small');
+        note.className = 'specs-sub';
+        note.textContent = t('in Colibrì');
+        actions.appendChild(note);
+      } else if (installed) {
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'button small';
@@ -2390,7 +2421,9 @@
       needs_model: t('Kein Modell'), downloading: t('Lädt herunter …'), loading: t('Lädt …'), idle: t('Bereit'), ready: t('Bereit'), error: t('Problem'),
     }[ls.phase] || ls.phase;
     el.olModelLine.firstChild.nodeValue = current ? modelName(current) : t('Modell');
-    el.olStatusSub.textContent = ls.phase === 'ready' && ls.loaded
+    el.olStatusSub.textContent = ls.phase === 'ready' && ls.loaded?.runtime === 'colibri'
+      ? (ls.loaded.backend && ls.loaded.backend !== 'cpu' ? t('läuft mit Colibrì: Grafikkarte, Arbeitsspeicher und SSD') : t('läuft mit Colibrì: Arbeitsspeicher und SSD'))
+      : ls.phase === 'ready' && ls.loaded
       ? (ls.loaded.device === 'gpu' ? t('läuft auf der Grafikkarte') : ls.loaded.device === 'partial' ? t('{p} % auf der Grafikkarte, Rest auf dem Prozessor', { p: ls.loaded.gpuPercent }) : t('läuft auf dem Prozessor'))
       : ls.phase === 'idle' ? t('wird beim ersten Satz geladen') : ls.runtime?.version ? `Ollama ${ls.runtime.version}` : '';
     el.olStatus.textContent = phaseText;
@@ -2459,7 +2492,7 @@
     el.olInstalled.textContent = '';
     for (const m of ls.installed || []) {
       const info = (picks.all || []).find((p) => p.id === m.id) || {};
-      el.olInstalled.appendChild(pickRow({ ...info, id: m.id, name: info.name || m.id, sizeBytes: m.sizeBytes }, { installed: true, current: m.id === current }));
+      el.olInstalled.appendChild(pickRow({ ...info, id: m.id, runtime: m.runtime, name: m.runtime === 'colibri' ? modelName(m.id) : (info.name || m.id), sizeBytes: m.sizeBytes }, { installed: true, current: m.id === current }));
     }
     el.olDir.textContent = ls.runtime?.modelsDir || '';
     // Erweitert
@@ -2477,9 +2510,165 @@
     el.olRisky.checked = state.settings?.localPermissions?.high === 'ask';
     el.olUnload.checked = cfg.unloadOnExit !== false;
     // Kurze Diagnose
+    fillColibri(ls);
     el.olDiagShort.textContent = ls.perf?.tokensPerSecond ? t('{n} Tokens/s gemessen', { n: ls.perf.tokensPerSecond }) : '';
     if (el.olDiagBox.open) loadOllamaDiag();
   }
+
+
+  // ---------- Colibrì (grosse Modelle) ----------
+
+  const COL_REASON = () => ({
+    fits_memory: t('Mit Ollama schneller: passt ganz in den Speicher'),
+    colibri_streams: t('Teile kommen laufend von der SSD: langsam, aber es läuft'),
+    colibri_expert_cache: t('Passt nicht ganz in den Speicher: Colibrì lädt Teile bei Bedarf nach'),
+    colibri_not_installed: t('Läuft hier nur mit Colibrì'),
+    needs_ram: t('Zu wenig Arbeitsspeicher'),
+    needs_disk: t('Zu wenig Platz auf dem Laufwerk'),
+  });
+  let colConfirm = null; // { kind: 'install'|'model', id, bytes }
+  let colCatalogAsked = false;
+
+  function colibriWorthShowing(ls) {
+    const c = ls?.colibri;
+    if (!c) return false;
+    if (c.installed) return true;
+    const h = ls.hardware;
+    // Nur anbieten, wo es sinnvoll laufen kann: genug Arbeitsspeicher und Platz für ein 19-GB-Modell
+    return Boolean(h && h.ramGB >= 16 && (h.diskFreeGB === null || h.diskFreeGB >= 25));
+  }
+
+  function fillColibri(ls) {
+    const c = ls?.colibri;
+    el.colBox.hidden = !colibriWorthShowing(ls);
+    if (el.colBox.hidden) return;
+    const busy = c.busy === 'install' || ls.download?.runtime === 'colibri';
+    el.colAction.hidden = true;
+    el.colList.textContent = '';
+    // Fortschritt (Installation oder Modell-Download)
+    const prog = c.busy === 'install' && c.progress ? c.progress : null;
+    el.colProgressRow.hidden = !prog;
+    if (prog) {
+      el.colProgressText.textContent = prog.phase === 'verify' ? t('Prüfe die Prüfsumme …') : prog.phase === 'install' ? t('Entpacke Colibrì …') : t('Lade Colibrì herunter …');
+      paintBar(el.colBarBox, el.colBar, prog.phase === 'download' ? prog.percent : null);
+    }
+    const h = ls.hardware || {};
+    const disk = h.diskMedia === 'hdd' ? t('Achtung: Der Speicherort liegt auf einer Festplatte (HDD). Colibrì wird damit sehr langsam.') : h.diskBus === 'nvme' ? t('Speicherort auf einer NVMe-SSD: gut für Colibrì.') : '';
+    if (!c.installed) {
+      el.colLine.textContent = t('Für Modelle, die nicht in den Speicher passen');
+      el.colSub.textContent = [t('Colibrì liest Teile des Modells bei Bedarf von der SSD. Das ist langsamer als Ollama, dafür laufen auch Modelle ab 19 GB.'), disk].filter(Boolean).join(' ');
+      el.colAction.hidden = busy;
+      const plan = c.plan;
+      if (colConfirm?.kind === 'install' && plan) {
+        el.colAction.textContent = plan.automatic ? t('Ja, Colibrì installieren · {size}', { size: fmtBytes(plan.sizeBytes) }) : t('Anleitung von Colibrì öffnen …');
+        footer(el.colFoot, plan.python === false
+          ? t('Für Colibrì braucht es zuerst Python 3.10 oder neuer (python.org oder Microsoft Store). Danach hier nochmals versuchen.')
+          : plan.automatic ? t('Buddy lädt Colibrì {tag} von GitHub ({size}), prüft die Prüfsumme und entpackt es in Buddys Ordner. Modelle lädst du danach einzeln.', { tag: plan.tag, size: fmtBytes(plan.sizeBytes) })
+            : t('Auf diesem System bitte Colibrì nach der Anleitung installieren. Buddy erkennt es danach automatisch.'), plan.python === false ? 'err' : '');
+        if (plan.python === false) el.colAction.hidden = true;
+      } else {
+        el.colAction.textContent = t('Colibrì einrichten …');
+      }
+      el.colAction.dataset.action = colConfirm?.kind === 'install' && c.plan ? (c.plan.automatic ? 'install' : 'docs') : 'plan';
+      if (c.error) footer(el.colFoot, olError(c.error), 'err');
+      return;
+    }
+    el.colLine.textContent = `Colibrì ${c.version || ''}${c.model ? ` · ${c.model.name}` : ''}`.trim();
+    el.colSub.textContent = [
+      c.python === false ? t('Python 3.10 oder neuer fehlt: Colibrì kann so nicht starten.') : '',
+      c.running ? t('Läuft gerade.') : c.state === 'loading' ? t('Lädt gerade ein Modell.') : '',
+      disk,
+    ].filter(Boolean).join(' ');
+    if (!c.catalog && !colCatalogAsked) {
+      colCatalogAsked = true;
+      api.colibriCatalog().then((r) => { if (r?.state) { state.localState = r.state; fillOllama(); } });
+    }
+    const list = (c.catalog || []).filter((m) => m.fits || m.choice?.runtime === 'ollama');
+    if (!list.length) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.textContent = c.catalog ? t('Kein Colibrì-Modell passt auf diesen PC.') : t('Frage Colibrì, welche Modelle hier laufen …');
+      el.colList.appendChild(row);
+    }
+    const current = ls.config?.model;
+    for (const m of list) {
+      const row = document.createElement('div');
+      row.className = `reco${m.id === current ? ' current' : ''}`;
+      const text = document.createElement('div');
+      text.className = 'reco-text';
+      const b = document.createElement('b');
+      if (m.id === current) { const tag = document.createElement('span'); tag.className = 'role'; tag.textContent = t('Aktiv'); b.appendChild(tag); }
+      b.appendChild(document.createTextNode(m.name));
+      const small = document.createElement('small');
+      small.textContent = [m.downloadGB ? `${m.downloadGB} GB ${t('Download')}` : '', m.ramGoodGB ? t('läuft gut ab {gb} GB Arbeitsspeicher', { gb: m.ramGoodGB }) : ''].filter(Boolean).join(' · ');
+      const why = document.createElement('small');
+      why.textContent = COL_REASON()[m.choice?.reason] || '';
+      text.append(b, small, why);
+      const actions = document.createElement('div');
+      actions.className = 'ol-actions';
+      const configured = c.model && `@colibri/${c.model.id}` === m.id;
+      if (m.id !== current) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'button small';
+        const confirming = colConfirm?.kind === 'model' && colConfirm.id === m.id;
+        btn.textContent = configured ? t('Verwenden') : confirming ? t('Ja, {size} laden', { size: `${m.downloadGB} GB` }) : t('Laden · {size}', { size: `${m.downloadGB} GB` });
+        if (confirming) btn.classList.add('primary');
+        btn.disabled = busy || ['downloading', 'loading', 'installing_runtime'].includes(ls.phase) || c.python === false;
+        btn.addEventListener('click', async () => {
+          if (configured) {
+            btn.disabled = true;
+            const r = await api.localSelect(m.id, true);
+            if (r?.state) state.localState = r.state;
+            if (r?.state?.error) footer(el.colFoot, olError(r.state.error), 'err');
+            state.settings = await api.getSettings();
+            renderLocalUi();
+            return;
+          }
+          if (!confirming) {
+            colConfirm = { kind: 'model', id: m.id };
+            footer(el.colFoot, t('{name} ist {size} gross und landet in {dir}. Colibrì lädt es von Hugging Face; ein abgebrochener Download geht beim nächsten Mal weiter.', { name: m.name, size: `${m.downloadGB} GB`, dir: ls.config?.colibriDir || t('Colibrìs Modellordner') }));
+            fillColibri(state.localState);
+            return;
+          }
+          colConfirm = null;
+          footer(el.colFoot, '');
+          const r = await api.colibriSetup(m.id, state.settings?.provider === 'local' || !state.settings?.hasKey);
+          if (r?.state) state.localState = r.state;
+          if (r?.state?.error) footer(el.colFoot, olError(r.state.error), 'err');
+          state.settings = await api.getSettings();
+          renderLocalUi();
+        });
+        actions.appendChild(btn);
+      }
+      row.append(text, actions);
+      el.colList.appendChild(row);
+    }
+    if (c.error) footer(el.colFoot, olError(c.error), 'err');
+  }
+
+  el.colAction.addEventListener('click', async () => {
+    const action = el.colAction.dataset.action;
+    if (action === 'docs') { api.colibriOpenDocs(); return; }
+    if (action === 'plan') {
+      el.colAction.disabled = true;
+      colConfirm = { kind: 'install' };
+      const r = await api.colibriPlan();
+      el.colAction.disabled = false;
+      if (r?.state) state.localState = r.state;
+      fillColibri(state.localState);
+      return;
+    }
+    if (action === 'install') {
+      colConfirm = null;
+      footer(el.colFoot, '');
+      const r = await api.colibriInstall();
+      if (r?.state) state.localState = r.state;
+      colCatalogAsked = false;
+      fillColibri(state.localState);
+    }
+  });
+  el.colStop.addEventListener('click', () => api.colibriCancel());
 
   function renderLocalUi() {
     renderEmpty();
@@ -2517,6 +2706,7 @@
     if (r?.state) state.localState = r.state;
   }
   el.olStop.addEventListener('click', () => {
+    if (state.localState?.download?.runtime === 'colibri' || String(state.localState?.install?.phase || '').startsWith('colibri_')) { api.colibriCancel(); return; }
     if (state.localState?.phase === 'installing_runtime') api.localCancelInstall();
     else api.localCancelPull();
   });

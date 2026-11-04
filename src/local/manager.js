@@ -16,7 +16,7 @@ const { LocalError } = require('./ollama');
 /** @typedef {import('./catalog').Candidate} Candidate */
 /**
  * @typedef {{
- *   model: string|null, modelsDir: string|null, tools: boolean, unloadOnExit: boolean,
+ *   model: string|null, modelsDir: string|null, colibriDir?: string|null, tools: boolean, unloadOnExit: boolean,
  *   advanced: { ctx: number|null, temperature: number|null, topP: number|null, maxTokens: number|null, keepAlive: string, gpu: 'auto'|'cpu', threads: number|null, batch: number|null },
  * }} LocalConfig
  */
@@ -24,6 +24,9 @@ const { LocalError } = require('./ollama');
 const ADVANCED_DEFAULTS = { ctx: null, temperature: null, topP: null, maxTokens: null, keepAlive: 'auto', gpu: 'auto', threads: null, batch: null };
 const REGISTRY_TTL = 6 * 3600 * 1000;
 const KEEP_ALIVE = new Set(['auto', '5m', '30m', '2h', 'forever']);
+/** Colibrì-Modelle tragen dieses Präfix, alle anderen gehören Ollama */
+const COLIBRI = '@colibri/';
+const isColibri = (/** @type {string|null|undefined} */ id) => String(id || '').startsWith(COLIBRI);
 
 /** Säubert die erweiterten Einstellungen @param {any} a */
 function cleanAdvanced(a) {
@@ -65,6 +68,7 @@ function kvMBPer1kFromShow(s) {
  *   setUserEnv?: (name: string, value: string|null) => Promise<boolean>,
  *   now?: () => number,
  *   freeRamGB?: () => number,
+ *   colibri?: ReturnType<import('./colibri')['createColibri']>|null,
  * }} deps
  */
 function createLocalManager(deps) {
@@ -73,6 +77,9 @@ function createLocalManager(deps) {
   const lang = deps.lang || (() => 'de');
   const detectHw = deps.detectHardware || hardware.detect;
   const now = deps.now || Date.now;
+  const colibri = deps.colibri || null;
+  /** @type {AbortController|null} */
+  let colibriCtrl = null;
 
   /** @type {Set<(s: any) => void>} */
   const listeners = new Set();
@@ -111,6 +118,8 @@ function createLocalManager(deps) {
     error: /** @type {any} */ (null),
     installPlan: /** @type {any} */ (null),
     offline: false,
+    // Colibrì: { installed, version, configured, model, backend, state, python, catalog, plan, error }
+    colibri: /** @type {any} */ (null),
   };
 
   function emit() {
@@ -157,14 +166,159 @@ function createLocalManager(deps) {
   }
 
   async function refreshInstalled() {
-    if (!state.runtime?.running) { state.installed = []; return []; }
-    try {
-      const list = await runtime.list();
-      state.installed = list.map((m) => ({ ...m, catalog: candidates.find((c) => c.id === m.id)?.name || null }));
-    } catch (err) {
-      log(`Lokale KI: Modellliste nicht lesbar (${/** @type {Error} */ (err).message})`);
+    /** @type {any[]} */
+    let list = [];
+    if (state.runtime?.running) {
+      try {
+        list = (await runtime.list()).map((m) => ({ ...m, runtime: 'ollama', catalog: candidates.find((c) => c.id === m.id)?.name || null }));
+      } catch (err) {
+        log(`Lokale KI: Modellliste nicht lesbar (${/** @type {Error} */ (err).message})`);
+        list = state.installed.filter((m) => m.runtime !== 'colibri');
+      }
     }
+    const c = state.colibri;
+    if (c?.configured && c.model) list.push({ id: `${COLIBRI}${c.model.id}`, runtime: 'colibri', name: c.model.name, sizeBytes: null, catalog: c.model.name });
+    state.installed = list;
     return state.installed;
+  }
+
+  // ---------------- Colibrì ----------------
+
+  /** Schneller Zustand von Colibrì (ohne Python, ausser es ist installiert und nichts bekannt) */
+  async function refreshColibri() {
+    if (!colibri) { state.colibri = null; return null; }
+    try {
+      const d = await colibri.detect();
+      const py = d.installed ? await colibri.findPython().catch(() => null) : null;
+      state.colibri = { ...(state.colibri || {}), ...d, python: d.installed ? Boolean(py) : (state.colibri?.python ?? null) };
+    } catch (err) {
+      state.colibri = { installed: false, error: errorInfo(err) };
+    }
+    return state.colibri;
+  }
+
+  /**
+   * Colibrìs eigene Modellliste gegen diesen PC, ergänzt um die Laufzeitwahl: Gibt es dasselbe
+   * Modell für Ollama und passt es dort in den Speicher, ist Ollama die Empfehlung.
+   */
+  async function colibriCatalog({ force = false } = {}) {
+    if (!colibri) return [];
+    await refreshColibri();
+    if (!state.colibri?.installed) return [];
+    try {
+      const list = await colibri.catalog({ force });
+      const h = hw || await refreshHardware();
+      const annotated = list.filter((m) => m.kind === 'text').map((m) => {
+        const twin = candidates.find((c) => c.colibri === m.id) || null;
+        const plan = twin && h ? catalog.planFor(twin, h) : null;
+        const choice = catalog.chooseRuntime({ plan, colibri: m, colibriInstalled: true, disk: h?.disk || null });
+        return { ...m, id: `${COLIBRI}${m.id}`, colibriId: m.id, ollamaTwin: twin ? { id: twin.id, name: twin.name, fits: Boolean(plan?.fits && plan.speed !== 'very_slow'), speed: plan?.speed || null } : null, choice };
+      });
+      state.colibri = { ...state.colibri, catalog: annotated, error: null };
+      emit();
+      return annotated;
+    } catch (err) {
+      state.colibri = { ...state.colibri, catalog: null, error: errorInfo(err) };
+      emit();
+      return [];
+    }
+  }
+
+  /** Was eine Colibrì-Installation bedeuten würde (lädt nichts) */
+  async function colibriPlan() {
+    if (!colibri) return null;
+    const h = hw || await refreshHardware();
+    const nv = h?.gpus.find((g) => g.vendor === 'nvidia' && !g.integrated);
+    const plan = await colibri.installPlan({ cudaOk: Boolean(nv && (nv.computeCap || 0) >= 8) });
+    state.colibri = { ...(state.colibri || {}), plan };
+    emit();
+    return plan;
+  }
+
+  /** Colibrì-Programm installieren (Download mit Prüfsumme). Die Oberfläche hat vorher gefragt. */
+  async function colibriInstall() {
+    if (!colibri || colibriCtrl) return snapshot();
+    colibriCtrl = new AbortController();
+    const h = hw || await refreshHardware();
+    const nv = h?.gpus.find((g) => g.vendor === 'nvidia' && !g.integrated);
+    state.colibri = { ...(state.colibri || {}), busy: 'install', progress: { phase: 'download', percent: 0 }, error: null };
+    emit();
+    try {
+      await colibri.install({ cudaOk: Boolean(nv && (nv.computeCap || 0) >= 8), signal: colibriCtrl.signal, onProgress: (p) => { state.colibri = { ...state.colibri, progress: p }; emit(); } });
+      await refreshColibri();
+      state.colibri = { ...state.colibri, busy: null, progress: null };
+      await colibriCatalog({ force: true });
+    } catch (err) {
+      state.colibri = { ...state.colibri, busy: null, progress: null, error: /** @type {Error} */ (err).name === 'AbortError' ? null : errorInfo(err) };
+      if (/** @type {Error} */ (err).name !== 'AbortError') log(`Lokale KI: Colibrì-Installation fehlgeschlagen (${/** @type {any} */ (err).raw || /** @type {Error} */ (err).message})`);
+    } finally {
+      colibriCtrl = null;
+      emit();
+    }
+    return snapshot();
+  }
+
+  /**
+   * Ein Colibrì-Modell einrichten (Download). Die Oberfläche hat Grösse und Platz gezeigt und gefragt.
+   * @param {string} id mit oder ohne Präfix @param {{ select?: boolean }} [o]
+   */
+  async function colibriSetup(id, { select = true } = {}) {
+    if (!colibri || colibriCtrl) return snapshot();
+    const plain = id.replace(COLIBRI, '');
+    colibriCtrl = new AbortController();
+    const entry = state.colibri?.catalog?.find((/** @type {any} */ m) => m.colibriId === plain);
+    const total = entry?.downloadGB ? entry.downloadGB * 1e9 : 0;
+    /** @type {{t: number, b: number}[]} */
+    const samples = [];
+    state.download = { id: `${COLIBRI}${plain}`, runtime: 'colibri', status: 'start', completedBytes: 0, totalBytes: total, percent: 0, speedBps: null, etaSec: null };
+    const prev = state.phase;
+    setPhase('downloading');
+    try {
+      // Ein von Buddy geladenes Ollama-Modell freigeben: der Download und Colibrì brauchen Platz
+      if (loadedByBuddy) { await runtime.unload(loadedByBuddy).catch(() => {}); loadedByBuddy = null; state.loaded = null; }
+      await colibri.setupModel(plain, {
+        dir: getConfig().colibriDir || null,
+        signal: colibriCtrl.signal,
+        onProgress: (p) => {
+          const t = now();
+          if (p.completedBytes) samples.push({ t, b: p.completedBytes });
+          while (samples.length > 2 && t - samples[0].t > 10000) samples.shift();
+          const span = samples.length > 1 ? (samples[samples.length - 1].t - samples[0].t) / 1000 : 0;
+          const speed = p.rateBps || (span >= 2 ? (samples[samples.length - 1].b - samples[0].b) / span : null);
+          const tot = p.totalBytes || total;
+          state.download = {
+            id: `${COLIBRI}${plain}`, runtime: 'colibri', status: p.phase, completedBytes: p.completedBytes, totalBytes: tot,
+            percent: tot ? Math.min(100, (p.completedBytes / tot) * 100) : null, speedBps: speed ? Math.round(speed) : null,
+            etaSec: speed && tot && span >= 3 ? Math.round((tot - p.completedBytes) / speed) : null,
+          };
+          emit();
+        },
+      });
+      state.download = null;
+      await refreshColibri();
+      await refreshInstalled();
+      if (select) {
+        colibriCtrl = null;
+        await selectModel(`${COLIBRI}${plain}`);
+      } else { state.phase = 'checking'; decidePhase(); }
+    } catch (err) {
+      state.download = null;
+      state.phase = prev === 'downloading' ? 'needs_model' : prev;
+      decidePhase();
+      if (/** @type {Error} */ (err).name !== 'AbortError') {
+        log(`Lokale KI: Colibrì-Modell ${plain} nicht eingerichtet (${/** @type {any} */ (err).raw || /** @type {Error} */ (err).message})`);
+        state.error = errorInfo(err, `${COLIBRI}${plain}`);
+        emit();
+      }
+    } finally {
+      colibriCtrl = null;
+    }
+    return snapshot();
+  }
+
+  function cancelColibri() {
+    colibriCtrl?.abort();
+    colibri?.cancelSetup();
   }
 
   /** Registry-Angaben für die Kandidaten, die auf diesem PC überhaupt passen könnten */
@@ -239,9 +393,10 @@ function createLocalManager(deps) {
     setPhase('checking');
     const cfg = getConfig();
     runtime.setModelsDir(cfg.modelsDir || null);
-    const [, rt] = await Promise.all([refreshHardware(), refreshRuntime()]);
-    // Läuft Ollama nicht, aber ist installiert: still starten (eigener Prozess)
-    if (rt.installed && !rt.running) {
+    const [, rt] = await Promise.all([refreshHardware(), refreshRuntime(), refreshColibri()]);
+    // Läuft Ollama nicht, aber ist installiert: still starten (eigener Prozess).
+    // Ist ein Colibrì-Modell gewählt, braucht es Ollama nicht.
+    if (rt.installed && !rt.running && !isColibri(cfg.model)) {
       try {
         setPhase('starting');
         await runtime.start();
@@ -268,6 +423,12 @@ function createLocalManager(deps) {
   function decidePhase() {
     if (state.phase === 'downloading' || state.phase === 'installing_runtime' || state.phase === 'loading') { emit(); return; }
     const cfg = getConfig();
+    if (isColibri(cfg.model)) {
+      const have = state.installed.some((m) => m.id === cfg.model);
+      if (have) { state.model = cfg.model; return setPhase(state.loaded?.id === cfg.model ? 'ready' : 'idle'); }
+      // Colibrì-Modell nicht mehr eingerichtet: ehrlich melden, nicht still wechseln
+      return setPhase('error', { code: state.colibri?.installed ? 'not_found' : 'runtime_missing', model: cfg.model });
+    }
     if (!state.runtime?.installed) return setPhase('needs_runtime');
     if (!state.runtime.running) return setPhase('error', state.error || { code: 'runtime_failed' });
     const have = state.installed.some((m) => m.id === cfg.model);
@@ -404,6 +565,8 @@ function createLocalManager(deps) {
 
   /** @param {string} id */
   async function removeModel(id) {
+    // Colibrì-Modelle verwaltet Colibrì selbst (eigener Ordner); Buddy löscht dort nichts
+    if (isColibri(id)) throw new LocalError('manual', 'Colibrì-Modelle werden in Colibrì verwaltet.');
     if (state.loaded?.id === id) { await runtime.unload(id); state.loaded = null; if (loadedByBuddy === id) loadedByBuddy = null; }
     await runtime.remove(id);
     shown.delete(id);
@@ -420,9 +583,11 @@ function createLocalManager(deps) {
     const prev = state.loaded?.id;
     setConfig({ model: id });
     state.model = id;
-    // Nie zwei Modelle gleichzeitig: das vorherige zuerst freigeben
+    // Nie zwei Modelle gleichzeitig: das vorherige zuerst freigeben (auch über Laufzeiten hinweg)
     if (prev && prev !== id) {
-      await runtime.unload(prev);
+      if (isColibri(prev)) await colibri?.stop().catch(() => {});
+      else await runtime.unload(prev).catch(() => {});
+      if (loadedByBuddy === prev) loadedByBuddy = null;
       state.loaded = null;
     }
     await ensureLoaded(id).catch(() => {});
@@ -443,6 +608,10 @@ function createLocalManager(deps) {
 
   /** Fähigkeiten ohne Wartezeit (für models.capabilities) @param {string} id */
   function capsOf(id) {
+    if (isColibri(id)) {
+      const c = colibri?.capabilities() || { tools: false, vision: false };
+      return { tools: c.tools, vision: c.vision, thinking: false, alwaysThinks: false };
+    }
     const s = shown.get(id);
     const c = candidates.find((x) => x.id === id);
     const caps = s ? s.caps : c ? c.caps : [];
@@ -482,6 +651,10 @@ function createLocalManager(deps) {
 
   /** Ollama-Optionen für ein Modell (identisch für Laden und Chat, sonst lädt Ollama neu) @param {string} id */
   async function optionsFor(id) {
+    if (isColibri(id)) {
+      const ctx = colibri?.capabilities().contextTokens || 8192;
+      return { options: { num_ctx: ctx }, plan: /** @type {any} */ ({ ctx, device: 'colibri', fits: true }) };
+    }
     const { plan } = await planOf(id);
     const adv = cleanAdvanced(getConfig().advanced);
     /** @type {Record<string, number>} */
@@ -498,6 +671,7 @@ function createLocalManager(deps) {
    */
   async function ensureLoaded(id = getConfig().model || '') {
     if (!id) throw new LocalError('no_model', 'Kein lokales Modell gewählt.');
+    if (isColibri(id)) return ensureColibri(id);
     if (state.loaded?.id === id && state.phase === 'ready') {
       // Ollama kann es nach keep_alive selbst entladen haben: billig nachsehen
       const still = await runtime.ps().then((l) => l.some((m) => m.id === id)).catch(() => false);
@@ -562,6 +736,60 @@ function createLocalManager(deps) {
     return loading;
   }
 
+  /** Colibrì-Server starten (oder einen laufenden mitbenutzen) @param {string} id */
+  async function ensureColibri(id) {
+    if (!colibri) throw new LocalError('runtime_missing', 'Colibrì ist nicht verfügbar.');
+    if (state.loaded?.id === id && state.phase === 'ready') {
+      const d = await colibri.detect();
+      if (d.running) return state.loaded;
+      state.loaded = null;
+    }
+    if (loading) return loading;
+    loading = (async () => {
+      setPhase('loading');
+      colibriCtrl = new AbortController();
+      try {
+        await refreshColibri();
+        if (!state.colibri?.configured || `${COLIBRI}${state.colibri.model?.id}` !== id) throw new LocalError('not_found', `${id} ist in Colibrì nicht eingerichtet.`);
+        // Ein von Buddy geladenes Ollama-Modell freigeben: Colibrì braucht den Arbeitsspeicher
+        if (loadedByBuddy) { await runtime.unload(loadedByBuddy).catch(() => {}); loadedByBuddy = null; }
+        const r = await colibri.start({
+          signal: colibriCtrl.signal,
+          onProgress: (p) => { state.download = null; state.install = { phase: `colibri_${p.phase}`, elapsedMs: p.elapsedMs }; emit(); },
+        });
+        state.install = null;
+        await colibri.detect().then((d) => { state.colibri = { ...state.colibri, ...d }; });
+        const backend = state.colibri?.backend || 'cpu';
+        state.loaded = {
+          id, runtime: 'colibri', backend,
+          // Colibrì verteilt das Modell auf Grafikkarte, Arbeitsspeicher und SSD: «Grafikkarte» nur
+          // behaupten, wenn Colibrì mit einem Grafik-Backend läuft, und dann als «teilweise»
+          device: backend === 'cpu' ? 'cpu' : 'partial', gpuPercent: null,
+          sizeBytes: null, vramBytes: null, ctx: colibri.capabilities().contextTokens, planned: 'colibri',
+          loadMs: r.loadMs, reused: r.reused, testOk: null,
+        };
+        state.perf = { model: id, loadMs: r.loadMs, firstTokenMs: null, tokensPerSecond: null, at: now() };
+        log(`Lokale KI: Colibrì ${id} bereit (${r.reused ? 'lief schon' : `geladen in ${r.loadMs} ms`}, ${backend})`);
+        state.model = id;
+        setPhase('ready');
+        return state.loaded;
+      } catch (err) {
+        state.install = null;
+        state.loaded = null;
+        if (/** @type {Error} */ (err).name === 'AbortError') { setPhase('idle'); throw err; }
+        log(`Lokale KI: Colibrì-Start fehlgeschlagen (${/** @type {any} */ (err).code || ''} ${/** @type {any} */ (err).raw || /** @type {Error} */ (err).message})`);
+        setPhase('error', errorInfo(err, id));
+        throw err;
+      } finally {
+        colibriCtrl = null;
+      }
+    })().finally(() => { loading = null; });
+    return loading;
+  }
+
+  /** Laden abbrechen (nur Colibrì kann während des Ladens abgebrochen werden) */
+  function cancelLoad() { if (state.phase === 'loading') colibriCtrl?.abort(); }
+
   /** Nach einem Chat: Messwerte merken (nur Zahlen, keine Inhalte) @param {string} id @param {any} timings */
   function recordPerf(id, timings) {
     if (!timings) return;
@@ -574,7 +802,8 @@ function createLocalManager(deps) {
     const code = err?.code;
     if (['unreachable', 'runner_crashed', 'gpu_error', 'out_of_memory', 'timeout'].includes(code)) {
       state.loaded = null;
-      await refreshRuntime().catch(() => {});
+      if (isColibri(getConfig().model)) await refreshColibri().catch(() => {});
+      else await refreshRuntime().catch(() => {});
       setPhase('error', errorInfo(err, getConfig().model || undefined));
     }
   }
@@ -634,6 +863,8 @@ function createLocalManager(deps) {
       catalog: catalogInfo,
       registryChecked: registryAt ? new Date(registryAt).toISOString() : null,
       log: runtime.logTail(60),
+      colibri: colibri ? await colibri.detect().catch(() => null) : null,
+      colibriLog: colibri && state.colibri?.installed ? await colibri.logs(30).catch(() => '') : '',
     };
   }
 
@@ -645,22 +876,27 @@ function createLocalManager(deps) {
       if (loadedByBuddy && getConfig().unloadOnExit !== false) await runtime.unload(loadedByBuddy);
     } catch { /* egal */ }
     await runtime.stop().catch(() => {});
+    colibriCtrl?.abort();
+    colibri?.cancelSetup();
+    if (getConfig().unloadOnExit !== false) await colibri?.stop().catch(() => {});
   }
 
   return {
     init,
     snapshot,
     onChange: (/** @type {(s: any) => void} */ fn) => { listeners.add(fn); return () => listeners.delete(fn); },
-    refresh: async () => { await refreshHardware(); await refreshRuntime(); await refreshInstalled(); computePicks(); decidePhase(); return snapshot(); },
+    refresh: async () => { await refreshHardware(); await refreshRuntime(); await refreshColibri(); await refreshInstalled(); computePicks(); decidePhase(); return snapshot(); },
     refreshRegistry: async () => { await refreshRegistry({ force: true }); computePicks(); emit(); return snapshot(); },
     installRuntime, cancelInstall,
     pull, cancelPull, removeModel, selectModel,
     ensureLoaded, optionsFor, keepAliveValue, capsOf, info, recordPerf, noteChatError,
-    setModelsDir, diagnostics, shutdown,
+    setModelsDir, diagnostics, shutdown, cancelLoad,
+    colibriCatalog, colibriPlan, colibriInstall, colibriSetup, cancelColibri, refreshColibri,
+    isColibri, colibri,
     candidates: () => candidates,
     hardware: () => hw,
     runtime,
   };
 }
 
-module.exports = { createLocalManager, cleanAdvanced, kvMBPer1kFromShow, ADVANCED_DEFAULTS };
+module.exports = { createLocalManager, cleanAdvanced, kvMBPer1kFromShow, ADVANCED_DEFAULTS, COLIBRI, isColibri };

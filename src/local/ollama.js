@@ -665,4 +665,4 @@ function createOllama(opts = {}) {
   };
 }
 
-module.exports = { createOllama, LocalError, classify, envFor, parseComputeLines, readNdjson, DEFAULT_HOST, INSTALLER_URL, DOWNLOAD_PAGE };
+module.exports = { createOllama, LocalError, classify, envFor, runCmd, parseComputeLines, readNdjson, DEFAULT_HOST, INSTALLER_URL, DOWNLOAD_PAGE };

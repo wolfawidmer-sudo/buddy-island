@@ -271,6 +271,23 @@
               </div>
               <p class="footer">Modelle kommen beim Herunterladen von ollama.com. Deine Gespräche mit lokalen Modellen verlassen den PC nicht.</p>
 
+              <div id="colBox" hidden>
+                <h3 class="section">Grosse Modelle (Colibrì)</h3>
+                <div class="group">
+                  <div class="row stacked">
+                    <span class="row-label" id="colLine"></span>
+                    <span class="specs-sub" id="colSub"></span>
+                  </div>
+                  <div class="row stacked" id="colProgressRow" hidden>
+                    <div class="lc-progress-head"><span id="colProgressText"></span><button type="button" class="link" id="colStop">Abbrechen</button></div>
+                    <div class="setup-progress" id="colBarBox"><i id="colBar"></i></div>
+                  </div>
+                  <div id="colList"></div>
+                  <button type="button" class="row row-button left" id="colAction" hidden></button>
+                </div>
+                <p class="footer" id="colFoot">Colibrì ist ein eigenständiges Open-Source-Programm für sehr grosse Modelle: Teile des Modells liegen auf der SSD und werden bei Bedarf gelesen. Das ist langsamer als Ollama, dafür laufen auch Modelle, die nicht in den Arbeitsspeicher passen.</p>
+              </div>
+
               <h3 class="section">Erweitert</h3>
               <div class="group">
                 <details class="row disclosure" id="olAdv">

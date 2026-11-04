@@ -22,6 +22,7 @@ const { createAudioMeter } = require('./audio-meter');
 const { createLlm } = require('./llm');
 const { createDiscovery } = require('./discovery');
 const { createRuntime } = require('./local/runtime');
+const { createColibri } = require('./local/colibri');
 const { createLocalManager, cleanAdvanced } = require('./local/manager');
 const i18n = require('./i18n');
 const { t } = i18n;
@@ -99,6 +100,7 @@ const DEFAULTS = {
   // Lokale KI (Ollama): gewähltes Modell, Speicherort, erweiterte Einstellungen
   localModel: null,
   localModelsDir: null,
+  colibriDir: null, // Ordner für Colibrì-Modelle (Standard: Colibrìs eigener, ~/colibri-models)
   localTools: true, // Werkzeuge (Timer, Apps …) mit lokalen Modellen, wenn das Modell es kann
   localUnloadOnExit: true,
   localAdvanced: { ctx: null, temperature: null, topP: null, maxTokens: null, keepAlive: 'auto', gpu: 'auto', threads: null, batch: null },
@@ -484,6 +486,7 @@ function localConfig() {
   return {
     model: settings.localModel || null,
     modelsDir: settings.localModelsDir || null,
+    colibriDir: settings.colibriDir || null,
     tools: settings.localTools !== false,
     unloadOnExit: settings.localUnloadOnExit !== false,
     advanced: cleanAdvanced(settings.localAdvanced),
@@ -2195,6 +2198,27 @@ function setupIpc() {
     await local.init({ force: true });
   }));
   ipcMain.handle('local:diagnostics', async () => (local ? local.diagnostics() : null));
+  // Colibrì (zweite Laufzeit): Liste, Installationsplan, Installation und Modell-Einrichtung.
+  // Downloads starten nur nach Bestätigung in der Oberfläche (mit Grösse und Speicherort).
+  ipcMain.handle('local:colibri-catalog', localGuard(async ({ force }) => ({ catalog: await local.colibriCatalog({ force: Boolean(force) }) })));
+  ipcMain.handle('local:colibri-plan', localGuard(async () => ({ plan: await local.colibriPlan() })));
+  ipcMain.handle('local:colibri-install', localGuard(() => local.colibriInstall()));
+  ipcMain.handle('local:colibri-setup', localGuard(async ({ id, activate }) => {
+    if (typeof id !== 'string' || !id) throw new Error('id');
+    if (activate) useLocal();
+    await local.colibriSetup(id, { select: true });
+    liveWin()?.webContents.send('settings:changed', publicSettings());
+  }));
+  ipcMain.handle('local:colibri-cancel', localGuard(() => { local.cancelColibri(); local.cancelLoad(); }));
+  ipcMain.handle('local:colibri-dir', async () => {
+    const { dialog } = require('electron');
+    const r = await dialog.showOpenDialog(liveWin() || undefined, { title: t('Ordner für Colibrì-Modelle'), properties: ['openDirectory', 'createDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    settings.colibriDir = r.filePaths[0];
+    saveSettings();
+    return settings.colibriDir;
+  });
+  ipcMain.on('local:open-colibri', () => shell.openExternal('https://github.com/JustVugg/colibri#get-started-in-one-step'));
   ipcMain.handle('local:benchmark', localGuard(async () => {
     const id = settings.localModel;
     if (!id) throw Object.assign(new Error(t('Kein lokales Modell gewählt.')), { code: 'no_model' });
@@ -2481,8 +2505,11 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     applyLanguage();
     discovery = createDiscovery({ home: os.homedir(), log });
     const runtime = createRuntime('ollama', { remoteFetch: (url, init) => net.fetch(url, init), log });
+    // Colibrì: zweite Laufzeit für sehr grosse MoE-Modelle; installiert in Buddys Datenordner
+    const colibriRt = createColibri({ remoteFetch: (url, init) => net.fetch(url, init), installRoot: path.join(app.getPath('userData'), 'colibri'), log });
     local = createLocalManager({
       runtime,
+      colibri: colibriRt,
       cacheDir: app.getPath('userData'),
       remoteFetch: (url, init) => net.fetch(url, init),
       lang: () => i18n.language(),
@@ -2491,7 +2518,10 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       setConfig: applyLocalConfig,
       setUserEnv,
     });
-    models.setLocalResolver({ caps: (id) => local.capsOf(id), name: (id) => local.candidates().find((c) => c.id === id)?.name || null });
+    models.setLocalResolver({
+      caps: (id) => local.capsOf(id),
+      name: (id) => (local.isColibri(id) ? `${local.snapshot().colibri?.model?.name || id.replace('@colibri/', '')} · Colibrì` : local.candidates().find((c) => c.id === id)?.name || null),
+    });
     local.onChange((s) => liveWin()?.webContents.send('local:state', s));
     llm = createLlm({
       localManager: local,

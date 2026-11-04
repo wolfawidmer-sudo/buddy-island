@@ -20,6 +20,32 @@ const { t } = require('../i18n');
 const PREFIX = 'local:';
 const NAME = 'Lokal';
 
+/**
+ * Ollama-Nachrichten → OpenAI Chat Completions (für Colibrì). Werkzeugaufrufe bekommen
+ * fortlaufende IDs, die Ergebnisse danach verweisen in derselben Reihenfolge darauf.
+ * @param {any[]} msgs
+ */
+function toOpenAiMessages(msgs) {
+  /** @type {any[]} */
+  const out = [];
+  /** @type {string[]} */
+  let open = [];
+  let n = 0;
+  for (const m of msgs) {
+    if (m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length) {
+      open = m.tool_calls.map(() => `call_${(n += 1)}`);
+      out.push({ role: 'assistant', content: m.content || null, tool_calls: m.tool_calls.map((/** @type {any} */ c, /** @type {number} */ i) => ({ id: open[i], type: 'function', function: { name: c.function.name, arguments: JSON.stringify(c.function.arguments || {}) } })) });
+    } else if (m.role === 'tool') {
+      out.push({ role: 'tool', tool_call_id: open.shift() || `call_${(n += 1)}`, content: String(m.content || '') });
+    } else if (m.images && m.images.length) {
+      out.push({ role: m.role, content: [{ type: 'text', text: String(m.content || '') }, ...m.images.map((/** @type {string} */ d) => ({ type: 'image_url', image_url: { url: `data:image/png;base64,${d}` } }))] });
+    } else {
+      out.push({ role: m.role, content: String(m.content || '') });
+    }
+  }
+  return out;
+}
+
 /** Grobe Token-Schätzung (gemischte Sprachen, Code): ~3.5 Zeichen pro Token @param {string} s */
 const approxTokens = (s) => Math.ceil(String(s || '').length / 3.5);
 
@@ -41,6 +67,7 @@ function friendly(err, model) {
     case 'unsupported': return t('«{model}» kann das nicht (z. B. Werkzeuge oder Bilder).', { model: name });
     case 'runtime_too_old': return t('Dieses Modell braucht eine neuere Version von Ollama. Aktualisiere Ollama und versuch es nochmals.');
     case 'disk_full': return t('Auf dem Laufwerk ist nicht genug Platz frei.');
+    case 'python_missing': return t('Für Colibrì fehlt Python 3.10 oder neuer. Installiere Python und versuch es nochmals.');
     default: return t('Das lokale Modell meldet einen Fehler: {e}', { e: String(err?.message || err || '').slice(0, 160) });
   }
 }
@@ -171,6 +198,23 @@ function createLocalClient({ manager, getAdvanced = () => ({ temperature: null, 
   /** @type {Map<string, string>} Hash des weggelassenen Teils → Zusammenfassung */
   const summaries = new Map();
 
+  /**
+   * Ein Chat-Aufruf über die Laufzeit des Modells: Ollama (eigenes Format) oder Colibrì
+   * (OpenAI-Format). Rückgabe in beiden Fällen gleich (content, toolCalls, Zeiten).
+   * @param {string} model @param {any} req
+   */
+  function runtimeChat(model, req) {
+    if (manager.isColibri?.(model) && manager.colibri) {
+      return manager.colibri.chat({
+        messages: toOpenAiMessages(req.messages),
+        tools: req.tools,
+        options: { temperature: req.options?.temperature, top_p: req.options?.top_p, max_tokens: req.options?.num_predict },
+        format: req.format, signal: req.signal, onDelta: req.onDelta,
+      });
+    }
+    return runtime.chat({ ...req, model });
+  }
+
   /** @param {string} model */
   async function prepare(model) {
     await manager.ensureLoaded(model);
@@ -190,8 +234,7 @@ function createLocalClient({ manager, getAdvanced = () => ({ temperature: null, 
     const key = crypto.createHash('sha256').update(`${model}\n${text}`).digest('hex');
     const cached = summaries.get(key);
     if (cached) return cached;
-    const r = await runtime.chat({
-      model,
+    const r = await runtimeChat(model, {
       messages: [
         { role: 'system', content: 'Summarize the conversation below in at most 120 words, in the language of the conversation. Keep names, numbers, decisions and open questions. No preamble.' },
         { role: 'user', content: text.slice(-24000) },
@@ -246,8 +289,8 @@ function createLocalClient({ manager, getAdvanced = () => ({ temperature: null, 
       const options = { ...base.options, num_predict: maxOut };
       options.temperature = req.format ? 0 : adv.temperature ?? 0.7;
       if (adv.topP !== null && adv.topP !== undefined) options.top_p = adv.topP;
-      const r = await runtime.chat({
-        model, messages: msgs, tools: toolInfo.tools, options, think: base.think, keepAlive: base.keepAlive,
+      const r = await runtimeChat(model, {
+        messages: msgs, tools: toolInfo.tools, options, think: base.think, keepAlive: base.keepAlive,
         format: req.format, signal: req.signal, onDelta: (x) => req.onText?.(x),
       });
       manager.recordPerf(model, r.timings);
@@ -293,4 +336,4 @@ function createLocalClient({ manager, getAdvanced = () => ({ temperature: null, 
   return { provider: 'local', listModels, streamMessage, json, summaries };
 }
 
-module.exports = { createLocalClient, toOllamaMessages, toOllamaTools, fitToBudget, friendly, approxTokens, PREFIX };
+module.exports = { createLocalClient, toOpenAiMessages, toOllamaMessages, toOllamaTools, fitToBudget, friendly, approxTokens, PREFIX };

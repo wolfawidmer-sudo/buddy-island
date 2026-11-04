@@ -1,27 +1,664 @@
 {
-  "_hinweis": "Kandidaten für die lokale KI (Ollama). Buddy prüft beim Start bei registry.ollama.ai, welche davon es wirklich gibt und wie gross sie sind; fehlende werden nie angezeigt. Diese Datei wird zusätzlich aus dem GitHub-Repo nachgeladen (höchstens einmal pro Tag), damit Empfehlungen ohne neue Buddy-Version aktuell bleiben. Felder: params/active in Mrd. (active nur bei MoE), sizeGB nur als Rückfall, kvMBPer1k = Kontextspeicher pro 1000 Tokens (vorsichtig geschätzt), quality = eigene Einschätzung 0–100 (keine Messung), caps = erwartete Fähigkeiten (Buddy übernimmt nach dem Download die echten von Ollama).",
+  "_hinweis": "Kandidaten für die lokale KI (Ollama). Buddy prüft beim Start bei registry.ollama.ai, welche davon es wirklich gibt und wie gross sie sind; fehlende werden nie angezeigt. Diese Datei wird zusätzlich aus dem GitHub-Repo nachgeladen (höchstens einmal pro Tag), damit Empfehlungen ohne neue Buddy-Version aktuell bleiben. Felder: params/active in Mrd. (active nur bei MoE), sizeGB nur als Rückfall, kvMBPer1k = Kontextspeicher pro 1000 Tokens (vorsichtig geschätzt), quality = eigene Einschätzung 0–100 (keine Messung), caps = erwartete Fähigkeiten (Buddy übernimmt nach dem Download die echten von Ollama). colibri = ID desselben Modells in Colibrì (github.com/JustVugg/colibri); passt es nicht in den Speicher, kann Buddy es dort laufen lassen.",
   "schema": 1,
-  "updated": "2026-11-04",
+  "updated": "2026-11-05",
   "models": [
-    { "id": "qwen3.5:0.8b", "name": "Qwen 3.5 0.8B", "family": "qwen3.5", "maker": "Alibaba", "params": 0.8, "sizeGB": 1.3, "ctxMax": 262144, "kvMBPer1k": 16, "quality": { "chat": 30, "german": 26, "coding": 20, "reasoning": 22, "tools": 28 }, "caps": ["tools", "vision", "thinking"], "strengths": ["very_small", "multilingual"], "limits": ["simple_answers"] },
-    { "id": "qwen3.5:2b", "name": "Qwen 3.5 2B", "family": "qwen3.5", "maker": "Alibaba", "params": 2, "sizeGB": 2.8, "ctxMax": 262144, "kvMBPer1k": 24, "quality": { "chat": 46, "german": 43, "coding": 36, "reasoning": 38, "tools": 46 }, "caps": ["tools", "vision", "thinking"], "strengths": ["fast", "multilingual"], "limits": ["simple_answers"] },
-    { "id": "qwen3.5:4b", "name": "Qwen 3.5 4B", "family": "qwen3.5", "maker": "Alibaba", "params": 4, "sizeGB": 3.4, "ctxMax": 262144, "kvMBPer1k": 32, "quality": { "chat": 62, "german": 58, "coding": 56, "reasoning": 58, "tools": 64 }, "caps": ["tools", "vision", "thinking"], "strengths": ["balanced", "multilingual", "tools"], "limits": [] },
-    { "id": "qwen3.5:9b", "name": "Qwen 3.5 9B", "family": "qwen3.5", "maker": "Alibaba", "params": 9, "sizeGB": 6.6, "ctxMax": 262144, "kvMBPer1k": 40, "quality": { "chat": 75, "german": 71, "coding": 69, "reasoning": 72, "tools": 75 }, "caps": ["tools", "vision", "thinking"], "strengths": ["smart", "multilingual", "tools", "coding"], "limits": [] },
-    { "id": "qwen3.5:27b", "name": "Qwen 3.5 27B", "family": "qwen3.5", "maker": "Alibaba", "params": 27, "sizeGB": 17, "ctxMax": 262144, "kvMBPer1k": 64, "quality": { "chat": 86, "german": 82, "coding": 83, "reasoning": 85, "tools": 85 }, "caps": ["tools", "vision", "thinking"], "strengths": ["very_smart", "multilingual", "coding", "reasoning"], "limits": ["large_download", "needs_strong_pc"] },
-    { "id": "qwen3.5:35b", "name": "Qwen 3.5 35B", "family": "qwen3.5", "maker": "Alibaba", "params": 35, "active": 3, "sizeGB": 22, "ctxMax": 262144, "kvMBPer1k": 40, "quality": { "chat": 82, "german": 78, "coding": 79, "reasoning": 80, "tools": 82 }, "caps": ["tools", "vision", "thinking"], "strengths": ["very_smart", "moe_fast", "multilingual"], "limits": ["large_download", "needs_much_memory"] },
-    { "id": "gemma4:e2b", "name": "Gemma 4 E2B", "family": "gemma4", "maker": "Google", "params": 5.1, "active": 2.3, "sizeGB": 7.2, "ctxMax": 131072, "kvMBPer1k": 24, "quality": { "chat": 52, "german": 56, "coding": 38, "reasoning": 42, "tools": 46 }, "caps": ["tools", "vision", "thinking"], "strengths": ["german", "multilingual", "fast"], "limits": ["simple_answers"] },
-    { "id": "gemma4:e4b", "name": "Gemma 4 E4B", "family": "gemma4", "maker": "Google", "params": 8, "active": 4.5, "sizeGB": 9.6, "ctxMax": 131072, "kvMBPer1k": 32, "quality": { "chat": 65, "german": 67, "coding": 50, "reasoning": 56, "tools": 58 }, "caps": ["tools", "vision", "thinking"], "strengths": ["german", "multilingual", "balanced"], "limits": ["large_download"] },
-    { "id": "gemma4:26b", "name": "Gemma 4 26B", "family": "gemma4", "maker": "Google", "params": 25.2, "active": 3.8, "sizeGB": 18, "ctxMax": 262144, "kvMBPer1k": 64, "quality": { "chat": 83, "german": 83, "coding": 73, "reasoning": 78, "tools": 78 }, "caps": ["tools", "vision", "thinking"], "strengths": ["very_smart", "german", "moe_fast"], "limits": ["large_download", "needs_much_memory"] },
-    { "id": "gemma4:31b", "name": "Gemma 4 31B", "family": "gemma4", "maker": "Google", "params": 30.7, "sizeGB": 20, "ctxMax": 262144, "kvMBPer1k": 120, "quality": { "chat": 86, "german": 85, "coding": 76, "reasoning": 82, "tools": 80 }, "caps": ["tools", "vision", "thinking"], "strengths": ["very_smart", "german", "multilingual"], "limits": ["large_download", "needs_strong_pc"] },
-    { "id": "qwen3:4b", "name": "Qwen 3 4B", "family": "qwen3", "maker": "Alibaba", "params": 4, "sizeGB": 2.5, "ctxMax": 40960, "kvMBPer1k": 144, "quality": { "chat": 55, "german": 48, "coding": 52, "reasoning": 56, "tools": 60 }, "caps": ["tools", "thinking"], "strengths": ["small", "tools"], "limits": ["german_ok"] },
-    { "id": "qwen3:8b", "name": "Qwen 3 8B", "family": "qwen3", "maker": "Alibaba", "params": 8.2, "sizeGB": 5.2, "ctxMax": 40960, "kvMBPer1k": 144, "quality": { "chat": 66, "german": 60, "coding": 62, "reasoning": 66, "tools": 68 }, "caps": ["tools", "thinking"], "strengths": ["tools", "coding"], "limits": ["german_ok"] },
-    { "id": "qwen3:14b", "name": "Qwen 3 14B", "family": "qwen3", "maker": "Alibaba", "params": 14.8, "sizeGB": 9.3, "ctxMax": 40960, "kvMBPer1k": 160, "quality": { "chat": 74, "german": 68, "coding": 70, "reasoning": 74, "tools": 74 }, "caps": ["tools", "thinking"], "strengths": ["smart", "tools", "coding"], "limits": ["german_ok"] },
-    { "id": "ministral-3:3b", "name": "Ministral 3 3B", "family": "ministral3", "maker": "Mistral AI", "params": 3.4, "sizeGB": 3.0, "ctxMax": 262144, "kvMBPer1k": 104, "quality": { "chat": 50, "german": 55, "coding": 42, "reasoning": 45, "tools": 55 }, "caps": ["tools", "vision"], "strengths": ["german", "fast", "tools"], "limits": ["simple_answers"] },
-    { "id": "ministral-3:8b", "name": "Ministral 3 8B", "family": "ministral3", "maker": "Mistral AI", "params": 8.9, "sizeGB": 6.0, "ctxMax": 262144, "kvMBPer1k": 136, "quality": { "chat": 64, "german": 68, "coding": 55, "reasoning": 58, "tools": 66 }, "caps": ["tools", "vision"], "strengths": ["german", "multilingual", "tools"], "limits": [] },
-    { "id": "ministral-3:14b", "name": "Ministral 3 14B", "family": "ministral3", "maker": "Mistral AI", "params": 13.9, "sizeGB": 9.1, "ctxMax": 262144, "kvMBPer1k": 160, "quality": { "chat": 72, "german": 74, "coding": 64, "reasoning": 68, "tools": 72 }, "caps": ["tools", "vision"], "strengths": ["german", "smart", "tools"], "limits": [] },
-    { "id": "llama3.2:3b", "name": "Llama 3.2 3B", "family": "llama", "maker": "Meta", "params": 3.2, "sizeGB": 2.0, "ctxMax": 131072, "kvMBPer1k": 112, "quality": { "chat": 45, "german": 40, "coding": 35, "reasoning": 36, "tools": 46 }, "caps": ["tools"], "strengths": ["small", "fast"], "limits": ["english_focus", "simple_answers"] },
-    { "id": "gpt-oss:20b", "name": "gpt-oss 20B", "family": "gpt-oss", "maker": "OpenAI", "params": 21, "active": 3.6, "sizeGB": 14, "ctxMax": 131072, "kvMBPer1k": 48, "alwaysThinks": true, "quality": { "chat": 77, "german": 62, "coding": 78, "reasoning": 84, "tools": 80 }, "caps": ["tools", "thinking"], "strengths": ["reasoning", "coding", "moe_fast"], "limits": ["thinks_first", "english_focus", "large_download"] },
-    { "id": "deepseek-r1:8b", "name": "DeepSeek-R1 8B", "family": "deepseek-r1", "maker": "DeepSeek", "params": 8.2, "sizeGB": 5.2, "ctxMax": 131072, "kvMBPer1k": 144, "alwaysThinks": true, "quality": { "chat": 56, "german": 45, "coding": 60, "reasoning": 75, "tools": 30 }, "caps": ["thinking"], "strengths": ["reasoning"], "limits": ["thinks_first", "english_focus"] },
-    { "id": "mistral-small3.2:24b", "name": "Mistral Small 3.2 24B", "family": "mistral", "maker": "Mistral AI", "params": 24, "sizeGB": 15, "ctxMax": 131072, "kvMBPer1k": 160, "quality": { "chat": 78, "german": 78, "coding": 70, "reasoning": 70, "tools": 76 }, "caps": ["tools", "vision"], "strengths": ["german", "smart", "tools"], "limits": ["large_download", "needs_strong_pc"] }
+    {
+      "id": "qwen3.5:0.8b",
+      "name": "Qwen 3.5 0.8B",
+      "family": "qwen3.5",
+      "maker": "Alibaba",
+      "params": 0.8,
+      "sizeGB": 1.3,
+      "ctxMax": 262144,
+      "kvMBPer1k": 16,
+      "quality": {
+        "chat": 30,
+        "german": 26,
+        "coding": 20,
+        "reasoning": 22,
+        "tools": 28
+      },
+      "caps": [
+        "tools",
+        "vision",
+        "thinking"
+      ],
+      "strengths": [
+        "very_small",
+        "multilingual"
+      ],
+      "limits": [
+        "simple_answers"
+      ]
+    },
+    {
+      "id": "qwen3.5:2b",
+      "name": "Qwen 3.5 2B",
+      "family": "qwen3.5",
+      "maker": "Alibaba",
+      "params": 2,
+      "sizeGB": 2.8,
+      "ctxMax": 262144,
+      "kvMBPer1k": 24,
+      "quality": {
+        "chat": 46,
+        "german": 43,
+        "coding": 36,
+        "reasoning": 38,
+        "tools": 46
+      },
+      "caps": [
+        "tools",
+        "vision",
+        "thinking"
+      ],
+      "strengths": [
+        "fast",
+        "multilingual"
+      ],
+      "limits": [
+        "simple_answers"
+      ]
+    },
+    {
+      "id": "qwen3.5:4b",
+      "name": "Qwen 3.5 4B",
+      "family": "qwen3.5",
+      "maker": "Alibaba",
+      "params": 4,
+      "sizeGB": 3.4,
+      "ctxMax": 262144,
+      "kvMBPer1k": 32,
+      "quality": {
+        "chat": 62,
+        "german": 58,
+        "coding": 56,
+        "reasoning": 58,
+        "tools": 64
+      },
+      "caps": [
+        "tools",
+        "vision",
+        "thinking"
+      ],
+      "strengths": [
+        "balanced",
+        "multilingual",
+        "tools"
+      ],
+      "limits": []
+    },
+    {
+      "id": "qwen3.5:9b",
+      "name": "Qwen 3.5 9B",
+      "family": "qwen3.5",
+      "maker": "Alibaba",
+      "params": 9,
+      "sizeGB": 6.6,
+      "ctxMax": 262144,
+      "kvMBPer1k": 40,
+      "quality": {
+        "chat": 75,
+        "german": 71,
+        "coding": 69,
+        "reasoning": 72,
+        "tools": 75
+      },
+      "caps": [
+        "tools",
+        "vision",
+        "thinking"
+      ],
+      "strengths": [
+        "smart",
+        "multilingual",
+        "tools",
+        "coding"
+      ],
+      "limits": []
+    },
+    {
+      "id": "qwen3.5:27b",
+      "name": "Qwen 3.5 27B",
+      "family": "qwen3.5",
+      "maker": "Alibaba",
+      "params": 27,
+      "sizeGB": 17,
+      "ctxMax": 262144,
+      "kvMBPer1k": 64,
+      "quality": {
+        "chat": 86,
+        "german": 82,
+        "coding": 83,
+        "reasoning": 85,
+        "tools": 85
+      },
+      "caps": [
+        "tools",
+        "vision",
+        "thinking"
+      ],
+      "strengths": [
+        "very_smart",
+        "multilingual",
+        "coding",
+        "reasoning"
+      ],
+      "limits": [
+        "large_download",
+        "needs_strong_pc"
+      ]
+    },
+    {
+      "id": "qwen3.5:35b",
+      "name": "Qwen 3.5 35B",
+      "family": "qwen3.5",
+      "maker": "Alibaba",
+      "params": 35,
+      "active": 3,
+      "sizeGB": 22,
+      "ctxMax": 262144,
+      "kvMBPer1k": 40,
+      "quality": {
+        "chat": 82,
+        "german": 78,
+        "coding": 79,
+        "reasoning": 80,
+        "tools": 82
+      },
+      "caps": [
+        "tools",
+        "vision",
+        "thinking"
+      ],
+      "strengths": [
+        "very_smart",
+        "moe_fast",
+        "multilingual"
+      ],
+      "limits": [
+        "large_download",
+        "needs_much_memory"
+      ]
+    },
+    {
+      "id": "gemma4:e2b",
+      "name": "Gemma 4 E2B",
+      "family": "gemma4",
+      "maker": "Google",
+      "params": 5.1,
+      "active": 2.3,
+      "sizeGB": 7.2,
+      "ctxMax": 131072,
+      "kvMBPer1k": 24,
+      "quality": {
+        "chat": 52,
+        "german": 56,
+        "coding": 38,
+        "reasoning": 42,
+        "tools": 46
+      },
+      "caps": [
+        "tools",
+        "vision",
+        "thinking"
+      ],
+      "strengths": [
+        "german",
+        "multilingual",
+        "fast"
+      ],
+      "limits": [
+        "simple_answers"
+      ]
+    },
+    {
+      "id": "gemma4:e4b",
+      "name": "Gemma 4 E4B",
+      "family": "gemma4",
+      "maker": "Google",
+      "params": 8,
+      "active": 4.5,
+      "sizeGB": 9.6,
+      "ctxMax": 131072,
+      "kvMBPer1k": 32,
+      "quality": {
+        "chat": 65,
+        "german": 67,
+        "coding": 50,
+        "reasoning": 56,
+        "tools": 58
+      },
+      "caps": [
+        "tools",
+        "vision",
+        "thinking"
+      ],
+      "strengths": [
+        "german",
+        "multilingual",
+        "balanced"
+      ],
+      "limits": [
+        "large_download"
+      ]
+    },
+    {
+      "id": "gemma4:26b",
+      "name": "Gemma 4 26B",
+      "family": "gemma4",
+      "maker": "Google",
+      "params": 25.2,
+      "active": 3.8,
+      "sizeGB": 18,
+      "ctxMax": 262144,
+      "kvMBPer1k": 64,
+      "quality": {
+        "chat": 83,
+        "german": 83,
+        "coding": 73,
+        "reasoning": 78,
+        "tools": 78
+      },
+      "caps": [
+        "tools",
+        "vision",
+        "thinking"
+      ],
+      "strengths": [
+        "very_smart",
+        "german",
+        "moe_fast"
+      ],
+      "limits": [
+        "large_download",
+        "needs_much_memory"
+      ]
+    },
+    {
+      "id": "gemma4:31b",
+      "name": "Gemma 4 31B",
+      "family": "gemma4",
+      "maker": "Google",
+      "params": 30.7,
+      "sizeGB": 20,
+      "ctxMax": 262144,
+      "kvMBPer1k": 120,
+      "quality": {
+        "chat": 86,
+        "german": 85,
+        "coding": 76,
+        "reasoning": 82,
+        "tools": 80
+      },
+      "caps": [
+        "tools",
+        "vision",
+        "thinking"
+      ],
+      "strengths": [
+        "very_smart",
+        "german",
+        "multilingual"
+      ],
+      "limits": [
+        "large_download",
+        "needs_strong_pc"
+      ]
+    },
+    {
+      "id": "qwen3:4b",
+      "name": "Qwen 3 4B",
+      "family": "qwen3",
+      "maker": "Alibaba",
+      "params": 4,
+      "sizeGB": 2.5,
+      "ctxMax": 40960,
+      "kvMBPer1k": 144,
+      "quality": {
+        "chat": 55,
+        "german": 48,
+        "coding": 52,
+        "reasoning": 56,
+        "tools": 60
+      },
+      "caps": [
+        "tools",
+        "thinking"
+      ],
+      "strengths": [
+        "small",
+        "tools"
+      ],
+      "limits": [
+        "german_ok"
+      ]
+    },
+    {
+      "id": "qwen3:8b",
+      "name": "Qwen 3 8B",
+      "family": "qwen3",
+      "maker": "Alibaba",
+      "params": 8.2,
+      "sizeGB": 5.2,
+      "ctxMax": 40960,
+      "kvMBPer1k": 144,
+      "quality": {
+        "chat": 66,
+        "german": 60,
+        "coding": 62,
+        "reasoning": 66,
+        "tools": 68
+      },
+      "caps": [
+        "tools",
+        "thinking"
+      ],
+      "strengths": [
+        "tools",
+        "coding"
+      ],
+      "limits": [
+        "german_ok"
+      ]
+    },
+    {
+      "id": "qwen3:14b",
+      "name": "Qwen 3 14B",
+      "family": "qwen3",
+      "maker": "Alibaba",
+      "params": 14.8,
+      "sizeGB": 9.3,
+      "ctxMax": 40960,
+      "kvMBPer1k": 160,
+      "quality": {
+        "chat": 74,
+        "german": 68,
+        "coding": 70,
+        "reasoning": 74,
+        "tools": 74
+      },
+      "caps": [
+        "tools",
+        "thinking"
+      ],
+      "strengths": [
+        "smart",
+        "tools",
+        "coding"
+      ],
+      "limits": [
+        "german_ok"
+      ]
+    },
+    {
+      "id": "ministral-3:3b",
+      "name": "Ministral 3 3B",
+      "family": "ministral3",
+      "maker": "Mistral AI",
+      "params": 3.4,
+      "sizeGB": 3.0,
+      "ctxMax": 262144,
+      "kvMBPer1k": 104,
+      "quality": {
+        "chat": 50,
+        "german": 55,
+        "coding": 42,
+        "reasoning": 45,
+        "tools": 55
+      },
+      "caps": [
+        "tools",
+        "vision"
+      ],
+      "strengths": [
+        "german",
+        "fast",
+        "tools"
+      ],
+      "limits": [
+        "simple_answers"
+      ]
+    },
+    {
+      "id": "ministral-3:8b",
+      "name": "Ministral 3 8B",
+      "family": "ministral3",
+      "maker": "Mistral AI",
+      "params": 8.9,
+      "sizeGB": 6.0,
+      "ctxMax": 262144,
+      "kvMBPer1k": 136,
+      "quality": {
+        "chat": 64,
+        "german": 68,
+        "coding": 55,
+        "reasoning": 58,
+        "tools": 66
+      },
+      "caps": [
+        "tools",
+        "vision"
+      ],
+      "strengths": [
+        "german",
+        "multilingual",
+        "tools"
+      ],
+      "limits": []
+    },
+    {
+      "id": "ministral-3:14b",
+      "name": "Ministral 3 14B",
+      "family": "ministral3",
+      "maker": "Mistral AI",
+      "params": 13.9,
+      "sizeGB": 9.1,
+      "ctxMax": 262144,
+      "kvMBPer1k": 160,
+      "quality": {
+        "chat": 72,
+        "german": 74,
+        "coding": 64,
+        "reasoning": 68,
+        "tools": 72
+      },
+      "caps": [
+        "tools",
+        "vision"
+      ],
+      "strengths": [
+        "german",
+        "smart",
+        "tools"
+      ],
+      "limits": []
+    },
+    {
+      "id": "llama3.2:3b",
+      "name": "Llama 3.2 3B",
+      "family": "llama",
+      "maker": "Meta",
+      "params": 3.2,
+      "sizeGB": 2.0,
+      "ctxMax": 131072,
+      "kvMBPer1k": 112,
+      "quality": {
+        "chat": 45,
+        "german": 40,
+        "coding": 35,
+        "reasoning": 36,
+        "tools": 46
+      },
+      "caps": [
+        "tools"
+      ],
+      "strengths": [
+        "small",
+        "fast"
+      ],
+      "limits": [
+        "english_focus",
+        "simple_answers"
+      ]
+    },
+    {
+      "id": "gpt-oss:20b",
+      "name": "gpt-oss 20B",
+      "family": "gpt-oss",
+      "maker": "OpenAI",
+      "params": 21,
+      "active": 3.6,
+      "sizeGB": 14,
+      "ctxMax": 131072,
+      "kvMBPer1k": 48,
+      "alwaysThinks": true,
+      "quality": {
+        "chat": 77,
+        "german": 62,
+        "coding": 78,
+        "reasoning": 84,
+        "tools": 80
+      },
+      "caps": [
+        "tools",
+        "thinking"
+      ],
+      "strengths": [
+        "reasoning",
+        "coding",
+        "moe_fast"
+      ],
+      "limits": [
+        "thinks_first",
+        "english_focus",
+        "large_download"
+      ]
+    },
+    {
+      "id": "deepseek-r1:8b",
+      "name": "DeepSeek-R1 8B",
+      "family": "deepseek-r1",
+      "maker": "DeepSeek",
+      "params": 8.2,
+      "sizeGB": 5.2,
+      "ctxMax": 131072,
+      "kvMBPer1k": 144,
+      "alwaysThinks": true,
+      "quality": {
+        "chat": 56,
+        "german": 45,
+        "coding": 60,
+        "reasoning": 75,
+        "tools": 30
+      },
+      "caps": [
+        "thinking"
+      ],
+      "strengths": [
+        "reasoning"
+      ],
+      "limits": [
+        "thinks_first",
+        "english_focus"
+      ]
+    },
+    {
+      "id": "mistral-small3.2:24b",
+      "name": "Mistral Small 3.2 24B",
+      "family": "mistral",
+      "maker": "Mistral AI",
+      "params": 24,
+      "sizeGB": 15,
+      "ctxMax": 131072,
+      "kvMBPer1k": 160,
+      "quality": {
+        "chat": 78,
+        "german": 78,
+        "coding": 70,
+        "reasoning": 70,
+        "tools": 76
+      },
+      "caps": [
+        "tools",
+        "vision"
+      ],
+      "strengths": [
+        "german",
+        "smart",
+        "tools"
+      ],
+      "limits": [
+        "large_download",
+        "needs_strong_pc"
+      ]
+    },
+    {
+      "id": "qwen3.6:35b",
+      "name": "Qwen 3.6 35B-A3B",
+      "family": "qwen3.6",
+      "maker": "Alibaba",
+      "params": 35,
+      "active": 3,
+      "sizeGB": 23,
+      "ctxMax": 262144,
+      "kvMBPer1k": 40,
+      "colibri": "qwen36-35b",
+      "quality": {
+        "chat": 84,
+        "german": 80,
+        "coding": 81,
+        "reasoning": 83,
+        "tools": 84
+      },
+      "caps": [
+        "tools",
+        "vision",
+        "thinking"
+      ],
+      "strengths": [
+        "very_smart",
+        "moe_fast",
+        "multilingual",
+        "tools"
+      ],
+      "limits": [
+        "large_download",
+        "needs_much_memory"
+      ]
+    },
+    {
+      "id": "qwen3-coder:30b",
+      "name": "Qwen3-Coder 30B-A3B",
+      "family": "qwen3-coder",
+      "maker": "Alibaba",
+      "params": 30.5,
+      "active": 3.3,
+      "sizeGB": 19,
+      "ctxMax": 262144,
+      "kvMBPer1k": 96,
+      "colibri": "qwen3-coder-30b",
+      "quality": {
+        "chat": 70,
+        "german": 62,
+        "coding": 86,
+        "reasoning": 72,
+        "tools": 82
+      },
+      "caps": [
+        "tools"
+      ],
+      "strengths": [
+        "coding",
+        "tools",
+        "moe_fast"
+      ],
+      "limits": [
+        "large_download",
+        "needs_much_memory",
+        "english_focus"
+      ]
+    }
   ]
 }

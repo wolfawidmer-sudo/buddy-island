@@ -16,6 +16,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 
 /** @typedef {'nvidia'|'amd'|'intel'|'apple'|'other'} Vendor */
+/** @typedef {{ path: string, freeGB: number|null, totalGB: number|null, media?: 'ssd'|'hdd'|null, bus?: string|null }} Disk */
 /**
  * @typedef {{
  *   name: string, vendor: Vendor, integrated: boolean,
@@ -30,7 +31,7 @@ const { execFile } = require('child_process');
  *   cpu: { name: string, vendor: string, cores: number, threads: number, avx: boolean|null, avx2: boolean|null, avx512: boolean|null },
  *   ram: { totalGB: number, freeGB: number },
  *   gpus: Gpu[],
- *   disk: { path: string, freeGB: number|null, totalGB: number|null } | null,
+ *   disk: Disk | null,
  *   vulkan: boolean|null,
  *   backends: string[],
  *   primary: Gpu|null,
@@ -287,9 +288,51 @@ async function diskInfo(dir) {
 }
 
 /**
+ * Art des Laufwerks (für Colibrì zählt das: grosse Modelle lesen Teile laufend von der Platte).
+ * Windows: Partition → Datenträger → physischer Datenträger (MediaType SSD/HDD, BusType NVMe/SATA/USB).
+ * Linux: /sys/block/<gerät>/queue/rotational. Unbekannt bleibt null.
+ * @param {string} dir @param {{ runImpl?: typeof run, platform?: string, readFile?: (p: string) => string }} [opts]
+ * @returns {Promise<{ media: 'ssd'|'hdd'|null, bus: string|null }>}
+ */
+async function storageType(dir, opts = {}) {
+  const exec = opts.runImpl || run;
+  const platform = opts.platform || process.platform;
+  try {
+    if (platform === 'win32') {
+      const letter = (/^([a-z]):/i.exec(dir) || /^([a-z]):/i.exec(path.resolve(dir)) || [])[1];
+      if (!letter) return { media: null, bus: null };
+      const ps = `$ErrorActionPreference='SilentlyContinue'; $d = Get-Partition -DriveLetter ${letter.toUpperCase()} | Get-Disk; $p = Get-PhysicalDisk | Where-Object { $_.DeviceId -eq [string]$d.Number } | Select-Object -First 1; @{ media = [string]$p.MediaType; bus = [string]$d.BusType } | ConvertTo-Json -Compress`;
+      const out = await exec('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', ps], 15000);
+      return parseStorage(out ? JSON.parse(out.slice(out.indexOf('{'))) : null);
+    }
+    if (platform === 'linux') {
+      const readFile = opts.readFile || ((/** @type {string} */ p) => fs.readFileSync(p, 'utf8'));
+      const dev = await exec('df', ['--output=source', dir], 5000);
+      const name = String(dev || '').split(/\r?\n/).pop()?.trim().replace(/^\/dev\//, '') || '';
+      // Partition → Gerät (nvme0n1p2 → nvme0n1, sda1 → sda)
+      const base = name.replace(/p\d+$/, '').replace(/^(sd[a-z]+|vd[a-z]+|xvd[a-z]+)\d+$/, '$1');
+      if (!base) return { media: null, bus: null };
+      const rot = readFile(`/sys/block/${base}/queue/rotational`).trim();
+      return { media: rot === '1' ? 'hdd' : rot === '0' ? 'ssd' : null, bus: base.startsWith('nvme') ? 'nvme' : null };
+    }
+  } catch { /* unbekannt */ }
+  return { media: null, bus: null };
+}
+
+/** @param {any} p @returns {{ media: 'ssd'|'hdd'|null, bus: string|null }} */
+function parseStorage(p) {
+  const media = String(p?.media || '').toLowerCase();
+  const bus = String(p?.bus || '').toLowerCase();
+  return {
+    media: media === 'ssd' || media === '4' ? 'ssd' : media === 'hdd' || media === '3' ? 'hdd' : bus === 'nvme' ? 'ssd' : null,
+    bus: bus === 'nvme' || bus === '17' ? 'nvme' : bus === 'sata' || bus === '11' ? 'sata' : bus === 'usb' || bus === '7' ? 'usb' : bus || null,
+  };
+}
+
+/**
  * Erkennt die Hardware. Schlägt etwas fehl, bleiben die Angaben leer und `errors` sagt,
  * was fehlt; die Empfehlung rechnet dann vorsichtig nur mit dem Prozessor.
- * @param {{ modelsDir?: string, runImpl?: typeof run, platform?: string, readFile?: (p: string) => string }} [opts]
+ * @param {{ modelsDir?: string, runImpl?: typeof run, platform?: string, readFile?: (p: string) => string, storage?: boolean }} [opts]
  * @returns {Promise<Hardware>}
  */
 async function detect(opts = {}) {
@@ -358,6 +401,7 @@ async function detect(opts = {}) {
   }
 
   const disk = opts.modelsDir ? await diskInfo(opts.modelsDir) : null;
+  if (disk && opts.modelsDir && opts.storage !== false) Object.assign(disk, await storageType(opts.modelsDir, { runImpl: exec, platform, readFile }));
   const primary = pickPrimary(gpus);
   const backends = [...new Set([...gpus.flatMap((g) => g.backends), 'cpu'])];
   return { os: osInfo, cpu, ram, gpus, disk, vulkan, backends, primary, errors, at: Date.now() };
@@ -387,8 +431,10 @@ function summary(hw) {
     vramGB: g ? g.vramGB : null,
     gpuKind: g ? 'dedicated' : shared ? 'integrated' : 'none',
     diskFreeGB: hw.disk?.freeGB ?? null,
+    diskMedia: hw.disk?.media ?? null,
+    diskBus: hw.disk?.bus ?? null,
     os: hw.os.name,
   };
 }
 
-module.exports = { detect, summary, freeRamGB, parseWindowsProbe, parseNvidiaSmi, vendorOf, isIntegrated, backendsFor, nvidiaDriverFromWindows, cpuFlagsLinux, memAvailableLinux, pickPrimary, diskInfo, PS_PROBE, MIN_NVIDIA_DRIVER };
+module.exports = { detect, summary, freeRamGB, storageType, parseStorage, parseWindowsProbe, parseNvidiaSmi, vendorOf, isIntegrated, backendsFor, nvidiaDriverFromWindows, cpuFlagsLinux, memAvailableLinux, pickPrimary, diskInfo, PS_PROBE, MIN_NVIDIA_DRIVER };

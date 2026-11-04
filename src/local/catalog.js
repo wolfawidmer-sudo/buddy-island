@@ -20,7 +20,7 @@ const path = require('path');
  *   id: string, name: string, family: string, maker: string, params: number, active?: number,
  *   sizeGB: number, ctxMax: number, kvMBPer1k: number, alwaysThinks?: boolean,
  *   quality: { chat: number, german: number, coding: number, reasoning: number, tools: number },
- *   caps: string[], strengths: string[], limits: string[],
+ *   caps: string[], strengths: string[], limits: string[], colibri?: string,
  * }} Candidate
  */
 /** @typedef {'very_fast'|'fast'|'smooth'|'slow'|'very_slow'} Speed */
@@ -65,6 +65,7 @@ function validateCatalog(data) {
       ctxMax: m.ctxMax,
       kvMBPer1k: m.kvMBPer1k,
       ...(m.alwaysThinks === true ? { alwaysThinks: true } : {}),
+      ...(typeof m.colibri === 'string' && /^[\w.-]{1,80}$/.test(m.colibri) ? { colibri: m.colibri } : {}),
       quality: { chat: score(q.chat), german: score(q.german), coding: score(q.coding), reasoning: score(q.reasoning), tools: score(q.tools) },
       caps: words(m.caps),
       strengths: words(m.strengths),
@@ -381,7 +382,32 @@ function recommend(hw, catalog, opts = {}) {
   };
 }
 
+/**
+ * Welche Laufzeit für ein Modell auf diesem PC passt, mit Begründung.
+ * Grundsatz: Passt das Modell ganz in Grafik- oder Arbeitsspeicher, ist Ollama die richtige Wahl.
+ * Colibrì nur, wenn es nicht passt und Colibrì selbst sagt, dass es hier läuft (Experten von
+ * der SSD). Colibrì wird nie gewählt, nur weil es installiert ist.
+ * @param {{ plan: Plan|null, colibri: { fits: boolean, runs?: string, reason?: string, status?: string }|null,
+ *   colibriInstalled: boolean, disk?: { media?: string|null }|null }} o
+ * @returns {{ runtime: 'ollama'|'colibri'|null, reason: string, note?: string }}
+ */
+function chooseRuntime({ plan, colibri, colibriInstalled, disk }) {
+  const ollamaOk = Boolean(plan && plan.fits && plan.speed !== 'very_slow');
+  if (ollamaOk) return { runtime: 'ollama', reason: 'fits_memory' };
+  if (colibri && colibri.fits) {
+    const streams = /ssd|disk|stream/i.test(colibri.runs || '');
+    return {
+      runtime: colibriInstalled ? 'colibri' : null,
+      reason: colibriInstalled ? (streams ? 'colibri_streams' : 'colibri_expert_cache') : 'colibri_not_installed',
+      note: disk?.media === 'hdd' ? 'hdd_slow' : undefined,
+    };
+  }
+  if (colibri && !colibri.fits) return { runtime: null, reason: colibri.status === 'needs-disk' ? 'needs_disk' : 'needs_ram' };
+  return { runtime: null, reason: plan?.fits ? 'too_slow' : 'not_enough_memory' };
+}
+
 module.exports = {
+  chooseRuntime,
   BUNDLED, REMOTE_URL, REGISTRY, SPEED_ORDER, CTX_STEPS,
   validateCatalog, loadCatalog, registryInfo, licenseName, versionAtLeast,
   memoryNeed, budgets, planFor, qualityFor, recommend, cpuSpeed, perTokenGB, bytesPerParam,
