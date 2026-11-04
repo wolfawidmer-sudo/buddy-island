@@ -116,6 +116,11 @@ const PROVIDERS = {
     keyHint: 'Ein Gemini-API-Key beginnt mit «AIza».', consoleUrl: 'https://aistudio.google.com/apikey',
     host: 'generativelanguage.googleapis.com', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', needsKey: true, family: /^(models\/)?gemini/i,
   },
+  local: {
+    id: 'local', kind: 'local', name: 'Lokal auf diesem PC', keyPrefix: '',
+    keyHint: '', consoleUrl: 'https://ollama.com',
+    host: '127.0.0.1', baseUrl: 'http://127.0.0.1:11434', needsKey: false, local: true,
+  },
   huggingface: {
     id: 'huggingface', kind: 'huggingface', name: 'Hugging Face (lokal)', keyPrefix: 'hf_',
     keyHint: 'Ein Hugging-Face-Token beginnt mit «hf_» (nur für geschützte Modelle nötig).', consoleUrl: 'https://huggingface.co/settings/tokens',
@@ -124,6 +129,18 @@ const PROVIDERS = {
 };
 
 const HF_PREFIX = 'hf:';
+const LOCAL_PREFIX = 'local:';
+
+// Fähigkeiten lokaler Modelle kennt erst die Laufzeit (Ollama meldet tools/vision/thinking).
+/** @type {(id: string) => { tools: boolean, vision: boolean } | null} */
+let localCaps = () => null;
+/** @type {(id: string) => string|null} */
+let localName = () => null;
+/** @param {{ caps?: typeof localCaps, name?: typeof localName }} r */
+function setLocalResolver(r) {
+  if (r.caps) localCaps = r.caps;
+  if (r.name) localName = r.name;
+}
 
 /** @param {string} modelId @returns {ProviderId} */
 function providerOf(modelId) {
@@ -131,6 +148,7 @@ function providerOf(modelId) {
   const known = CATALOG.find((m) => m.id === id);
   if (known) return known.provider;
   if (id.startsWith(HF_PREFIX)) return 'huggingface';
+  if (id.startsWith(LOCAL_PREFIX)) return 'local';
   if (/^claude/i.test(id)) return 'anthropic';
   for (const p of /** @type {ProviderInfo[]} */ (Object.values(PROVIDERS))) if (p.family && p.family.test(id)) return p.id;
   return 'anthropic';
@@ -163,6 +181,15 @@ function info(modelId) {
   const known = CATALOG.find((m) => m.id === modelId);
   if (known) return known;
   const provider = providerOf(modelId);
+  if (provider === 'local') {
+    const raw = String(modelId).slice(LOCAL_PREFIX.length);
+    const c = localCaps(raw) || { tools: false, vision: false };
+    const short = localName(raw) || raw;
+    return {
+      id: modelId, provider, tier: 'sonnet', name: `${short} (lokal)`, short, price: ZERO_PRICE,
+      efforts: [], caps: { vision: Boolean(c.vision), tools: Boolean(c.tools), computerUse: false, structured: true }, local: true,
+    };
+  }
   if (provider === 'huggingface') {
     const name = String(modelId).slice(HF_PREFIX.length);
     const short = name.split(/[\\/]/).filter(Boolean).pop() || 'Lokales Modell';
@@ -275,7 +302,7 @@ function resolveTiers(available, providerId = 'anthropic') {
   }
   /** @type {Partial<Record<Tier,string>>} */
   const result = {};
-  if (providerId === 'huggingface') {
+  if (providerId === 'huggingface' || providerId === 'local') {
     if (ids[0]) for (const tier of TIERS) result[tier] = ids[0];
     return result;
   }
@@ -382,6 +409,8 @@ module.exports = {
   TIER_LABEL,
   PROVIDERS,
   HF_PREFIX,
+  LOCAL_PREFIX,
+  setLocalResolver,
   providerOf,
   tierOf,
   info,

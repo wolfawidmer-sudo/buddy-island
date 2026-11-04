@@ -91,6 +91,32 @@
               <button type="button" class="chip" data-send="Öffne den Editor und schreib eine Einkaufsliste für Spaghetti Bolognese hinein">Einkaufsliste im Editor schreiben</button>
               <button type="button" class="chip" data-send="Wie viel KI-Nutzung habe ich noch, und was haben meine KI-Tools heute gemacht?">KI-Nutzung heute</button>
             </div>
+            <!-- Ersteinrichtung der lokalen KI: Hardware, ein empfohlenes Modell, ein Knopf -->
+            <div class="local-card" id="localCard" hidden>
+              <p class="lc-hw" id="lcHw"></p>
+              <div class="lc-model" id="lcModel">
+                <b id="lcName"></b>
+                <small id="lcMeta"></small>
+              </div>
+              <div class="lc-confirm" id="lcConfirm" hidden>
+                <p id="lcConfirmText"></p>
+                <div class="empty-actions">
+                  <button type="button" class="button" id="lcCancel">Abbrechen</button>
+                  <button type="button" class="button primary" id="lcGo">Ja, herunterladen</button>
+                </div>
+              </div>
+              <div class="lc-progress" id="lcProgress" hidden>
+                <div class="lc-progress-head"><span id="lcStep"></span><button type="button" class="link" id="lcStop">Abbrechen</button></div>
+                <div class="setup-progress" id="lcBarBox"><i id="lcBar"></i></div>
+                <span class="lc-sub" id="lcSub"></span>
+              </div>
+              <p class="lc-error" id="lcError" hidden></p>
+              <div class="empty-actions" id="lcActions">
+                <button type="button" class="button primary" id="lcStart">Lokale KI einrichten</button>
+                <button type="button" class="button" id="lcOther">Anderes Modell</button>
+              </div>
+              <p class="lc-note" id="lcNote">Danach läuft Buddy ohne Internet und ohne Kosten direkt auf deinem PC.</p>
+            </div>
             <div class="empty-actions">
               <button type="button" class="button primary" id="localBtn" hidden>Lokale KI einrichten</button>
               <button type="button" class="button" id="connectBtn" hidden>API-Key hinzufügen</button>
@@ -203,6 +229,82 @@
             </div>
             <p class="footer" id="keyMsg"></p>
             <p class="footer" id="keyFoot"></p>
+
+            <!-- Lokale KI über Ollama -->
+            <div id="ollamaBox" hidden>
+              <h3 class="section">Lokale KI</h3>
+              <div class="group">
+                <div class="row">
+                  <span class="row-label two" id="olModelLine">Modell<small id="olStatusSub"></small></span>
+                  <span class="row-value" id="olStatus">–</span>
+                </div>
+                <div class="row stacked" id="olProgressRow" hidden>
+                  <div class="lc-progress-head"><span id="olProgressText"></span><button type="button" class="link" id="olStop">Abbrechen</button></div>
+                  <div class="setup-progress" id="olBarBox"><i id="olBar"></i></div>
+                  <span class="specs-sub" id="olProgressSub"></span>
+                </div>
+                <button type="button" class="row row-button left" id="olAction" hidden></button>
+              </div>
+              <p class="footer" id="olMsg"></p>
+
+              <h3 class="section">Empfehlung für deinen PC</h3>
+              <div class="group">
+                <div class="row stacked">
+                  <span class="row-label" id="olHw">Prüfe die Hardware …</span>
+                  <span class="specs-sub" id="olHwSub"></span>
+                </div>
+                <div id="olPicks"></div>
+                <details class="row disclosure" id="olMore">
+                  <summary><span class="row-label">Alle passenden Modelle</span><span class="row-value" id="olMoreCount"></span></summary>
+                  <div id="olAll"></div>
+                </details>
+              </div>
+              <p class="footer" id="olPicksFoot">Tempo-Stufen sind Schätzungen. Wie schnell es wirklich ist, hängt von deinem PC ab; unter «Diagnose» kannst du es messen.</p>
+
+              <h3 class="section">Auf diesem PC</h3>
+              <div class="group">
+                <div id="olInstalled"></div>
+                <div class="row">
+                  <span class="row-label two">Speicherort<small id="olDir"></small></span>
+                  <button type="button" class="button small" id="olDirBtn">Ändern …</button>
+                </div>
+              </div>
+              <p class="footer">Modelle kommen beim Herunterladen von ollama.com. Deine Gespräche mit lokalen Modellen verlassen den PC nicht.</p>
+
+              <h3 class="section">Erweitert</h3>
+              <div class="group">
+                <details class="row disclosure" id="olAdv">
+                  <summary><span class="row-label">Für Fortgeschrittene</span><span class="row-value">nur falls nötig</span></summary>
+                  <div class="ol-adv">
+                    <label class="row"><span class="row-label">Kontextlänge</span>
+                      <select id="olCtx" class="row-select">
+                        <option value="">Automatisch</option><option value="4096">4 000 Tokens</option><option value="8192">8 000 Tokens</option><option value="16384">16 000 Tokens</option><option value="32768">32 000 Tokens</option><option value="65536">64 000 Tokens</option>
+                      </select></label>
+                    <label class="row"><span class="row-label">Rechnen auf</span>
+                      <select id="olGpu" class="row-select"><option value="auto">Automatisch</option><option value="cpu">Nur Prozessor</option></select></label>
+                    <label class="row"><span class="row-label">Im Speicher halten</span>
+                      <select id="olKeep" class="row-select"><option value="auto">Automatisch</option><option value="5m">5 Minuten</option><option value="30m">30 Minuten</option><option value="2h">2 Stunden</option><option value="forever">Solange Buddy läuft</option></select></label>
+                    <label class="row"><span class="row-label">Temperatur</span><input class="ol-num" id="olTemp" type="number" min="0" max="2" step="0.1" placeholder="0.7"></label>
+                    <label class="row"><span class="row-label">Top-p</span><input class="ol-num" id="olTopP" type="number" min="0.05" max="1" step="0.05" placeholder="Standard"></label>
+                    <label class="row"><span class="row-label">Max. Antwortlänge</span><input class="ol-num" id="olMaxTok" type="number" min="64" max="32768" step="64" placeholder="Standard"></label>
+                    <label class="row"><span class="row-label">Prozessor-Threads</span><input class="ol-num" id="olThreads" type="number" min="1" max="256" step="1" placeholder="Automatisch"></label>
+                    <label class="row"><span class="row-label">Batch-Grösse</span><input class="ol-num" id="olBatch" type="number" min="16" max="4096" step="16" placeholder="Automatisch"></label>
+                    <label class="row"><span class="row-label two">Werkzeuge erlauben<small>Timer, Apps, Musik … nur bei Modellen, die das können</small></span><span class="switch"><input type="checkbox" id="olTools"><span></span></span></label>
+                    <label class="row"><span class="row-label two">Riskante Aktionen<small>z. B. Dateien löschen, immer mit Nachfrage</small></span><span class="switch"><input type="checkbox" id="olRisky"><span></span></span></label>
+                    <label class="row"><span class="row-label two">Beim Beenden freigeben<small>Modell aus dem Speicher nehmen, wenn Buddy schliesst</small></span><span class="switch"><input type="checkbox" id="olUnload"><span></span></span></label>
+                  </div>
+                </details>
+                <details class="row disclosure" id="olDiagBox">
+                  <summary><span class="row-label">Diagnose</span><span class="row-value" id="olDiagShort"></span></summary>
+                  <div class="ol-diag" id="olDiag"></div>
+                  <div class="ol-diag-actions">
+                    <button type="button" class="button small" id="olBench">Tempo messen</button>
+                    <button type="button" class="button small" id="olDiagCopy">Diagnose kopieren</button>
+                    <button type="button" class="button small" id="olRestart">Ollama neu starten</button>
+                  </div>
+                </details>
+              </div>
+            </div>
 
             <div id="setupBox" hidden>
               <h3 class="section">Lokale KI einrichten</h3>

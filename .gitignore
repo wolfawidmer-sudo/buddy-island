@@ -10,3 +10,4 @@ selftest.txt
 Thumbs.db
 
 .netlify
+test-results/

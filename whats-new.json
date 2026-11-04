@@ -2,6 +2,27 @@
   "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Für Kundinnen und Kunden geschrieben: Nutzen statt Technik, keine Fachbegriffe.",
   "versions": [
     {
+      "version": "0.8.0",
+      "highlights": [
+        {
+          "title": "Lokale KI mit einem Klick",
+          "text": "Buddy prüft deinen PC, empfiehlt ein passendes Modell, zeigt vorher die Grösse und richtet alles selbst ein. Danach chattest du ohne Konto und ohne Kosten."
+        },
+        {
+          "title": "Nutzt deine Grafikkarte",
+          "text": "NVIDIA, AMD und Intel werden erkannt. Buddy zeigt ehrlich, ob das Modell wirklich auf der Grafikkarte rechnet oder auf dem Prozessor."
+        },
+        {
+          "title": "Modelle verwalten",
+          "text": "Herunterladen mit Fortschritt und Restzeit, abbrechen, wechseln, löschen und den Speicherort wählen, alles in den Einstellungen."
+        },
+        {
+          "title": "Neu generieren",
+          "text": "Gefällt dir eine Antwort nicht, lässt du sie mit einem Klick neu schreiben. Code erscheint jetzt farbig hervorgehoben."
+        }
+      ]
+    },
+    {
       "version": "0.7.1",
       "highlights": [
         {

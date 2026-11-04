@@ -207,10 +207,10 @@ function createRouter({ claude, usage, log = () => {} }) {
     const contextTokens = approxTokens(messages);
 
     // Lokales Hugging-Face-Modell: es gibt nur dieses eine, kein Router-Aufruf
-    if (providerId === 'huggingface') {
+    if (providerId === 'huggingface' || providerId === 'local') {
       const model = tiers.sonnet || settings.model;
       return decision({
-        source: 'lokal', tier: 'sonnet', model, effort: null, reason: t('Lokales Modell (Hugging Face)'), analysis: null,
+        source: 'lokal', tier: 'sonnet', model, effort: null, reason: providerId === 'local' ? t('Lokales Modell') : t('Lokales Modell (Hugging Face)'), analysis: null,
         allowOpus: false, needsPlan: false, estimate: 0, routerCost: 0,
       });
     }

@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["src/llm/**/*", "src/models.js", "src/discovery.js", "src/system-specs.js", "src/i18n/index.js"]
+  "include": ["src/llm/**/*", "src/local/**/*", "src/models.js", "src/discovery.js", "src/system-specs.js", "src/i18n/index.js"]
 }

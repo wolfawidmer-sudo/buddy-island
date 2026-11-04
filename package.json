@@ -1,20 +1,21 @@
 {
   "name": "buddy-island",
   "productName": "Buddy Island",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Ein kleiner Claude-Assistent im Dynamic-Island-Stil für Windows: Chat, Timer, Musik, Kalender, Mitteilungen, Sprache und PC-Steuerung.",
   "main": "src/main.js",
   "author": "Wolf Widmer",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node test/claude.test.js && node test/calendar.test.js && node test/core.test.js && node test/files.test.js && node test/router.test.js && node test/speed.test.js && node test/agent.test.js && node test/ai-usage.test.js && node test/providers.test.js && node test/matrix.test.js && node test/resilience.test.js && node test/memory.test.js && node test/audio.test.js && node test/models.test.js && node test/whats-new.test.js",
+    "test": "node test/claude.test.js && node test/calendar.test.js && node test/core.test.js && node test/files.test.js && node test/router.test.js && node test/speed.test.js && node test/agent.test.js && node test/ai-usage.test.js && node test/providers.test.js && node test/matrix.test.js && node test/resilience.test.js && node test/memory.test.js && node test/audio.test.js && node test/models.test.js && node test/whats-new.test.js && node test/local.test.js",
     "pack:win": "electron-packager . \"Buddy Island\" --platform=win32 --arch=x64 --out=dist --overwrite --asar --icon=assets/icon.ico --app-copyright=\"Wolf Widmer\" --win32metadata.CompanyName=\"Wolf Widmer\" --win32metadata.FileDescription=\"Buddy Island\" --win32metadata.ProductName=\"Buddy Island\" --ignore=\"^/dist\" --ignore=\"^/test\" --ignore=\"^/docs\" --ignore=\"^/\\.git\"",
     "dist:win": "electron-builder --win nsis --x64 --publish never",
     "typecheck": "tsc -p tsconfig.json",
     "test:visualizer": "node test/e2e/visualizer.e2e.js",
     "test:layout": "node test/e2e/layout.e2e.js",
-    "test:lifecycle": "node test/e2e/lifecycle.e2e.js"
+    "test:lifecycle": "node test/e2e/lifecycle.e2e.js",
+    "test:ollama": "node test/e2e/ollama.e2e.js"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",

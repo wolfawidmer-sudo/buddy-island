@@ -9,6 +9,7 @@ const { createClient: createAnthropicClient } = require('../claude');
 const { createOpenAiCompatClient } = require('./openai-compat');
 const { createGeminiClient } = require('./gemini');
 const { createHuggingFaceClient } = require('./huggingface');
+const { createLocalClient } = require('./local');
 const learned = require('./learned');
 const fallback = require('./fallback');
 const { ProviderError, diagnosticLine, isTransient } = require('./errors');
@@ -23,6 +24,7 @@ function endpointFor(provider, model) {
     case 'anthropic': return 'https://api.anthropic.com/v1/messages';
     case 'gemini': return `${provider.baseUrl}/models/${model || '{model}'}:streamGenerateContent`;
     case 'huggingface': return 'local://transformers';
+    case 'local': return 'http://127.0.0.1:11434/api/chat';
     default: return `${provider.baseUrl}/chat/completions`;
   }
 }
@@ -68,9 +70,12 @@ function annotate(err, provider, model, stage) {
  *   getHfToken?: () => string|null,
  *   log?: (m: string) => void,
  *   onLocalStatus?: (s: {state: string, model: string|null, device: string|null, error: string|null}) => void,
+ *   localManager?: any,
+ *   getLocalAdvanced?: () => any,
+ *   allowLocalTools?: () => boolean,
  * }} opts
  */
-function createLlm({ fetchImpl = globalThis.fetch, scriptDir, getPythonRuntime, getHfToken, log = () => {}, onLocalStatus }) {
+function createLlm({ fetchImpl = globalThis.fetch, scriptDir, getPythonRuntime, getHfToken, log = () => {}, onLocalStatus, localManager, getLocalAdvanced, allowLocalTools }) {
   /** @type {Partial<Record<ProviderId, LlmClient>>} */
   const clients = {};
   const hf = createHuggingFaceClient({ scriptDir, getRuntime: getPythonRuntime, getToken: getHfToken, log, onStatus: onLocalStatus });
@@ -101,6 +106,10 @@ function createLlm({ fetchImpl = globalThis.fetch, scriptDir, getPythonRuntime, 
     let c;
     if (provider.kind === 'anthropic') c = /** @type {LlmClient} */ (/** @type {unknown} */ (createAnthropicClient(fetchImpl)));
     else if (provider.kind === 'huggingface') c = hf;
+    else if (provider.kind === 'local') {
+      if (!localManager) throw new ProviderError(0, 'Lokale KI nicht verfügbar', 'local_error', 'Lokal');
+      c = createLocalClient({ manager: localManager, getAdvanced: getLocalAdvanced, allowTools: allowLocalTools, log });
+    }
     else if (provider.kind === 'gemini') c = createGeminiClient({ provider, fetchImpl });
     else c = createOpenAiCompatClient({ provider, fetchImpl });
     const wrapped = provider.kind === 'huggingface' ? { ...wrap(provider, c), stop: hf.stop, status: hf.status, preload: hf.preload } : wrap(provider, c);

@@ -6,8 +6,8 @@
 // Jeder Adapter übersetzt es in das Format seines Anbieters und zurück. So bleiben
 // Agent, Router und Verlauf vom Anbieter unabhängig.
 
-export type ProviderId = 'anthropic' | 'openai' | 'xai' | 'gemini' | 'huggingface';
-export type ProviderKind = 'anthropic' | 'openai' | 'gemini' | 'huggingface';
+export type ProviderId = 'anthropic' | 'openai' | 'xai' | 'gemini' | 'huggingface' | 'local';
+export type ProviderKind = 'anthropic' | 'openai' | 'gemini' | 'huggingface' | 'local';
 export type Tier = 'haiku' | 'sonnet' | 'opus';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -148,6 +148,8 @@ export interface StreamRequest {
    * Der Agent setzt sie tiefer, wenn ein Ausweichmodell bereitsteht.
    */
   maxRetries?: number;
+  /** Hinweis für den Chat (z. B. «älterer Teil wurde zusammengefasst») */
+  onNotice?: (text: string) => void;
 }
 
 export interface StreamResult {

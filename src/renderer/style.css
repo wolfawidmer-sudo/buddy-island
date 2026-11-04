@@ -1263,6 +1263,43 @@ body { padding-top: var(--gap); }
 .reco .tag { margin-right: 2px; }
 .reco.active .button { opacity: 0.5; pointer-events: none; }
 
+/* Lokale KI: Ersteinrichtung im Island */
+.local-card { display: grid; gap: 10px; margin: 6px 0 4px; padding: 12px 14px; border-radius: 14px; background: var(--group); }
+.lc-hw { margin: 0; font-size: 12px; color: var(--label-3); }
+.lc-hw:empty { display: none; }
+.lc-model { display: grid; gap: 2px; }
+.lc-model b { font-size: 14.5px; font-weight: 600; }
+.lc-model small { font-size: 12px; color: var(--label-2); line-height: 1.4; }
+.lc-model:has(b:empty) { display: none; }
+.lc-confirm p { margin: 0 0 8px; font-size: 13px; color: var(--label-2); line-height: 1.45; }
+.lc-progress { display: grid; gap: 6px; }
+.lc-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 13px; }
+.lc-progress-head span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lc-sub { font-size: 11.5px; color: var(--label-3); font-variant-numeric: tabular-nums; }
+.lc-sub:empty { display: none; }
+.lc-error { margin: 0; font-size: 12.5px; color: var(--red); line-height: 1.4; }
+.lc-note { margin: 0; font-size: 11.5px; color: var(--label-3); }
+.local-card .empty-actions { margin: 0; }
+.local-card .empty-actions:empty { display: none; }
+/* Lokale KI: Einstellungen */
+.reco .role { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 6px; font-size: 10.5px; font-weight: 600; background: var(--fill); color: var(--label-2); vertical-align: 1px; }
+.reco.current .role { background: color-mix(in srgb, var(--green) 25%, transparent); color: var(--green); }
+.reco .ol-actions { display: flex; gap: 6px; flex: none; }
+#olPicks .reco, #olAll .reco, #olInstalled .reco { box-sizing: border-box; width: 100%; min-width: 0; }
+#olPicks .reco-text, #olAll .reco-text, #olInstalled .reco-text { flex: 1 1 0; grid-template-columns: minmax(0, 1fr); }
+#olPicks .reco-text small, #olAll .reco-text small, #olInstalled .reco-text small { white-space: normal; overflow-wrap: anywhere; }
+.ol-adv .row::before, .ol-adv .row + .row::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; border-top: 0.5px solid var(--sep); }
+.ol-num { width: 110px; text-align: right; }
+.ol-diag { padding: 0 14px 8px; font: 11.5px/1.55 var(--mono); color: var(--label-2); white-space: pre-wrap; word-break: break-word; }
+.ol-diag-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 12px; }
+#olInstalled:empty + .row::before { display: none; }
+
+/* Code-Hervorhebung */
+.md .hl-c { color: var(--label-3); font-style: italic; }
+.md .hl-s { color: #8fd18f; }
+.md .hl-n { color: #e0b46b; }
+.md .hl-k { color: #82aaff; }
+
 /* Erkannte Tools */
 .tool-item { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 14px; }
 .tool-item + .tool-item::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; border-top: 0.5px solid var(--sep); }

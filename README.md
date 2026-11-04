@@ -18,8 +18,8 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 - **Notch-Modus**: Island anklicken, gedrückt halten und schon 1 Pixel nach oben ziehen: Es wird sofort zu einem tiefschwarzen Notch am Bildschirmrand. 1 Pixel nach unten oder ein Klick holt es zurück.
 - **Passende Grösse**: Offen ist das Island höchstens 75 % der Bildschirmhöhe hoch (richtig umgerechnet bei Windows-Skalierung); Listen scrollen, das Eingabefeld bleibt sichtbar.
 - **Gedächtnis**: «Merk dir, dass …» speichert kurze Notizen lokal. Gespeichert wird nur auf ausdrücklichen Wunsch, nie Passwörter, Karten- oder Kontonummern; an die KI geht nur, was zur Frage passt. In den Einstellungen einzeln löschbar.
-- **Mehrere KI-Anbieter**: Anthropic Claude, OpenAI, xAI Grok, Google Gemini oder ein lokales Modell über Hugging Face Transformers. Alle hängen an einer gemeinsamen Schnittstelle (`LlmClient`), jeder Anbieter hat eine Fähigkeitsmatrix (Bilder, Werkzeuge, PC-Steuerung, strukturierte Ausgabe). Kann ein Modell etwas nicht, sagt Buddy das im Island, statt abzustürzen.
-- **Lokal zuerst**: Ohne API-Key wählt Buddy automatisch ein lokales Modell. Er misst Arbeitsspeicher, Prozessor und Grafikkarte, empfiehlt das schnellste und das beste Modell und richtet Python, PyTorch, Transformers und das Modell mit einem Klick ein (nur für deinen Benutzer, ohne Administratorrechte). Einen API-Key kannst du jederzeit in den Einstellungen ergänzen.
+- **Mehrere KI-Anbieter**: Anthropic Claude, OpenAI, xAI Grok, Google Gemini oder ein lokales Modell über Ollama (ältere Einrichtungen mit Hugging Face Transformers laufen weiter). Alle hängen an einer gemeinsamen Schnittstelle (`LlmClient`), jeder Anbieter hat eine Fähigkeitsmatrix (Bilder, Werkzeuge, PC-Steuerung, strukturierte Ausgabe). Kann ein Modell etwas nicht, sagt Buddy das im Island, statt abzustürzen.
+- **Lokal zuerst**: Ohne API-Key bietet Buddy eine lokale KI an. Er erkennt Prozessor, Arbeitsspeicher, Grafikkarte (NVIDIA, AMD, Intel, integriert) und freien Platz, empfiehlt «Empfohlen», «Am schnellsten» und «Beste Qualität», zeigt die Download-Grösse und fragt vorher. Dann installiert er Ollama (offizielles Installationsprogramm, Signatur wird geprüft, ohne Administratorrechte), lädt das Modell mit Fortschritt, Tempo und Restzeit, lädt es, testet es kurz und öffnet den Chat. Siehe [Lokale KI](#lokale-ki).
 - **Verbindungstest**: Einstellungen → «Provider & API-Keys» → «Verbindung testen» prüft jeden verbundenen Anbieter Schritt für Schritt (Key und Modellliste, einfache Antwort ohne Streaming, Streaming, Verlauf, Werkzeug mit Fortsetzung, parallele Werkzeuge, Router). Jeder Schritt läuft unabhängig und bekommt einen Status: Funktioniert, Eingeschränkt, Temporär nicht verfügbar, Nicht unterstützt, Konfigurationsfehler oder Fehler in der Integration. Ist das Hauptmodell gerade überlastet, prüft der Test die übrigen Funktionen mit einem Modell, das geantwortet hat. Fehler nennen Anbieter, Modell, API-Version, HTTP-Status, Stufe und Wiederholungen; der kopierbare Bericht enthält keine Keys.
 - **Ausweichmodell bei Überlastung**: Meldet ein Anbieter eine vorübergehende Störung (HTTP 429, 500, 502, 503, 504, Zeitüberschreitung), wiederholt Buddy kurz mit wachsender Pause und Jitter und weicht dann für diese eine Anfrage auf ein anderes Modell aus der Modellliste deines Keys aus (z. B. Gemini Flash → Flash-Lite). Das steht offen im Chat, deine Modellwahl bleibt unverändert. Nie bei falschem Key, fehlender Berechtigung oder leerem Guthaben. Abschaltbar unter «Modell und Denktiefe».
 - **Spricht deine Sprache**: Oberfläche, Meldungen und Anweisungen an die KI folgen beim Start der Windows-Sprache (Deutsch, Englisch, Französisch; sonst englische Oberfläche, Antworten trotzdem in deiner Sprache).
@@ -52,7 +52,7 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 1. **Installer herunterladen**: Lade unter [Releases](../../releases) die Datei `BuddyIsland-Setup-….exe` herunter.
 2. **Installieren**: Doppelklick auf die Datei. Falls Windows «Der Computer wurde durch Windows geschützt» anzeigt: «Weitere Informationen» → «Trotzdem ausführen». Das erscheint, weil die App (noch) nicht mit einem kostenpflichtigen Zertifikat signiert ist. Buddy installiert sich nur für deinen Benutzer, ohne Administratorrechte, und legt Verknüpfungen im Startmenü und auf dem Desktop an.
 3. **KI einrichten**:
-   - Ohne Key: Klicke oben auf das Island → «Lokale KI einrichten». Buddy wählt das passende Modell für deinen PC und lädt es einmalig (etwa 1 bis 3 GB).
+   - Ohne Key: Klicke oben auf das Island → «Einrichten». Buddy zeigt das empfohlene Modell und die Grösse, fragt nach und richtet Ollama und das Modell selbst ein (je nach PC etwa 2 bis 10 GB).
    - Mit Key (optional, klügere Antworten, PC-Steuerung nur mit Claude): Einstellungen → «Provider & API-Keys» → Anbieter wählen → Key einfügen → «Verbinden». Keys gibt es in der [Claude Console](https://platform.claude.com/settings/keys), bei [OpenAI](https://platform.openai.com/api-keys), in der [xAI Console](https://console.x.ai) oder im [Google AI Studio](https://aistudio.google.com/apikey).
 4. **Fertig**: Mit <kbd>Strg</kbd> + <kbd>Umschalt</kbd> + <kbd>Leertaste</kbd> öffnest du Buddy von überall.
 5. **Selbsttest**: Einstellungen → «Über Buddy» → «Selbsttest starten» zeigt dir, ob alles funktioniert.
@@ -126,6 +126,19 @@ Ausführlich in [PRIVACY.md](PRIVACY.md). Kurz:
 
 Im Leerlauf läuft keine einzige Endlos-Animation: Das Fenster ist dann nur so gross wie das Island, und der leuchtende Rand ist ganz geschlossen. Der Steuerungs-Helfer startet erst, wenn Buddy steuern darf, und beendet sich nach zwei Minuten ohne Aktion. CPU und GPU sind im Leerlauf praktisch bei 0 %. Der RAM-Grundbedarf liegt bei etwa 80–120 MB, weil Buddy auf Electron (Chromium) läuft.
 
+
+## Lokale KI
+
+Buddy nutzt **[Ollama](https://ollama.com)** als Laufzeit für lokale Modelle. Gründe: offizielles Windows-Programm ohne Administratorrechte, rechnet mit NVIDIA (CUDA), AMD (ROCm oder Vulkan), Intel (Vulkan) oder nur dem Prozessor, lädt quantisierte Modelle mit Prüfsumme und fortsetzbarem Download, verteilt grosse Modelle selbst auf Grafikkarte und Prozessor und bietet eine lokale Schnittstelle mit Streaming und Werkzeugaufrufen. llama.cpp direkt einzubinden hätte feinere Kontrolle gebracht, aber eigene Builds pro Grafikkarte, eigene Downloads und eigene Updates verlangt. Die Anbindung liegt hinter einer kleinen Schnittstelle (`src/local/runtime.js`), weitere Laufzeiten lassen sich dort ergänzen.
+
+**Ablauf beim ersten Start**: Hardware erkennen → Ollama suchen (läuft es schon, z. B. als App, benutzt Buddy es mit und beendet es nie) → Empfehlung zeigen → nach Bestätigung Ollama installieren und das Modell laden → kurz testen → Chat.
+
+**Empfehlung**: Der Katalog (`src/local/models.json`) nennt Kandidaten (Qwen, Gemma, Ministral, Llama, gpt-oss, DeepSeek-R1, Mistral Small). Ob es ein Modell wirklich gibt und wie gross es ist, fragt Buddy direkt bei der Ollama-Registry; nicht bestätigte Modelle erscheinen nicht. Der Katalog wird zusätzlich aus diesem Repo nachgeladen (höchstens einmal pro Tag, streng geprüft), damit Empfehlungen ohne neue Version aktuell bleiben. Der Speicherbedarf rechnet Modellgewichte + Kontextspeicher + Laufzeit-Puffer und lässt Reserve für Windows; die Kontextlänge richtet sich nach dem freien Speicher. Tempo nur als grobe Stufe.
+
+**Ehrlichkeit**: Ob die Grafikkarte wirklich rechnet, liest Buddy nach dem Laden aus Ollama (`/api/ps`, Anteil im Grafikspeicher) und zeigt «Grafikkarte», «teils Grafikkarte» oder «Prozessor». Wird ein Gespräch zu lang, fasst das Modell den älteren Teil zusammen und Buddy sagt das im Chat.
+
+**Tests**: `test/local.test.js` (nachgebauter Ollama-Server, Hardware-Profile für NVIDIA, AMD, Intel, integriert, nur Prozessor, mehrere Grafikkarten, wenig Speicher). Der echte Durchlauf mit Ollama läuft auf Windows in GitHub Actions (`.github/workflows/local-ai.yml`, Ergebnisse als Artefakt) oder lokal mit `npm run test:ollama`.
+
 ## Wie es funktioniert
 
 | Datei | Aufgabe |
@@ -134,7 +147,9 @@ Im Leerlauf läuft keine einzige Endlos-Animation: Das Fenster ist dann nur so g
 | `src/llm/` | Anbieter-Schnittstelle (`types.d.ts`), Adapter mit dem jeweils eigenen Protokoll: OpenAI/xAI (Chat Completions), Gemini (nativ `generateContent` mit `thoughtSignature`), lokal (Transformers); gemeinsame Fehlerklassen mit Backoff (`errors.js`), Ausweichmodelle (`fallback.js`) und Verbindungstest (`health.js`) |
 | `src/claude.js` | Claude Messages API (Streaming, Prompt-Caching, Wiederholungen, Zeitlimits) |
 | `src/discovery.js` | Erkennt installierte KI-Tools und Laufzeiten |
-| `src/system-specs.js` | Liest die Hardware und empfiehlt lokale Modelle |
+| `src/local/` | Lokale KI: Hardware-Erkennung (`hardware.js`), Modellkatalog, Speicherabschätzung und Empfehlung (`catalog.js`, `models.json`), Ollama-Anbindung (`ollama.js`), Laufzeit-Schnittstelle (`runtime.js`), Ablauf und Zustand (`manager.js`) |
+| `src/llm/local.js` | Chat-Adapter für lokale Modelle: Streaming, Werkzeuge nur bei fähigen Modellen, Kontext-Zusammenfassung |
+| `src/system-specs.js` | Hardware und Empfehlung der älteren Hugging-Face-Laufzeit |
 | `src/audio-meter.js` | Audio-Analyse (Loopback, FFT, Bänder) für Visualizer und Rand |
 | `src/i18n/` | Sprachen (Deutsch als Quelle, Englisch, Französisch) |
 | `src/models.js` | Anbieter, Modelle, Preise, Denktiefe |
@@ -164,8 +179,9 @@ Im Leerlauf läuft keine einzige Endlos-Animation: Das Fenster ist dann nur so g
 - Abo-Limits von Claude (Pro/Max), ChatGPT und Grok geben die Anbieter über keine offizielle Schnittstelle heraus. Buddy zeigt sie darum als «nicht verfügbar». Codex schreibt seine Limits in die eigenen Protokolle, die zeigt Buddy (Stand der letzten Codex-Nutzung).
 - Claude Code und Codex in WSL legen ihre Protokolle im Linux-Teil ab, dort liest Buddy nicht.
 - Kosten sind Schätzungen aus Token-Zahlen und Listenpreisen. Massgebend ist die Abrechnung beim Anbieter. Die Preise von OpenAI, xAI und Google sind Schätzungen (Stand Oktober 2026).
-- PC-Steuerung gibt es nur mit Claude. Lokale Modelle können nur chatten (keine Werkzeuge, keine Bilder).
-- Lokale Modelle auf dem Prozessor sind langsam; mit einer NVIDIA-Grafikkarte und CUDA-PyTorch geht es viel schneller.
+- PC-Steuerung gibt es nur mit Claude. Lokale Modelle können Buddys einfache Werkzeuge (Timer, Apps, Musik …) nutzen, wenn Ollama das für das Modell meldet; riskante Aktionen sind für lokale Modelle standardmässig gesperrt.
+- Lokale Modelle auf dem Prozessor sind deutlich langsamer als auf einer Grafikkarte. Tempo-Angaben sind grobe Stufen, unter «Diagnose» lässt es sich messen.
+- Die automatische Installation von Ollama gibt es nur unter Windows; auf anderen Systemen bitte selbst installieren.
 
 ## Lizenz
 

@@ -21,6 +21,8 @@ const systemSpecs = require('./system-specs');
 const { createAudioMeter } = require('./audio-meter');
 const { createLlm } = require('./llm');
 const { createDiscovery } = require('./discovery');
+const { createRuntime } = require('./local/runtime');
+const { createLocalManager, cleanAdvanced } = require('./local/manager');
 const i18n = require('./i18n');
 const { t } = i18n;
 const { createComputer, supportsCaptureExclusion } = require('./computer');
@@ -94,6 +96,13 @@ const DEFAULTS = {
   visualizer: true, // Musik-Balken nach dem Systemton
   glowMusic: true, // Bildschirmrand reagiert auf laufende Musik
   providerChosen: false, // hat der Nutzer selbst einen Anbieter gewählt? Sonst lokal, falls möglich
+  // Lokale KI (Ollama): gewähltes Modell, Speicherort, erweiterte Einstellungen
+  localModel: null,
+  localModelsDir: null,
+  localTools: true, // Werkzeuge (Timer, Apps …) mit lokalen Modellen, wenn das Modell es kann
+  localUnloadOnExit: true,
+  localAdvanced: { ctx: null, temperature: null, topP: null, maxTokens: null, keepAlive: 'auto', gpu: 'auto', threads: null, batch: null },
+  localPermissions: { high: 'block' }, // lokale Modelle: riskante Aktionen standardmässig gesperrt
   shortcutsCreated: false,
   settingsVersion: SETTINGS_VERSION,
 };
@@ -148,6 +157,11 @@ let aiUsage = null;
 // Lokale KI für die Nutzungsansicht: Modell, Zustand und gemessener Arbeitsspeicher des Prozesses
 async function localUsage() {
   const { execFile } = require('child_process');
+  if (local && (currentProvider() === 'local' || settings.localModel)) {
+    const s = local.snapshot();
+    const loaded = s.loaded && s.loaded.id === settings.localModel ? s.loaded : null;
+    return { model: settings.localModel || '', loaded: Boolean(loaded), device: loaded ? loaded.device : null, memoryMB: loaded?.sizeBytes ? Math.round(loaded.sizeBytes / 1048576) : null };
+  }
   const model = getSecret('hfModel');
   if (!model && !discovery?.peek()?.python) return null;
   const st = llm?.hfStatus() || {};
@@ -179,13 +193,14 @@ function usagePresent(id) {
     case 'chatgpt': return Boolean(has.chatgpt_app || has.codex);
     case 'openai_api': return key('openai') || Boolean(getSecret('openaiAdmin'));
     case 'gemini': return key('gemini') || Boolean(has.gemini_cli);
-    case 'local': return Boolean(getSecret('hfModel')) || Boolean(discovery?.peek()?.python);
+    case 'local': return Boolean(settings.localModel) || Boolean(getSecret('hfModel')) || Boolean(discovery?.peek()?.python);
     case 'grok': return Boolean(has.grok_cli) || key('xai');
     default: return true;
   }
 }
 let llm = null;
 let discovery = null;
+let local = null; // Lokale KI (src/local/manager.js)
 let audioMeter = null;
 const modelCache = new Map(); // Anbieter -> { at, list }
 let updateHealth = null; // Infos für Rollback und Anzeige
@@ -304,7 +319,12 @@ function displayList() {
 function providerList() {
   const found = discovery?.peek();
   return Object.values(models.PROVIDERS)
+    // Die alte Hugging-Face-Laufzeit nur noch für Nutzer, die sie schon eingerichtet haben
+    .filter((p) => p.id !== 'huggingface' || settings.provider === 'huggingface' || Boolean(getSecret('hfModel')))
     .map((p) => {
+      if (p.id === 'local') {
+        return { id: 'local', name: t('Lokal auf diesem PC'), consoleUrl: p.consoleUrl, keyPrefix: '', local: true, hasKey: localHasModel(), hint: null, status: null, ready: true };
+      }
       const k = providerKeyInfo(p.id);
       return { id: p.id, name: p.id === 'huggingface' ? t('Lokal (Hugging Face)') : p.name, consoleUrl: p.consoleUrl, keyPrefix: p.keyPrefix, local: Boolean(p.local), hasKey: k.has, hint: k.hint, status: settings.keyStatus?.[p.id] || null, ready: p.id !== 'huggingface' || Boolean(found?.python) };
     });
@@ -330,6 +350,7 @@ function publicSettings() {
     keyHint: providerKeyInfo(currentProvider()).hint,
     keyStatusCurrent: settings.keyStatus?.[currentProvider()] || null,
     hfModel: getSecret('hfModel') || '',
+    local: local ? local.snapshot() : null,
     hasHfToken: Boolean(settings.hfTokenEncrypted || settings.hfTokenPlain),
     hfStatus: llm?.hfStatus() || null,
     discovery: discovery?.peek() ? publicDiscovery(discovery.peek()) : null,
@@ -338,7 +359,7 @@ function publicSettings() {
     hasAnthropicAdmin: Boolean(settings.anthropicAdminEncrypted || settings.anthropicAdminPlain),
     hasOpenaiAdmin: Boolean(settings.openaiAdminEncrypted || settings.openaiAdminPlain),
     // Lokal zählt erst als verbunden, wenn Python mit torch und transformers wirklich läuft
-    hasKey: currentProvider() === 'huggingface' ? Boolean(getSecret('hfModel') && discovery?.peek()?.python) : Boolean(getApiKey(currentProvider())),
+    hasKey: currentProvider() === 'huggingface' ? Boolean(getSecret('hfModel') && discovery?.peek()?.python) : currentProvider() === 'local' ? localHasModel() : Boolean(getApiKey(currentProvider())),
     localIncomplete: currentProvider() === 'huggingface' && Boolean(discovery?.peek()) && !discovery.peek().python,
     hasCalendar: Boolean(settings.calendarEncrypted || settings.calendarPlain),
     calendarStatus: calendar?.status() || null,
@@ -366,7 +387,22 @@ let localProgressTimer = null;
 // Wählt beim Start das lokale Modell, solange der Nutzer keinen Anbieter selbst gewählt
 // und keinen API-Key hat. Das empfohlene Modell richtet sich nach der Hardware.
 async function autoSelectLocal() {
+  // Neue lokale KI: Ollama mit einem installierten Modell ist da, aber noch kein Anbieter gewählt
+  if (local && !settings.providerChosen && !(getApiKey(currentProvider()) && !['huggingface', 'local'].includes(currentProvider()))) {
+    const s = await local.init();
+    if (s.config?.model && s.installed.some((m) => m.id === s.config.model) && !getSecret('hfModel')) {
+      if (settings.provider !== 'local') {
+        settings.provider = 'local';
+        saveSettings();
+        log(`Lokale KI automatisch gewählt: ${s.config.model}`);
+      }
+      liveWin()?.webContents.send('settings:changed', publicSettings());
+      return true;
+    }
+  }
   const found = await discovery.get();
+  // Die alte Hugging-Face-Laufzeit wird nur noch für bestehende Einrichtungen automatisch gewählt
+  if (!getSecret('hfModel')) return false;
   if (settings.providerChosen || getApiKey(currentProvider()) && currentProvider() !== 'huggingface') return false;
   if (!found.python) return false;
   let changed = false;
@@ -419,12 +455,57 @@ function onLocalStatus(st) {
 
 // Island geht auf: lokales Modell im Hintergrund schon laden
 function warmLocal() {
+  if (currentProvider() === 'local') {
+    const s = local?.snapshot();
+    // Nur laden, wenn ein Modell installiert ist und nichts anderes läuft
+    if (s && settings.localModel && s.installed.some((m) => m.id === settings.localModel) && ['idle', 'error'].includes(s.phase) && !(s.error && ['out_of_memory', 'low_ram', 'gpu_error'].includes(s.error.code))) {
+      local.ensureLoaded(settings.localModel).catch(() => {});
+    }
+    return;
+  }
   if (currentProvider() !== 'huggingface') return;
   const model = getSecret('hfModel');
   if (!model || !discovery.peek()?.python) return;
   const st = llm.hfStatus();
   if (st.state === 'ready' || st.state === 'loading') return;
   llm.preloadLocal(model);
+}
+
+// Hat die lokale KI ein installiertes, gewähltes Modell?
+function localHasModel() {
+  if (!local || !settings.localModel) return false;
+  const s = local.snapshot();
+  // Solange die Prüfung läuft, dem gespeicherten Stand vertrauen (sonst flackert die Oberfläche)
+  if (s.phase === 'checking' || s.phase === 'starting') return true;
+  return s.installed.some((m) => m.id === settings.localModel) || s.phase === 'loading' || s.phase === 'ready';
+}
+
+function localConfig() {
+  return {
+    model: settings.localModel || null,
+    modelsDir: settings.localModelsDir || null,
+    tools: settings.localTools !== false,
+    unloadOnExit: settings.localUnloadOnExit !== false,
+    advanced: cleanAdvanced(settings.localAdvanced),
+  };
+}
+
+function applyLocalConfig(patch = {}) {
+  if ('model' in patch) settings.localModel = patch.model || null;
+  if ('modelsDir' in patch) settings.localModelsDir = patch.modelsDir || null;
+  if ('tools' in patch) settings.localTools = Boolean(patch.tools);
+  if ('unloadOnExit' in patch) settings.localUnloadOnExit = Boolean(patch.unloadOnExit);
+  if ('advanced' in patch) settings.localAdvanced = cleanAdvanced({ ...settings.localAdvanced, ...patch.advanced });
+  saveSettings();
+}
+
+// Benutzer-Umgebungsvariable (nur Windows), damit auch die Ollama-App den Modellordner kennt
+async function setUserEnv(name, value) {
+  if (process.platform !== 'win32') return false;
+  const { execFile } = require('child_process');
+  const v = value ? `'${String(value).replace(/'/g, "''")}'` : '$null';
+  const ps = `[Environment]::SetEnvironmentVariable('${name}', ${v}, 'User')`;
+  return new Promise((resolve) => execFile('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', ps], { windowsHide: true, timeout: 15000 }, (err) => resolve(!err)));
 }
 
 // Einrichtung per Knopfdruck: Python (falls nötig) → Hugging-Face-Pakete → empfohlenes Modell
@@ -622,6 +703,7 @@ const currentProvider = () => (models.PROVIDERS[settings.provider] ? settings.pr
 
 function getApiKey(provider = currentProvider()) {
   if (provider === 'huggingface') return getSecret('hfModel') ? 'lokal' : null;
+  if (provider === 'local') return settings.localModel ? 'lokal' : null;
   if (provider !== 'anthropic') return getSecret(`key_${provider}`);
   if (settings.keyEncrypted && safeStorage.isEncryptionAvailable()) {
     try {
@@ -670,6 +752,7 @@ function setApiKey(key, provider = currentProvider()) {
 function providerKeyInfo(id) {
   if (id === 'anthropic') return { has: Boolean(settings.keyEncrypted || settings.keyPlain), hint: settings.keyHint, protected: Boolean(settings.keyEncrypted) };
   if (id === 'huggingface') return { has: Boolean(getSecret('hfModel')), hint: null, protected: Boolean(settings.hfModelEncrypted) };
+  if (id === 'local') return { has: localHasModel(), hint: null, protected: false };
   return { has: Boolean(settings[`key_${id}Encrypted`] || settings[`key_${id}Plain`]), hint: settings.keyHints?.[id] || null, protected: Boolean(settings[`key_${id}Encrypted`]) };
 }
 
@@ -679,6 +762,9 @@ function providerKeyInfo(id) {
 // Zeitüberschreitung, Serverfehler) weiter benutzt, statt blind eingebaute Namen zu raten.
 // Bei abgelehntem Key gibt es keine Liste (das ist kein «Modell fehlt»).
 async function availableModels(provider = currentProvider(), { force = false } = {}) {
+  if (provider === 'local') {
+    return settings.localModel ? [{ id: `${models.LOCAL_PREFIX}${settings.localModel}`, name: settings.localModel }] : [];
+  }
   if (provider === 'huggingface') {
     const model = getSecret('hfModel');
     return model ? [{ id: `${models.HF_PREFIX}${model}`, name: models.info(`${models.HF_PREFIX}${model}`).name }] : [];
@@ -745,6 +831,7 @@ Regeln für die PC-Steuerung:
     // Die Uhrzeit ändert sich jede Minute: darum ganz ans Ende, sonst greift der Prompt-Cache
     // der Anbieter für alles danach nicht mehr (langsamere erste Antwort, höhere Kosten).
     const clock = lang === 'de' ? `Jetzt ist ${now}.` : `It is now ${now}.`;
+    if (opts.provider === 'local') text += '\n\nDu läufst als lokales Modell direkt auf dem PC des Nutzers. Schreibt der Nutzer Schweizerdeutsch, antworte auf Hochdeutsch in Schweizer Schreibweise. Erfinde keine Fakten: Wenn du etwas nicht sicher weisst, sag das.';
     return `${text}${opts.extra || ''}\n\n${clock}`;
   }
   const langName = languageName(answerLanguage);
@@ -772,6 +859,7 @@ Rules for PC control:
   // Die Uhrzeit ändert sich jede Minute: darum ganz ans Ende, sonst greift der Prompt-Cache
   // der Anbieter für alles danach nicht mehr (langsamere erste Antwort, höhere Kosten).
   const clock = lang === 'de' ? `Jetzt ist ${now}.` : `It is now ${now}.`;
+  if (opts.provider === 'local') text += '\n\nYou run as a local model directly on the user\'s PC. If the user writes Swiss German, reply in standard German (Swiss spelling). Do not make up facts: if you are not sure, say so.';
   return `${text}${opts.extra || ''}\n\n${clock}`;
 }
 
@@ -1748,7 +1836,12 @@ async function runDiagnostics() {
 
   const provider = models.PROVIDERS[currentProvider()];
   const key = getApiKey();
-  if (provider.id === 'huggingface') {
+  if (provider.id === 'local') {
+    const s = local ? await local.init() : null;
+    const rt = s?.runtime;
+    add(t('Lokale KI'), rt?.running && s?.installed.some((m) => m.id === settings.localModel) ? true : false,
+      rt?.running ? `Ollama ${rt.version} · ${settings.localModel || t('kein Modell gewählt')}${s.loaded ? ` · ${s.loaded.gpuPercent} % ${t('Grafikkarte')}` : ''}` : rt?.installed ? t('Ollama ist installiert, läuft aber nicht') : t('Ollama ist nicht installiert'));
+  } else if (provider.id === 'huggingface') {
     const found = await discovery.get();
     add(t('Lokales Modell'), found.python ? true : false, found.python ? `${getSecret('hfModel') || t('kein Modell gewählt')} · transformers ${found.python.transformers} · ${found.python.device}` : t('Python mit transformers und torch fehlt'));
   } else if (!key) add(provider.name, false, t('Kein API-Key verbunden'));
@@ -1871,6 +1964,7 @@ function setupIpc() {
       settings.provider = patch.provider;
       settings.providerChosen = true;
       if (patch.provider !== 'huggingface') llm.stopAll();
+      if (patch.provider === 'local') local?.init().catch(() => {});
       // Manuelles Modell an den neuen Anbieter anpassen
       if (models.providerOf(settings.model) !== settings.provider) {
         settings.model = models.resolveTiers([], settings.provider).sonnet || settings.model;
@@ -1933,7 +2027,7 @@ function setupIpc() {
   ipcMain.handle('key:set', async (_e, { key, workspaceId, provider: pid } = {}) => {
     const clean = (key || '').trim();
     const provider = models.PROVIDERS[pid] || models.PROVIDERS[currentProvider()];
-    if (provider.id === 'huggingface') return { ok: false, error: t('Lokale Modelle brauchen keinen API-Key.') };
+    if (provider.id === 'huggingface' || provider.id === 'local') return { ok: false, error: t('Lokale Modelle brauchen keinen API-Key.') };
     if (!clean) return { ok: false, error: t('Bitte einen Key einfügen.') };
     if (!clean.startsWith(provider.keyPrefix)) return { ok: false, error: t(provider.keyHint) };
     if (/\s/.test(clean) || clean.length > 300) return { ok: false, error: t('Der Key enthält Leerzeichen oder ist zu lang. Kopiere ihn nochmals aus der Console.') };
@@ -2015,6 +2109,109 @@ function setupIpc() {
   });
   ipcMain.on('hf:warm', () => warmLocal());
 
+
+  // ---------- Lokale KI (Ollama) ----------
+  // Die Oberfläche fragt vor jedem Download selbst nach (mit Grösse); hier wird nur ausgeführt.
+  const localGuard = (fn) => async (_e, arg = {}) => {
+    if (!local) return { ok: false, error: 'not_ready' };
+    try {
+      const out = await fn(arg || {});
+      return { ok: true, state: local.snapshot(), ...(out && typeof out === 'object' && !Array.isArray(out) ? out : {}) };
+    } catch (err) {
+      log(`Lokale KI: ${err.code || ''} ${err.raw || err.message}`);
+      return { ok: false, error: err.message, code: err.code || 'error', state: local.snapshot() };
+    }
+  };
+  const useLocal = () => {
+    if (settings.provider !== 'local') {
+      settings.provider = 'local';
+      settings.providerChosen = true;
+      llm.stopAll();
+      saveSettings();
+    }
+  };
+  ipcMain.handle('local:get', localGuard(({ force }) => local.init({ force: Boolean(force) })));
+  ipcMain.handle('local:refresh', localGuard(() => local.refresh()));
+  ipcMain.handle('local:registry', localGuard(() => local.refreshRegistry()));
+  ipcMain.handle('local:install-runtime', localGuard(async ({ activate }) => {
+    if (activate) useLocal();
+    await local.installRuntime();
+  }));
+  ipcMain.handle('local:cancel-install', localGuard(() => local.cancelInstall()));
+  ipcMain.handle('local:pull', localGuard(async ({ id, activate }) => {
+    if (typeof id !== 'string' || !id) throw new Error('id');
+    if (activate) useLocal();
+    await local.pull(id, { select: activate || !settings.localModel || settings.provider === 'local' });
+    liveWin()?.webContents.send('settings:changed', publicSettings());
+  }));
+  ipcMain.handle('local:cancel-pull', localGuard(() => local.cancelPull()));
+  ipcMain.handle('local:remove', localGuard(async ({ id }) => {
+    if (typeof id !== 'string' || !id) throw new Error('id');
+    await local.removeModel(id);
+    liveWin()?.webContents.send('settings:changed', publicSettings());
+  }));
+  ipcMain.handle('local:select', localGuard(async ({ id, activate }) => {
+    if (typeof id !== 'string' || !id) throw new Error('id');
+    if (activate) useLocal();
+    await local.selectModel(id);
+    liveWin()?.webContents.send('settings:changed', publicSettings());
+  }));
+  ipcMain.handle('local:use', localGuard(async () => { useLocal(); await local.init(); liveWin()?.webContents.send('settings:changed', publicSettings()); }));
+  ipcMain.handle('local:load', localGuard(() => local.ensureLoaded(settings.localModel || '')));
+  ipcMain.handle('local:config', localGuard(async (patch) => {
+    /** @type {any} */
+    const p = {};
+    if ('tools' in patch) p.tools = Boolean(patch.tools);
+    if ('unloadOnExit' in patch) p.unloadOnExit = Boolean(patch.unloadOnExit);
+    if (patch.advanced && typeof patch.advanced === 'object') p.advanced = patch.advanced;
+    applyLocalConfig(p);
+    if (patch.permissions && typeof patch.permissions === 'object') {
+      settings.localPermissions = { high: patch.permissions.high === 'ask' ? 'ask' : 'block' };
+      saveSettings();
+    }
+    // Neue Kontextlänge oder Grafikkarte/Prozessor: beim nächsten Satz neu laden
+    if (p.advanced && settings.localModel) await local.runtime.unload(settings.localModel).then(() => local.refresh());
+  }));
+  ipcMain.handle('local:storage-pick', async () => {
+    const { dialog } = require('electron');
+    const r = await dialog.showOpenDialog(liveWin() || undefined, { title: t('Ordner für lokale Modelle'), properties: ['openDirectory', 'createDirectory'], defaultPath: local?.runtime.getModelsDir() });
+    return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+  });
+  ipcMain.handle('local:storage-set', localGuard(async ({ dir, move }) => {
+    const target = typeof dir === 'string' && dir ? dir : null;
+    return local.setModelsDir(target, { move: Boolean(move) });
+  }));
+  // Fremden Ollama-Server (z. B. die Ollama-App) neu starten: nur auf ausdrücklichen Wunsch
+  ipcMain.handle('local:restart-runtime', localGuard(async () => {
+    if (process.platform === 'win32' && !local.runtime.isManaged()) {
+      const { execFile } = require('child_process');
+      for (const im of ['ollama app.exe', 'ollama.exe']) {
+        await new Promise((r) => execFile('taskkill', ['/IM', im, '/F'], { windowsHide: true, timeout: 10000 }, () => r()));
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    } else {
+      await local.runtime.stop();
+    }
+    await local.init({ force: true });
+  }));
+  ipcMain.handle('local:diagnostics', async () => (local ? local.diagnostics() : null));
+  ipcMain.handle('local:benchmark', localGuard(async () => {
+    const id = settings.localModel;
+    if (!id) throw Object.assign(new Error(t('Kein lokales Modell gewählt.')), { code: 'no_model' });
+    await local.ensureLoaded(id);
+    const { options } = await local.optionsFor(id);
+    const caps = local.capsOf(id);
+    const r = await local.runtime.chat({
+      model: id,
+      messages: [{ role: 'user', content: 'Schreib drei kurze Sätze über die Schweiz.' }],
+      options: { ...options, num_predict: 120, temperature: 0.7 },
+      think: caps.thinking && !caps.alwaysThinks ? false : null,
+      keepAlive: local.keepAliveValue(),
+    });
+    local.recordPerf(id, r.timings);
+    return { timings: r.timings, tokens: r.evalTokens };
+  }));
+  ipcMain.on('local:open-download', () => shell.openExternal('https://ollama.com/download'));
 
   // Hardware erkennen und lokale Modelle empfehlen
   ipcMain.handle('specs:get', async () => {
@@ -2151,7 +2348,7 @@ function setupIpc() {
   });
 
   ipcMain.on('chat:send', (event, { id, messages, meta } = {}) => {
-    if (currentProvider() === 'huggingface' && Date.now() - (settings.lastLocalUse || 0) > 3600 * 1000) { settings.lastLocalUse = Date.now(); saveSettings(); }
+    if (['huggingface', 'local'].includes(currentProvider()) && Date.now() - (settings.lastLocalUse || 0) > 3600 * 1000) { settings.lastLocalUse = Date.now(); saveSettings(); }
     const lastUser = Array.isArray(messages) ? [...messages].reverse().find((m) => m?.role === 'user' && typeof m.content === 'string') : null;
     memory?.setUserText(lastUser?.content || '');
     const sender = event.sender;
@@ -2270,13 +2467,36 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', () => openIsland());
   app.on('before-quit', () => { quitting = true; });
+  let localShutdown = false;
+  app.on('before-quit', (e) => {
+    if (!local || localShutdown) return;
+    localShutdown = true;
+    e.preventDefault();
+    Promise.race([local.shutdown(), new Promise((r) => setTimeout(r, 3000))]).finally(() => app.quit());
+  });
 
   app.whenReady().then(() => {
     if (process.platform === 'win32') app.setAppUserModelId('ch.wolfwidmer.buddyisland');
     loadSettings();
     applyLanguage();
     discovery = createDiscovery({ home: os.homedir(), log });
+    const runtime = createRuntime('ollama', { remoteFetch: (url, init) => net.fetch(url, init), log });
+    local = createLocalManager({
+      runtime,
+      cacheDir: app.getPath('userData'),
+      remoteFetch: (url, init) => net.fetch(url, init),
+      lang: () => i18n.language(),
+      log,
+      getConfig: localConfig,
+      setConfig: applyLocalConfig,
+      setUserEnv,
+    });
+    models.setLocalResolver({ caps: (id) => local.capsOf(id), name: (id) => local.candidates().find((c) => c.id === id)?.name || null });
+    local.onChange((s) => liveWin()?.webContents.send('local:state', s));
     llm = createLlm({
+      localManager: local,
+      getLocalAdvanced: () => cleanAdvanced(settings.localAdvanced),
+      allowLocalTools: () => settings.localTools !== false,
       fetchImpl: (url, init) => net.fetch(url, init),
       scriptDir: app.getPath('userData'),
       getPythonRuntime: async () => (await discovery.get()).python,
@@ -2293,6 +2513,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     });
     // Im Hintergrund prüfen, welche KI-Tools installiert sind (blockiert den Start nicht).
     // Ohne API-Key wählt Buddy danach automatisch das passende lokale Modell.
+    setTimeout(() => local.init().catch((err) => log(`Lokale KI: ${err.message}`)), 800);
     setTimeout(() => discovery.get().then(async () => {
       liveWin()?.webContents.send('discovery', publicDiscovery(discovery.peek()));
       await autoSelectLocal().catch((err) => log(`Lokale Auswahl: ${err.message}`));
@@ -2300,7 +2521,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       liveWin()?.webContents.send('settings:changed', publicSettings());
       // Lokales Modell schon beim Start laden, aber nur wenn es zuletzt auch benutzt wurde
       // (sonst belegt es Gigabytes, ohne dass es jemand braucht; geladen wird dann beim Öffnen)
-      if (Date.now() - (settings.lastLocalUse || 0) < 7 * 24 * 3600 * 1000) warmLocal();
+      if (Date.now() - (settings.lastLocalUse || 0) < 7 * 24 * 3600 * 1000 && currentProvider() !== 'local') warmLocal();
     }), 1500);
 
     computer = createComputer({

@@ -232,7 +232,11 @@ function createAgent(deps) {
     // Ausweichmodell bei vorübergehenden Störungen (Einstellung «Ausweichmodell bei Überlastung», Standard an)
     const fallbackEnabled = settings.modelFallback !== false;
     const fallbackPrefs = Array.isArray(settings.fallbackModels) ? settings.fallbackModels.filter((x) => typeof x === 'string') : [];
-    const policy = permissions.cleanPolicy(settings.permissions);
+    // Lokale Modelle haben eigene, strengere Regeln: Mittel immer mit Nachfrage, Hoch standardmässig gesperrt
+    const localProvider = getProvider() === 'local';
+    const policy = localProvider
+      ? { medium: 'ask', high: settings.localPermissions?.high === 'ask' ? 'ask' : 'block' }
+      : permissions.cleanPolicy(settings.permissions);
     const limit = Number(settings.monthlyLimit) || 0;
     let budget = usage.budget(limit);
     if (budget.level === 'blocked') {
@@ -648,6 +652,7 @@ function createAgent(deps) {
         try {
           const result = await client.streamMessage({
             apiKey, workspaceId: settings.workspaceId, model, system, messages: conversation, tools: toolList, maxTokens, effort, signal, onText, maxRetries,
+            onNotice: (text) => send('chat:notice', { id, text, soft: true }),
             onRetry: (n, err) => {
               // Steht ein Ausweichmodell bereit, nicht länger warten als vorgesehen
               // (Gemini hält maxRetries selbst ein, die anderen Adapter brechen hier ab)
@@ -662,7 +667,7 @@ function createAgent(deps) {
         } catch (err) {
           if (err?.name === 'AbortError' || signal.aborted) throw abortError();
           // Abbruch mitten im Stream: Runde einmal neu starten (es wurde noch nichts ausgeführt)
-          if (err?.status === 0 && st.streamRetries < MAX_STREAM_RETRIES) {
+          if (err?.status === 0 && err?.category !== 'local' && st.streamRetries < MAX_STREAM_RETRIES) {
             st.streamRetries += 1;
             if (emitted) send('chat:rewind', { id, chars: emitted });
             emitted = 0;

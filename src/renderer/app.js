@@ -142,6 +142,63 @@
     rollbackBtn: $('rollbackBtn'),
     pillProgress: $('pillProgress'),
     localBtn: $('localBtn'),
+    localCard: $('localCard'),
+    lcHw: $('lcHw'),
+    lcName: $('lcName'),
+    lcMeta: $('lcMeta'),
+    lcConfirm: $('lcConfirm'),
+    lcConfirmText: $('lcConfirmText'),
+    lcCancel: $('lcCancel'),
+    lcGo: $('lcGo'),
+    lcProgress: $('lcProgress'),
+    lcStep: $('lcStep'),
+    lcStop: $('lcStop'),
+    lcBarBox: $('lcBarBox'),
+    lcBar: $('lcBar'),
+    lcSub: $('lcSub'),
+    lcError: $('lcError'),
+    lcActions: $('lcActions'),
+    lcStart: $('lcStart'),
+    lcOther: $('lcOther'),
+    lcNote: $('lcNote'),
+    ollamaBox: $('ollamaBox'),
+    olStatus: $('olStatus'),
+    olModelLine: $('olModelLine'),
+    olStatusSub: $('olStatusSub'),
+    olProgressRow: $('olProgressRow'),
+    olProgressText: $('olProgressText'),
+    olStop: $('olStop'),
+    olBarBox: $('olBarBox'),
+    olBar: $('olBar'),
+    olProgressSub: $('olProgressSub'),
+    olAction: $('olAction'),
+    olMsg: $('olMsg'),
+    olHw: $('olHw'),
+    olHwSub: $('olHwSub'),
+    olPicks: $('olPicks'),
+    olMore: $('olMore'),
+    olMoreCount: $('olMoreCount'),
+    olAll: $('olAll'),
+    olInstalled: $('olInstalled'),
+    olDir: $('olDir'),
+    olDirBtn: $('olDirBtn'),
+    olCtx: $('olCtx'),
+    olGpu: $('olGpu'),
+    olKeep: $('olKeep'),
+    olTemp: $('olTemp'),
+    olTopP: $('olTopP'),
+    olMaxTok: $('olMaxTok'),
+    olThreads: $('olThreads'),
+    olBatch: $('olBatch'),
+    olTools: $('olTools'),
+    olRisky: $('olRisky'),
+    olUnload: $('olUnload'),
+    olDiagBox: $('olDiagBox'),
+    olDiag: $('olDiag'),
+    olDiagShort: $('olDiagShort'),
+    olBench: $('olBench'),
+    olDiagCopy: $('olDiagCopy'),
+    olRestart: $('olRestart'),
     emptyProgress: $('emptyProgress'),
     emptyBar: $('emptyBar'),
     keyBlock: $('keyBlock'),
@@ -210,6 +267,8 @@
     local: null, // Status des lokalen Modells { state, model, device, error, percent }
     setup: null, // Einrichtung der lokalen KI { state, text, percent, log, error }
     specs: null, // Hardware und Empfehlungen
+    localState: null, // Lokale KI (Ollama): Phase, Hardware, Empfehlungen, Download …
+    localConfirm: null, // Bestätigung vor einem Download { id, bytes, runtime }
     history: loadHistory(), // [{ role, content, tools? }]
     stream: null, // { id, text, node, raf, tools }
     status: 'idle', // idle | busy | done | error
@@ -752,6 +811,7 @@
     for (const msg of state.history) {
       el.messages.appendChild(msg.role === 'user' ? userBubble(msg.content) : assistantBubble(msg.content, msg.tools, msg));
     }
+    markLastAssistant();
     renderEmpty();
     scrollToBottom(true);
   }
@@ -763,7 +823,17 @@
     const setup = state.setup;
     el.emptyProgress.hidden = true;
     el.localBtn.hidden = true;
-    if (!hasKey) {
+    el.localCard.hidden = true;
+    // Neue lokale KI (Ollama): Ersteinrichtung für alle ohne Key, ausser wer die alte Hugging-Face-Laufzeit nutzt
+    const legacyHf = s?.provider === 'huggingface' || Boolean(s?.hfModel);
+    if (!hasKey && !legacyHf) {
+      el.empty.hidden = false;
+      el.emptyTitle.textContent = t('Hoi, ich bin {name}.', { name: s?.name || t('Buddy') });
+      el.chips.hidden = true;
+      el.connectBtn.hidden = false;
+      el.emptyText.textContent = t('Ich kann direkt auf deinem PC laufen: ohne Konto, ohne Kosten und ohne dass deine Nachrichten den PC verlassen. Oder du verbindest einen API-Key.');
+      renderLocalCard();
+    } else if (!hasKey) {
       el.empty.hidden = false;
       el.emptyTitle.textContent = t('Hoi, ich bin {name}.', { name: s?.name || t('Buddy') });
       el.chips.hidden = true;
@@ -801,6 +871,7 @@
   // Kurzer Status des lokalen Modells, z. B. «Lokal: Qwen2.5 1.5B · lädt 40 %»
   function localLine(short) {
     const s = state.settings;
+    if (s?.provider === 'local') return ollamaLine(short);
     if (!s || s.provider !== 'huggingface' || !s.hfModel) return '';
     const name = s.hfModel.split(/[\\/]/).filter(Boolean).pop();
     const st = state.local || s.hfStatus || {};
@@ -817,7 +888,10 @@
     const s = state.settings;
     if (!s) return;
     const st = state.local || s.hfStatus || {};
-    const text = s.provider === 'huggingface' && s.hasKey && ['loading', 'error'].includes(st.state) ? localLine(true) : '';
+    const ls = state.localState;
+    const text = s.provider === 'local'
+      ? (s.hasKey && ls && ['loading', 'error', 'downloading', 'starting'].includes(ls.phase) ? ollamaLine(true) : '')
+      : s.provider === 'huggingface' && s.hasKey && ['loading', 'error'].includes(st.state) ? localLine(true) : '';
     el.footnote.textContent = text;
     el.footnote.hidden = !text;
   }
@@ -883,10 +957,44 @@
     state.history.push({ role: 'user', content: clean });
     saveHistory();
     el.empty.hidden = true;
+    el.messages.querySelector('.regen')?.remove();
     el.messages.appendChild(userBubble(clean));
     el.input.value = '';
     autoGrow();
+    startStream(viaVoice);
+  }
 
+  // Letzte Antwort neu erzeugen: die alte Antwort fällt weg, die Frage bleibt
+  function regenerate() {
+    if (state.stream || !state.settings?.hasKey) return;
+    const last = state.history[state.history.length - 1];
+    if (!last || last.role !== 'assistant') return;
+    if (state.history[state.history.length - 2]?.role !== 'user') return;
+    state.history.pop();
+    saveHistory();
+    const nodes = el.messages.querySelectorAll('.bubble.assistant');
+    nodes[nodes.length - 1]?.remove();
+    for (const n of el.messages.querySelectorAll('.notice')) if (n === el.messages.lastElementChild) n.remove();
+    startStream(false);
+  }
+
+  // «Neu generieren» nur unter der letzten Antwort
+  function markLastAssistant() {
+    for (const b of el.messages.querySelectorAll('.regen')) b.remove();
+    const last = state.history[state.history.length - 1];
+    if (!last || last.role !== 'assistant' || state.stream) return;
+    const nodes = el.messages.querySelectorAll('.bubble.assistant');
+    const tools = nodes[nodes.length - 1]?.querySelector('.msg-tools');
+    if (!tools) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'regen';
+    btn.textContent = t('Neu generieren');
+    btn.addEventListener('click', regenerate);
+    tools.appendChild(btn);
+  }
+
+  function startStream(viaVoice) {
     const id = uid();
     const node = typingBubble();
     el.messages.appendChild(node);
@@ -936,6 +1044,7 @@
       s.node.replaceWith(assistantBubble(text, s.tools, entry));
       state.history.push(entry);
       saveHistory();
+      markLastAssistant();
     } else if (s.route && usage && showRouting()) {
       s.node.replaceWith(assistantBubble('', [], entry));
     } else {
@@ -1815,8 +1924,19 @@
     }
     el.providerSelect.value = pid;
     const local = pid === 'huggingface';
-    el.keyBlock.hidden = local;
+    const ollama = pid === 'local';
+    el.keyBlock.hidden = local || ollama;
     el.localBlock.hidden = !local;
+    el.ollamaBox.hidden = !ollama;
+    if (ollama) {
+      el.workspaceRow.hidden = true;
+      el.setupBox.hidden = true;
+      el.specsBox.hidden = true;
+      el.keyFoot.textContent = t('Lokale Modelle laufen über Ollama direkt auf deinem PC: ohne Konto, ohne Kosten, deine Nachrichten bleiben auf dem PC. Nur das Herunterladen braucht Internet.');
+      fillOllama();
+      if (!state.localState) api.localGet().then((r) => { if (r?.state) { state.localState = r.state; fillOllama(); } });
+      return;
+    }
     el.workspaceRow.hidden = pid !== 'anthropic';
     if (!local) {
       const invalid = p.hasKey && p.status === 'invalid';
@@ -1920,6 +2040,574 @@
     fillSettings();
     renderEmpty();
   }
+
+
+  // ---------- Lokale KI (Ollama) ----------
+
+  const OL_SPEED = () => ({ very_fast: t('sehr schnell'), fast: t('schnell'), smooth: t('flüssig'), slow: t('langsam'), very_slow: t('sehr langsam') });
+  const OL_DEVICE = () => ({ gpu: t('auf der Grafikkarte'), partial: t('teils Grafikkarte, teils Prozessor'), cpu: t('auf dem Prozessor') });
+  const OL_ROLE = () => ({ recommended: t('Empfohlen'), fastest: t('Am schnellsten'), best: t('Beste Qualität') });
+  const OL_STRENGTH = () => ({
+    very_small: t('sehr klein'), small: t('klein'), fast: t('schnell'), balanced: t('ausgewogen'), multilingual: t('viele Sprachen'),
+    german: t('gutes Deutsch'), tools: t('kann Buddys Werkzeuge nutzen'), smart: t('kluge Antworten'), very_smart: t('sehr kluge Antworten'),
+    coding: t('gut beim Programmieren'), reasoning: t('stark beim Nachdenken'), moe_fast: t('schnell für seine Grösse'),
+  });
+  const OL_LIMIT = () => ({
+    simple_answers: t('eher einfache Antworten'), large_download: t('grosser Download'), needs_strong_pc: t('braucht einen starken PC'),
+    needs_much_memory: t('braucht viel Speicher'), german_ok: t('Deutsch brauchbar, nicht perfekt'), english_focus: t('vor allem Englisch'),
+    thinks_first: t('denkt vor jeder Antwort nach (langsamer)'),
+  });
+
+  function fmtBytes(b) {
+    if (!b && b !== 0) return '?';
+    if (b >= 1e9) return `${(b / 1e9).toFixed(b >= 1e10 ? 0 : 1)} GB`;
+    if (b >= 1e6) return `${Math.round(b / 1e6)} MB`;
+    return `${Math.max(1, Math.round(b / 1e3))} KB`;
+  }
+  function fmtEta(sec) {
+    if (!sec && sec !== 0) return '';
+    if (sec < 60) return t('noch {n} s', { n: Math.max(1, Math.round(sec)) });
+    if (sec < 3600) return t('noch {n} Min.', { n: Math.round(sec / 60) });
+    return t('noch {h} h {m} Min.', { h: Math.floor(sec / 3600), m: Math.round((sec % 3600) / 60) });
+  }
+  const modelName = (id) => {
+    const ls = state.localState;
+    const p = ls?.picks?.all?.find((x) => x.id === id);
+    return p?.name || id || '';
+  };
+
+  // Fehlermeldungen ohne Fachbegriffe, mit nächstem Schritt
+  function olError(err) {
+    if (!err) return '';
+    const name = modelName(err.model);
+    switch (err.code) {
+      case 'signature_invalid': return t('Das Installationsprogramm von Ollama war nicht gültig signiert. Buddy hat es aus Sicherheitsgründen nicht ausgeführt. Installiere Ollama bei Bedarf selbst von ollama.com.');
+      case 'install_failed': return t('Ollama konnte nicht installiert werden. Du kannst es auch selbst von ollama.com installieren, Buddy erkennt es danach automatisch.');
+      case 'manual_install': return t('Installiere Ollama von ollama.com, danach erkennt Buddy es automatisch.');
+      case 'network': return t('Keine Verbindung zum Internet. Prüfe die Verbindung und versuch es nochmals; Bereits geladenes bleibt erhalten.');
+      case 'disk_full': return t('Nicht genug freier Platz auf dem Laufwerk ({detail}). Gib Platz frei oder wähle einen anderen Speicherort.', { detail: err.detail || '' });
+      case 'out_of_memory': return t('Für «{model}» reicht der Speicher nicht. Wähle ein kleineres Modell.', { model: name });
+      case 'low_ram': return t('Gerade ist zu wenig Arbeitsspeicher frei für «{model}». Schliesse ein paar Programme und versuch es nochmals, oder wähle ein kleineres Modell.', { model: name });
+      case 'gpu_error': return t('Die Grafikkarte hat einen Fehler gemeldet. Oft hilft ein aktueller Grafiktreiber. In «Erweitert» kannst du auch «Nur Prozessor» wählen.');
+      case 'runner_crashed': return t('Das Modell ist abgestürzt. Versuch es nochmals.');
+      case 'runtime_failed':
+      case 'unreachable':
+      case 'port_in_use': return t('Ollama startet nicht. Versuch «Ollama neu starten» unter «Diagnose».');
+      case 'runtime_missing': return t('Ollama ist nicht installiert.');
+      case 'not_found': return t('«{model}» ist nicht mehr auf diesem PC.', { model: name });
+      case 'runtime_too_old': return t('Dieses Modell braucht eine neuere Ollama-Version. Installiere die neuste Version von ollama.com.');
+      case 'timeout': return t('Das Modell hat zu lange nicht geantwortet. Versuch es nochmals oder wähle ein kleineres Modell.');
+      default: return t('Etwas hat nicht geklappt. Details stehen unter «Diagnose».');
+    }
+  }
+
+  function ollamaLine(short) {
+    const ls = state.localState;
+    const s = state.settings;
+    const id = ls?.config?.model || s?.local?.config?.model;
+    if (!id) return '';
+    const name = modelName(id);
+    let what = '';
+    if (!ls) what = '';
+    else if (ls.phase === 'loading') what = t('lädt …');
+    else if (ls.phase === 'downloading') what = t('lädt herunter {p} %', { p: Math.floor(ls.download?.percent || 0) });
+    else if (ls.phase === 'starting' || ls.phase === 'checking') what = t('startet …');
+    else if (ls.phase === 'ready') what = ls.loaded?.device === 'gpu' ? t('bereit (Grafikkarte)') : ls.loaded?.device === 'partial' ? t('bereit (Grafikkarte und Prozessor)') : t('bereit (Prozessor)');
+    else if (ls.phase === 'idle') what = t('bereit');
+    else if (ls.phase === 'error') what = t('Problem');
+    if (short) return `${t('Lokal')}: ${name}${what ? ` · ${what}` : ''}`;
+    return `${t('Lokal')}: ${name}${what ? ` · ${what}` : ''}`;
+  }
+
+  function hwLine(ls) {
+    const h = ls?.hardware;
+    if (!h) return '';
+    const gpu = h.gpuKind === 'dedicated' ? `${h.gpu}${h.vramGB ? ` (${h.vramGB} GB)` : ''}` : h.gpuKind === 'integrated' ? t('{gpu} (teilt den Arbeitsspeicher)', { gpu: h.gpu }) : t('keine eigene Grafikkarte');
+    return `${t('Dein PC')}: ${h.ramGB} GB ${t('Arbeitsspeicher')} · ${gpu}`;
+  }
+
+  function pickMeta(p) {
+    if (!p) return '';
+    return [
+      `${p.sizeExact ? '' : '≈ '}${fmtBytes(p.downloadBytes)} ${t('Download')}`,
+      `${OL_SPEED()[p.speed] || ''} ${OL_DEVICE()[p.device] || ''}`.trim(),
+      t('braucht ca. {gb} GB Speicher', { gb: p.needGB }),
+    ].filter(Boolean).join(' · ');
+  }
+
+  function progressInfo(ls) {
+    if (!ls) return null;
+    if (ls.phase === 'installing_runtime') {
+      const i = ls.install || {};
+      const step = i.phase === 'verify' ? t('Prüfe die Signatur von Ollama …') : i.phase === 'install' ? t('Installiere Ollama …') : i.phase === 'start' ? t('Starte Ollama …') : t('Lade Ollama herunter …');
+      const sub = i.phase === 'download' && i.totalBytes ? `${fmtBytes(i.completedBytes)} / ${fmtBytes(i.totalBytes)}` : '';
+      return { step, percent: i.phase === 'download' ? i.percent : null, sub, cancel: i.phase === 'download' };
+    }
+    if (ls.phase === 'downloading' && ls.download) {
+      const d = ls.download;
+      const sub = d.totalBytes ? [`${fmtBytes(d.completedBytes)} / ${fmtBytes(d.totalBytes)}`, d.speedBps ? `${fmtBytes(d.speedBps)}/s` : '', fmtEta(d.etaSec)].filter(Boolean).join(' · ') : t('Verbinde …');
+      const verifying = /verifying|writing|success/i.test(d.status || '');
+      return { step: verifying ? t('Prüfe {name} …', { name: modelName(d.id) }) : t('Lade {name} herunter …', { name: modelName(d.id) }), percent: verifying ? null : d.percent, sub: verifying ? '' : sub, cancel: !verifying };
+    }
+    if (ls.phase === 'loading') return { step: t('Starte {name} …', { name: modelName(ls.config?.model) }), percent: null, sub: t('Beim ersten Mal kann das einen Moment dauern.'), cancel: false };
+    if (ls.phase === 'checking' || ls.phase === 'starting') return { step: t('Prüfe deinen PC …'), percent: null, sub: '', cancel: false };
+    return null;
+  }
+
+  function paintBar(box, bar, percent) {
+    box.classList.toggle('indeterminate', percent === null || percent === undefined);
+    bar.style.width = percent === null || percent === undefined ? '' : `${Math.max(2, Math.min(100, percent))}%`;
+  }
+
+  // Ersteinrichtung im leeren Island
+  function renderLocalCard() {
+    const ls = state.localState;
+    el.localCard.hidden = false;
+    el.lcError.hidden = true;
+    el.lcConfirm.hidden = true;
+    el.lcProgress.hidden = true;
+    el.lcActions.hidden = false;
+    el.lcHw.textContent = hwLine(ls);
+    const prog = progressInfo(ls);
+    if (!ls || prog) {
+      el.lcName.textContent = '';
+      el.lcMeta.textContent = '';
+      el.lcProgress.hidden = false;
+      el.lcActions.hidden = true;
+      el.connectBtn.hidden = true;
+      el.lcStep.textContent = prog ? prog.step : t('Prüfe deinen PC …');
+      el.lcSub.textContent = prog?.sub || '';
+      el.lcStop.hidden = !prog?.cancel;
+      paintBar(el.lcBarBox, el.lcBar, prog ? prog.percent : null);
+      el.lcNote.textContent = t('Danach läuft Buddy ohne Internet und ohne Kosten direkt auf deinem PC.');
+      return;
+    }
+    el.lcStart.hidden = false;
+    // Schon Modelle in Ollama vorhanden: ohne Download starten
+    const installed = ls.installed || [];
+    const rec = ls.picks?.recommended;
+    const usableInstalled = (ls.picks?.all || []).find((p) => p.installed && p.usable) || (installed[0] ? { id: installed[0].id, name: installed[0].id, installed: true } : null);
+    if (ls.error) {
+      el.lcError.hidden = false;
+      el.lcError.textContent = olError(ls.error);
+    }
+    if (usableInstalled && ls.runtime?.running) {
+      el.lcName.textContent = usableInstalled.name;
+      el.lcMeta.textContent = t('Schon auf deinem PC, kein Download nötig.');
+      el.lcStart.textContent = t('Lokal starten');
+      el.lcStart.dataset.mode = 'use';
+      el.lcStart.dataset.id = usableInstalled.id;
+      el.lcStart.disabled = false;
+    } else if (rec) {
+      const runtimeBytes = ls.runtime?.installed ? 0 : ls.installPlan?.sizeBytes || 0;
+      el.lcName.textContent = `${t('Empfohlen')}: ${rec.name}`;
+      el.lcMeta.textContent = pickMeta(rec);
+      el.lcStart.textContent = ls.runtime?.installed ? t('Herunterladen · {size}', { size: fmtBytes(rec.downloadBytes) }) : t('Einrichten · ca. {size}', { size: fmtBytes(rec.downloadBytes + runtimeBytes) });
+      el.lcStart.dataset.mode = 'pull';
+      el.lcStart.dataset.id = rec.id;
+      el.lcStart.disabled = false;
+    } else if (ls.picks?.nothingFits) {
+      el.lcName.textContent = '';
+      el.lcMeta.textContent = '';
+      el.lcError.hidden = false;
+      el.lcError.textContent = t('Dieser PC hat zu wenig freien Arbeitsspeicher für ein lokales Modell. Verbinde stattdessen einen API-Key.');
+      el.lcStart.hidden = true;
+    } else {
+      el.lcName.textContent = '';
+      el.lcMeta.textContent = ls.offline ? t('Keine Internetverbindung: Buddy kann gerade nicht prüfen, welche Modelle es gibt.') : t('Suche passende Modelle …');
+      el.lcStart.textContent = t('Nochmals prüfen');
+      el.lcStart.dataset.mode = 'retry';
+      el.lcStart.disabled = false;
+    }
+    if (state.localConfirm) {
+      const c = state.localConfirm;
+      el.lcActions.hidden = true;
+      el.lcConfirm.hidden = false;
+      el.lcConfirmText.textContent = c.runtime
+        ? t('Buddy lädt Ollama (die Laufzeit für lokale Modelle) und {name} herunter, zusammen etwa {size}. Das kommt aus dem Internet von ollama.com; danach rechnet alles auf deinem PC.', { name: c.name, size: fmtBytes(c.bytes) })
+        : t('Buddy lädt {name} herunter, etwa {size}. Das kommt aus dem Internet von ollama.com; danach rechnet alles auf deinem PC.', { name: c.name, size: fmtBytes(c.bytes) });
+    }
+    el.lcNote.textContent = ls.runtime?.installed ? t('Ollama ist bereits installiert. Deine Nachrichten bleiben auf diesem PC.') : t('Danach läuft Buddy ohne Internet und ohne Kosten direkt auf deinem PC.');
+  }
+
+  // Ablauf: (Ollama installieren) → Modell laden → Chat. Gefragt wird vorher mit Grösse.
+  function askDownload(id, sourceEl) {
+    const ls = state.localState;
+    const p = (ls?.picks?.all || []).find((x) => x.id === id) || ls?.picks?.recommended;
+    if (!p) return;
+    const runtime = !ls.runtime?.installed;
+    state.localConfirm = { id, name: p.name, bytes: p.downloadBytes + (runtime ? ls.installPlan?.sizeBytes || 0 : 0), runtime, source: sourceEl || 'card' };
+    if (state.localConfirm.source === 'card') renderLocalCard();
+    else fillOllama();
+  }
+
+  async function runLocalSetup(id, activate) {
+    state.localConfirm = null;
+    let ls = state.localState;
+    if (!ls?.runtime?.installed) {
+      const r = await api.localInstallRuntime(activate);
+      if (r?.state) { state.localState = r.state; ls = r.state; }
+      if (!ls?.runtime?.installed || !ls.runtime.running) { renderLocalUi(); return; }
+    }
+    const r = await api.localPull(id, activate);
+    if (r?.state) state.localState = r.state;
+    if (r?.ok === false && r.error) footer(el.olMsg, olError({ code: r.code, model: id }), 'err');
+    state.settings = await api.getSettings();
+    renderLocalUi();
+    render();
+    if (state.settings.hasKey && state.view === 'chat') el.input.focus();
+  }
+
+  el.lcStart.addEventListener('click', async () => {
+    const mode = el.lcStart.dataset.mode;
+    const id = el.lcStart.dataset.id;
+    if (mode === 'retry') { const r = await api.localGet(true); if (r?.state) state.localState = r.state; renderLocalUi(); return; }
+    if (mode === 'use') {
+      el.lcStart.disabled = true;
+      const r = await api.localSelect(id, true);
+      if (r?.state) state.localState = r.state;
+      state.settings = await api.getSettings();
+      renderLocalUi();
+      render();
+      return;
+    }
+    askDownload(id, 'card');
+  });
+  el.lcCancel.addEventListener('click', () => { state.localConfirm = null; renderLocalUi(); });
+  el.lcGo.addEventListener('click', () => { const c = state.localConfirm; if (c) runLocalSetup(c.id, true); });
+  el.lcStop.addEventListener('click', () => {
+    if (state.localState?.phase === 'installing_runtime') api.localCancelInstall();
+    else api.localCancelPull();
+  });
+  el.lcOther.addEventListener('click', async () => {
+    await api.localUse();
+    state.settings = await api.getSettings();
+    open('settings');
+    requestAnimationFrame(() => el.ollamaBox.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  });
+
+  // Einstellungen: Zustand, Empfehlungen, Installierte, Erweitert, Diagnose
+  function pickRow(p, { role, current, installed } = {}) {
+    const row = document.createElement('div');
+    row.className = `reco${current ? ' current' : ''}`;
+    const text = document.createElement('div');
+    text.className = 'reco-text';
+    const b = document.createElement('b');
+    if (role) {
+      const tag = document.createElement('span');
+      tag.className = 'role';
+      tag.textContent = current ? t('Aktiv') : OL_ROLE()[role] || '';
+      b.appendChild(tag);
+    } else if (current) {
+      const tag = document.createElement('span');
+      tag.className = 'role';
+      tag.textContent = t('Aktiv');
+      b.appendChild(tag);
+    }
+    b.appendChild(document.createTextNode(p.name || p.id));
+    const small = document.createElement('small');
+    const good = (p.strengths || []).map((x) => OL_STRENGTH()[x]).filter(Boolean).slice(0, 2);
+    const bad = (p.limits || []).map((x) => OL_LIMIT()[x]).filter(Boolean).slice(0, 2);
+    const lines = installed
+      ? [fmtBytes(p.sizeBytes || p.downloadBytes), p.speed ? `${OL_SPEED()[p.speed]} ${OL_DEVICE()[p.device] || ''}`.trim() : null, p.usable === false ? t('läuft hier zu langsam') : null]
+      : [pickMeta(p)];
+    small.textContent = lines.filter(Boolean).join(' · ');
+    text.append(b, small);
+    if (good.length || bad.length) {
+      const note = document.createElement('small');
+      note.textContent = [good.length ? `+ ${good.join(', ')}` : '', bad.length ? `− ${bad.join(', ')}` : ''].filter(Boolean).join('   ');
+      text.appendChild(note);
+    }
+    const actions = document.createElement('div');
+    actions.className = 'ol-actions';
+    const ls = state.localState;
+    const busy = ['downloading', 'installing_runtime', 'loading'].includes(ls?.phase);
+    if (installed || p.installed) {
+      if (!current) {
+        const use = document.createElement('button');
+        use.type = 'button';
+        use.className = 'button small';
+        use.textContent = t('Verwenden');
+        use.disabled = busy;
+        use.addEventListener('click', async () => {
+          use.disabled = true;
+          const r = await api.localSelect(p.id, true);
+          if (r?.state) state.localState = r.state;
+          if (!r?.ok) footer(el.olMsg, olError(r?.state?.error || { code: r?.code, model: p.id }), 'err');
+          state.settings = await api.getSettings();
+          renderLocalUi();
+        });
+        actions.appendChild(use);
+      }
+      if (installed) {
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'button small';
+        del.textContent = t('Löschen');
+        del.disabled = busy;
+        del.addEventListener('click', async () => {
+          if (del.dataset.armed !== '1') {
+            del.dataset.armed = '1';
+            del.textContent = t('Wirklich löschen?');
+            setTimeout(() => { del.dataset.armed = ''; del.textContent = t('Löschen'); }, 4000);
+            return;
+          }
+          del.disabled = true;
+          const r = await api.localRemove(p.id);
+          if (r?.state) state.localState = r.state;
+          footer(el.olMsg, r?.ok ? t('{name} gelöscht, {size} frei.', { name: p.name || p.id, size: fmtBytes(p.sizeBytes) }) : olError({ code: r?.code }), r?.ok ? 'ok' : 'err');
+          state.settings = await api.getSettings();
+          renderLocalUi();
+        });
+        actions.appendChild(del);
+      }
+    } else {
+      const dl = document.createElement('button');
+      dl.type = 'button';
+      dl.className = 'button small';
+      const confirming = state.localConfirm?.id === p.id && state.localConfirm.source === 'settings';
+      dl.textContent = confirming ? t('Ja, {size} laden', { size: fmtBytes(state.localConfirm.bytes) }) : t('Laden · {size}', { size: fmtBytes(p.downloadBytes) });
+      if (confirming) dl.classList.add('primary');
+      dl.disabled = busy || p.tooNew;
+      dl.addEventListener('click', () => {
+        if (state.localConfirm?.id === p.id) runLocalSetup(p.id, state.settings?.provider === 'local');
+        else askDownload(p.id, 'settings');
+      });
+      actions.appendChild(dl);
+    }
+    row.append(text, actions);
+    return row;
+  }
+
+  function fillOllama() {
+    const ls = state.localState;
+    if (!ls || el.ollamaBox.hidden) return;
+    const cfg = ls.config || {};
+    const current = cfg.model;
+    // Zustand
+    const phaseText = {
+      checking: t('Prüfe …'), starting: t('Startet …'), needs_runtime: t('Ollama fehlt'), installing_runtime: t('Installiert Ollama …'),
+      needs_model: t('Kein Modell'), downloading: t('Lädt herunter …'), loading: t('Lädt …'), idle: t('Bereit'), ready: t('Bereit'), error: t('Problem'),
+    }[ls.phase] || ls.phase;
+    el.olModelLine.firstChild.nodeValue = current ? modelName(current) : t('Modell');
+    el.olStatusSub.textContent = ls.phase === 'ready' && ls.loaded
+      ? (ls.loaded.device === 'gpu' ? t('läuft auf der Grafikkarte') : ls.loaded.device === 'partial' ? t('{p} % auf der Grafikkarte, Rest auf dem Prozessor', { p: ls.loaded.gpuPercent }) : t('läuft auf dem Prozessor'))
+      : ls.phase === 'idle' ? t('wird beim ersten Satz geladen') : ls.runtime?.version ? `Ollama ${ls.runtime.version}` : '';
+    el.olStatus.textContent = phaseText;
+    el.olStatus.classList.toggle('ok', ls.phase === 'ready' || ls.phase === 'idle');
+    el.olStatus.classList.toggle('bad', ls.phase === 'error');
+    const prog = progressInfo(ls);
+    el.olProgressRow.hidden = !prog || ls.phase === 'checking';
+    if (prog) {
+      el.olProgressText.textContent = prog.step;
+      el.olProgressSub.textContent = prog.sub || '';
+      el.olStop.hidden = !prog.cancel;
+      paintBar(el.olBarBox, el.olBar, prog.percent);
+    }
+    // Nächster Schritt
+    el.olAction.hidden = true;
+    if (ls.phase === 'needs_runtime') {
+      el.olAction.hidden = false;
+      const size = ls.installPlan?.sizeBytes ? ` · ${fmtBytes(ls.installPlan.sizeBytes)}` : '';
+      el.olAction.textContent = ls.installPlan?.automatic === false ? t('Ollama von ollama.com installieren …') : t('Ollama installieren{size}', { size });
+      el.olAction.dataset.action = ls.installPlan?.automatic === false ? 'manual' : 'install';
+    } else if (ls.phase === 'error' && ['runtime_failed', 'unreachable', 'port_in_use'].includes(ls.error?.code)) {
+      el.olAction.hidden = false;
+      el.olAction.textContent = t('Ollama neu starten');
+      el.olAction.dataset.action = 'restart';
+    } else if (ls.phase === 'error' && current) {
+      el.olAction.hidden = false;
+      el.olAction.textContent = t('Nochmals versuchen');
+      el.olAction.dataset.action = 'load';
+    }
+    if (ls.error && !el.olMsg.textContent) footer(el.olMsg, olError(ls.error), 'err');
+    if (!ls.error && el.olMsg.classList.contains('err')) footer(el.olMsg, '');
+    // Kleineres Modell vorschlagen, wenn der Speicher nicht reicht
+    if (ls.error && ['out_of_memory', 'low_ram'].includes(ls.error.code) && ls.picks?.fastest && ls.picks.fastest.id !== current) {
+      footer(el.olMsg, `${olError(ls.error)} ${t('Vorschlag: {name}.', { name: ls.picks.fastest.name })}`, 'err');
+    }
+    // Hardware und Empfehlungen
+    el.olHw.textContent = hwLine(ls) || t('Prüfe die Hardware …');
+    const h = ls.hardware;
+    el.olHwSub.textContent = !h ? '' : [
+      `${h.cpu} · ${h.threads} ${t('Threads')}`,
+      h.avx2 === false ? t('Prozessor ohne AVX2: lokale Modelle laufen hier langsamer') : '',
+      ls.picks?.mode === 'gpu' ? t('Modelle laufen auf der Grafikkarte, solange sie hineinpassen.') : t('Ohne passende Grafikkarte rechnet der Prozessor. Kleine Modelle sind hier am angenehmsten.'),
+      h.diskFreeGB !== null && h.diskFreeGB !== undefined ? t('{gb} GB frei am Speicherort', { gb: h.diskFreeGB }) : '',
+    ].filter(Boolean).join(' · ');
+    el.olPicks.textContent = '';
+    const picks = ls.picks || {};
+    const shown = new Set();
+    for (const role of ['recommended', 'fastest', 'best']) {
+      const p = picks[role];
+      if (!p) continue;
+      shown.add(p.id);
+      el.olPicks.appendChild(pickRow(p, { role, current: p.id === current && p.installed }));
+    }
+    if (!shown.size) {
+      const empty = document.createElement('div');
+      empty.className = 'row';
+      empty.textContent = ls.offline ? t('Keine Internetverbindung: Buddy kann die Modelle gerade nicht prüfen.') : picks.nothingFits ? t('Für diesen PC passt leider kein lokales Modell.') : t('Suche passende Modelle …');
+      el.olPicks.appendChild(empty);
+    }
+    const others = (picks.all || []).filter((p) => !shown.has(p.id) && !p.installed);
+    el.olMore.hidden = !others.length;
+    el.olMoreCount.textContent = others.length ? String(others.length) : '';
+    el.olAll.textContent = '';
+    for (const p of others) el.olAll.appendChild(pickRow(p, {}));
+    // Installiert
+    el.olInstalled.textContent = '';
+    for (const m of ls.installed || []) {
+      const info = (picks.all || []).find((p) => p.id === m.id) || {};
+      el.olInstalled.appendChild(pickRow({ ...info, id: m.id, name: info.name || m.id, sizeBytes: m.sizeBytes }, { installed: true, current: m.id === current }));
+    }
+    el.olDir.textContent = ls.runtime?.modelsDir || '';
+    // Erweitert
+    const a = cfg.advanced || {};
+    const setVal = (node, v) => { if (document.activeElement !== node) node.value = v === null || v === undefined ? '' : String(v); };
+    setVal(el.olCtx, a.ctx);
+    setVal(el.olGpu, a.gpu || 'auto');
+    setVal(el.olKeep, a.keepAlive || 'auto');
+    setVal(el.olTemp, a.temperature);
+    setVal(el.olTopP, a.topP);
+    setVal(el.olMaxTok, a.maxTokens);
+    setVal(el.olThreads, a.threads);
+    setVal(el.olBatch, a.batch);
+    el.olTools.checked = cfg.tools !== false;
+    el.olRisky.checked = state.settings?.localPermissions?.high === 'ask';
+    el.olUnload.checked = cfg.unloadOnExit !== false;
+    // Kurze Diagnose
+    el.olDiagShort.textContent = ls.perf?.tokensPerSecond ? t('{n} Tokens/s gemessen', { n: ls.perf.tokensPerSecond }) : '';
+    if (el.olDiagBox.open) loadOllamaDiag();
+  }
+
+  function renderLocalUi() {
+    renderEmpty();
+    updateFootnote();
+    if (state.view === 'settings' && state.settings?.provider === 'local') fillOllama();
+  }
+
+  api.onLocalState((ls) => {
+    const before = state.localState?.phase;
+    state.localState = ls;
+    if (state.settings) state.settings.local = ls;
+    renderLocalUi();
+    // Fertig geladen: Status in der Fusszeile und Anbieter-Liste aktualisieren
+    if (before !== ls.phase && ['ready', 'idle', 'needs_model', 'error'].includes(ls.phase)) {
+      api.getSettings().then((s) => { state.settings = s; render(); });
+    }
+  });
+
+  el.olAction.addEventListener('click', async () => {
+    const action = el.olAction.dataset.action;
+    el.olAction.disabled = true;
+    footer(el.olMsg, '');
+    try {
+      if (action === 'install') await runLocalSetupRuntimeOnly();
+      else if (action === 'manual') api.localOpenDownload();
+      else if (action === 'restart') { const r = await api.localRestartRuntime(); if (r?.state) state.localState = r.state; }
+      else if (action === 'load') { const r = await api.localLoad(); if (r?.state) state.localState = r.state; }
+    } finally {
+      el.olAction.disabled = false;
+      renderLocalUi();
+    }
+  });
+  async function runLocalSetupRuntimeOnly() {
+    const r = await api.localInstallRuntime(false);
+    if (r?.state) state.localState = r.state;
+  }
+  el.olStop.addEventListener('click', () => {
+    if (state.localState?.phase === 'installing_runtime') api.localCancelInstall();
+    else api.localCancelPull();
+  });
+  el.olDirBtn.addEventListener('click', async () => {
+    const dir = await api.localPickStorage();
+    if (!dir) return;
+    const n = (state.localState?.installed || []).length;
+    let move = false;
+    if (n) {
+      // Vorhandene Modelle mitnehmen? (Kopieren kann bei grossen Modellen dauern)
+      move = window.confirm(t('{n} Modell(e) liegen am alten Ort. Sollen sie mit in den neuen Ordner? (Bei «Abbrechen» bleiben sie am alten Ort und sind in Buddy nicht mehr sichtbar.)', { n }));
+    }
+    footer(el.olMsg, move ? t('Verschiebe die Modelle …') : t('Speichere …'));
+    const r = await api.localSetStorage(dir, move);
+    if (r?.state) state.localState = r.state;
+    footer(el.olMsg, !r?.ok ? olError({ code: r?.code }) : r.needsRestart ? t('Gespeichert. Ollama läuft schon als eigene App: Starte es unter «Diagnose» neu, damit der neue Ordner gilt.') : t('Gespeichert.'), r?.ok ? 'ok' : 'err');
+    renderLocalUi();
+  });
+  const saveAdvanced = async () => {
+    const num = (node) => (node.value === '' ? null : Number(node.value));
+    const r = await api.localConfig({ advanced: { ctx: num(el.olCtx), gpu: el.olGpu.value, keepAlive: el.olKeep.value, temperature: num(el.olTemp), topP: num(el.olTopP), maxTokens: num(el.olMaxTok), threads: num(el.olThreads), batch: num(el.olBatch) } });
+    if (r?.state) state.localState = r.state;
+    footer(el.olMsg, r?.ok ? t('Gespeichert. Gilt ab der nächsten Nachricht.') : olError({ code: r?.code }), r?.ok ? 'ok' : 'err');
+  };
+  for (const node of [el.olCtx, el.olGpu, el.olKeep, el.olTemp, el.olTopP, el.olMaxTok, el.olThreads, el.olBatch]) node.addEventListener('change', saveAdvanced);
+  el.olTools.addEventListener('change', () => api.localConfig({ tools: el.olTools.checked }).then((r) => { if (r?.state) state.localState = r.state; }));
+  el.olUnload.addEventListener('change', () => api.localConfig({ unloadOnExit: el.olUnload.checked }));
+  el.olRisky.addEventListener('change', async () => {
+    await api.localConfig({ permissions: { high: el.olRisky.checked ? 'ask' : 'block' } });
+    state.settings = await api.getSettings();
+  });
+
+  function diagText(d) {
+    if (!d) return t('Keine Angaben.');
+    const hw = d.hardware || {};
+    const lines = [];
+    lines.push(`${t('System')}: ${hw.os?.name || ''} ${hw.os?.build || ''} (${hw.os?.arch || ''})`);
+    lines.push(`${t('Prozessor')}: ${hw.cpu?.name || '?'} · ${hw.cpu?.cores || '?'} ${t('Kerne')} / ${hw.cpu?.threads || '?'} Threads · AVX2 ${hw.cpu?.avx2 === null ? '?' : hw.cpu?.avx2 ? t('ja') : t('nein')}`);
+    lines.push(`${t('Arbeitsspeicher')}: ${hw.ram?.totalGB} GB, ${hw.ram?.freeGB} GB ${t('frei')}`);
+    for (const g of hw.gpus || []) lines.push(`${t('Grafik')}: ${g.name} · ${g.integrated ? t('integriert') : `${g.vramGB ?? '?'} GB`} · ${t('Treiber')} ${g.driver || '?'} · ${g.backends.join('/') || '–'}${g.notes.length ? ` · ${g.notes.join(', ')}` : ''}`);
+    if (!(hw.gpus || []).length) lines.push(`${t('Grafik')}: ${t('keine erkannt')}`);
+    if (hw.disk) lines.push(`${t('Speicherort')}: ${hw.disk.path} · ${hw.disk.freeGB ?? '?'} GB ${t('frei')}`);
+    if (hw.errors?.length) lines.push(`${t('Erkennung unvollständig')}: ${hw.errors.join(', ')}`);
+    const rt = d.runtime || {};
+    lines.push(`Ollama: ${rt.running ? `${t('läuft')}, ${t('Version')} ${rt.version}` : rt.installed ? t('installiert, läuft nicht') : t('nicht installiert')}${rt.managed ? ` · ${t('von Buddy gestartet')}` : rt.running ? ` · ${t('eigener Dienst')}` : ''} · ${rt.host || ''}`);
+    for (const dev of d.devices || []) lines.push(`${t('Beschleuniger laut Ollama')}: ${dev.library} · ${dev.name}${dev.totalGB ? ` · ${dev.totalGB} GB` : ''}`);
+    for (const m of d.loaded || []) {
+      const share = m.sizeBytes ? Math.round((m.vramBytes / m.sizeBytes) * 100) : 0;
+      lines.push(`${t('Geladen')}: ${m.id} · ${fmtBytes(m.sizeBytes)} · ${share} % ${t('auf der Grafikkarte')}${m.ctx ? ` · ${t('Kontext')} ${m.ctx}` : ''}`);
+    }
+    if (!(d.loaded || []).length) lines.push(`${t('Geladen')}: –`);
+    const p = d.perf;
+    if (p) lines.push(`${t('Gemessen')}: ${[p.loadMs ? `${t('Laden')} ${(p.loadMs / 1000).toFixed(1)} s` : '', p.firstTokenMs ? `${t('erstes Wort')} ${(p.firstTokenMs / 1000).toFixed(2)} s` : '', p.tokensPerSecond ? `${p.tokensPerSecond} Tokens/s` : ''].filter(Boolean).join(' · ') || '–'}`);
+    if (d.error) lines.push(`${t('Letzter Fehler')}: ${d.error.code}${d.error.detail ? ` (${d.error.detail})` : ''}`);
+    lines.push(`${t('Katalog')}: ${d.catalog?.source === 'remote' ? t('aktualisiert') : t('eingebaut')} ${d.catalog?.updated || ''}${d.registryChecked ? ` · ${t('Registry geprüft')} ${new Date(d.registryChecked).toLocaleString(I18N.locale)}` : ''}`);
+    return lines.join('\n');
+  }
+  let lastDiag = null;
+  async function loadOllamaDiag() {
+    try { lastDiag = await api.localDiagnostics(); } catch { lastDiag = null; }
+    el.olDiag.textContent = diagText(lastDiag);
+  }
+  el.olDiagBox.addEventListener('toggle', () => { if (el.olDiagBox.open) loadOllamaDiag(); });
+  el.olDiagCopy.addEventListener('click', async () => {
+    await loadOllamaDiag();
+    const tail = (lastDiag?.log || []).slice(-40).join('\n');
+    copyText(`${diagText(lastDiag)}\n\n--- Ollama-Protokoll (letzte Zeilen) ---\n${tail}`, el.olDiagCopy);
+  });
+  el.olBench.addEventListener('click', async () => {
+    el.olBench.disabled = true;
+    el.olBench.textContent = t('Misst …');
+    const r = await api.localBenchmark();
+    el.olBench.disabled = false;
+    el.olBench.textContent = t('Tempo messen');
+    if (r?.state) state.localState = r.state;
+    if (r?.ok) footer(el.olMsg, t('Gemessen: erstes Wort nach {a} s, {b} Tokens pro Sekunde.', { a: ((r.timings.firstTokenMs || 0) / 1000).toFixed(2), b: r.timings.tokensPerSecond ?? '?' }), 'ok');
+    else footer(el.olMsg, olError(r?.state?.error || { code: r?.code }), 'err');
+    loadOllamaDiag();
+    renderLocalUi();
+  });
+  el.olRestart.addEventListener('click', async () => {
+    const external = state.localState?.runtime?.running && !state.localState?.runtime?.managed;
+    if (external && !window.confirm(t('Ollama läuft als eigene App. Buddy beendet sie und startet Ollama neu. Programme, die gerade Ollama benutzen, werden dabei unterbrochen. Fortfahren?'))) return;
+    el.olRestart.disabled = true;
+    const r = await api.localRestartRuntime();
+    el.olRestart.disabled = false;
+    if (r?.state) state.localState = r.state;
+    footer(el.olMsg, r?.ok ? t('Ollama wurde neu gestartet.') : olError({ code: r?.code }), r?.ok ? 'ok' : 'err');
+    loadOllamaDiag();
+    renderLocalUi();
+  });
 
   function fillTools() {
     const d = state.settings?.discovery;
@@ -2951,5 +3639,7 @@
     renderNowPlaying();
     render();
     if (state.settings.hasKey) loadModels();
+    state.localState = state.settings.local || null;
+    api.localGet().then((r) => { if (r?.state) { state.localState = r.state; renderLocalUi(); } }).catch(() => {});
   })();
 })();

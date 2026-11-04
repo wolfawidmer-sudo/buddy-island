@@ -1,0 +1,50 @@
+name: Lokale KI (echt, Windows)
+
+# Spielt die lokale KI auf einem echten Windows-Rechner von GitHub durch:
+# Hardware erkennen, Ollama mit Buddys eigenem Installer installieren (inkl. Signaturprüfung),
+# kleines Modell laden, auf Deutsch, Englisch und Schweizerdeutsch chatten, abbrechen, messen.
+# Die GitHub-Rechner haben keine Grafikkarte: gemessen wird nur der Prozessor-Betrieb.
+# Ergebnisse: Artefakt «ollama-e2e» (test-results/ollama-e2e.json).
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Modell (Ollama-Name)
+        default: qwen3.5:0.8b
+  push:
+    branches: [main]
+    paths:
+      - 'src/local/**'
+      - 'src/llm/local.js'
+      - 'test/e2e/ollama.e2e.js'
+      - '.github/workflows/local-ai.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - name: Lokale KI durchspielen
+        run: node test/e2e/ollama.e2e.js
+        env:
+          BUDDY_E2E_INSTALL: '1'
+          BUDDY_E2E_DELETE: '1'
+          BUDDY_E2E_MODEL: ${{ github.event.inputs.model || 'qwen3.5:0.8b' }}
+      - name: Ergebnisse
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ollama-e2e
+          path: test-results/

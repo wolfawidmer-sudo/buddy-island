@@ -6,7 +6,7 @@ Buddy Island ist ein privates Testprojekt von Wolf Widmer. Die App läuft vollst
 
 ## Lokale KI
 
-Ohne API-Key läuft Buddy mit einem **lokalen Modell** (Hugging Face Transformers) auf deinem PC. Dann verlässt nichts von deinen Eingaben den PC. Nur beim Einrichten lädt Buddy Python (python.org bzw. Microsoft Store), Pakete (PyPI) und das Modell (Hugging Face) herunter. Für die Empfehlung liest Buddy Arbeitsspeicher, Prozessor und Grafikkarte aus, nur lokal.
+Mit der **lokalen KI** läuft das Modell über Ollama auf deinem PC. Deine Nachrichten gehen nur an Ollama auf diesem PC (Adresse 127.0.0.1, von aussen nicht erreichbar) und an keinen KI-Anbieter. Aus dem Internet geladen werden nur: das Installationsprogramm von Ollama (ollama.com, Buddy prüft vorher die digitale Signatur), die Modelle (Ollama-Registry, nach deiner Bestätigung mit Grössenangabe), eine Liste empfohlener Modelle (aus dem GitHub-Repo von Buddy) und Angaben zu Grösse und Lizenz der Modelle (Ollama-Registry). Dabei werden keine Inhalte und keine Hardware-Daten verschickt. Für die Empfehlung liest Buddy Prozessor, Arbeitsspeicher, Grafikkarte, Treiberversion und freien Speicherplatz aus, nur lokal. Ältere Einrichtungen mit Hugging Face Transformers funktionieren weiter wie bisher.
 
 ## Was an den gewählten KI-Anbieter geht
 

@@ -92,6 +92,42 @@
     return html.join('');
   }
 
+  // Kleine Syntax-Hervorhebung: arbeitet auf dem Rohtext und escaped jedes Stück selbst.
+  // Kennt Kommentare, Zeichenketten, Zahlen und Schlüsselwörter der gängigen Sprachen.
+  const KEYWORDS = new Set(('if else elif for while do switch case break continue return function def class const let var new this self ' +
+    'import from export default as async await try catch except finally raise throw in of is not and or null None true false True False ' +
+    'public private protected static void int float double bool boolean string char long struct enum interface type extends implements ' +
+    'package fn pub mut impl use mod match loop where go func defer chan select range yield lambda with pass global nonlocal echo then fi done ' +
+    'SELECT FROM WHERE INSERT INTO UPDATE DELETE CREATE TABLE JOIN ON GROUP BY ORDER LIMIT AND OR NOT NULL VALUES SET').split(' '));
+  const HASH_COMMENT = /^(py|python|sh|bash|zsh|shell|ps1|powershell|yaml|yml|toml|r|rb|ruby|pl|perl|dockerfile|make|makefile|ini|conf)$/i;
+  function highlight(code, lang) {
+    if (code.length > 60000) return escapeHtml(code);
+    const hash = HASH_COMMENT.test(lang || '');
+    const sql = /^sql$/i.test(lang || '');
+    const re = new RegExp([
+      '(\\/\\*[\\s\\S]*?(?:\\*\\/|$)|\\/\\/[^\\n]*' + (hash ? '|#[^\\n]*' : '') + (sql ? '|--[^\\n]*' : '') + ')',
+      '("(?:[^"\\\\\\n]|\\\\.)*"?|\'(?:[^\'\\\\\\n]|\\\\.)*\'?|`(?:[^`\\\\]|\\\\.)*`?)',
+      '(\\b\\d+(?:\\.\\d+)?(?:e[+-]?\\d+)?\\b|\\b0x[\\da-f]+\\b)',
+      '([A-Za-z_][\\w]*)',
+    ].join('|'), 'gi');
+    let out = '';
+    let last = 0;
+    let m;
+    while ((m = re.exec(code))) {
+      if (m.index > last) out += escapeHtml(code.slice(last, m.index));
+      const piece = escapeHtml(m[0]);
+      if (m[1]) out += `<span class="hl-c">${piece}</span>`;
+      else if (m[2]) out += `<span class="hl-s">${piece}</span>`;
+      else if (m[3]) out += `<span class="hl-n">${piece}</span>`;
+      else if (m[4] && KEYWORDS.has(m[4])) out += `<span class="hl-k">${piece}</span>`;
+      else out += piece;
+      last = re.lastIndex;
+      if (m[0] === '') re.lastIndex += 1;
+    }
+    if (last < code.length) out += escapeHtml(code.slice(last));
+    return out;
+  }
+
   function render(text) {
     const parts = [];
     const fence = /```([\w+#.-]*)[^\n]*\n([\s\S]*?)(```|$)/g;
@@ -100,7 +136,7 @@
     while ((m = fence.exec(text))) {
       if (m.index > last) parts.push(renderBlocks(text.slice(last, m.index)));
       const lang = escapeHtml(m[1] || '');
-      const code = escapeHtml(m[2].replace(/\n$/, ''));
+      const code = highlight(m[2].replace(/\n$/, ''), m[1] || '');
       parts.push(
         `<div class="codeblock">${lang ? `<span class="lang">${lang}</span>` : ''}` +
         `<button type="button" class="copy">Kopieren</button><pre><code>${code}</code></pre></div>`,
@@ -113,4 +149,5 @@
   }
 
   window.renderMarkdown = render;
+  window.highlightCode = highlight;
 })();
