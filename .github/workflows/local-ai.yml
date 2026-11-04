@@ -67,6 +67,7 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
       - name: Ollama und Colibrì vergleichen
+        timeout-minutes: 45
         run: node test/e2e/colibri.e2e.js
       - name: Ergebnisse
         if: always()

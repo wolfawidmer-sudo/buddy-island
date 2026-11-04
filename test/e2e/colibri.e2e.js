@@ -81,7 +81,8 @@ const save = () => { fs.mkdirSync('test-results', { recursive: true }); fs.write
   await col.stop();
   save();
   console.log(JSON.stringify({ ollama: out.ollama, colibri: out.colibri }, null, 2));
-  if (!out.colibri?.ok && !out.ollama?.ok) process.exit(1);
+  // Der gestartete Ollama-Server hält sonst die Ereignisschleife offen
+  process.exit(!out.colibri?.ok && !out.ollama?.ok ? 1 : 0);
 })().catch((err) => {
   out.error = String(err.stack || err);
   console.error(err);
