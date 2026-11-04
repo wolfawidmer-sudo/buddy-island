@@ -1,4 +1,5 @@
 // @ts-check
+const learned = require('./llm/learned');
 // Anbieter, Modelle, Preise und Fähigkeiten an einem Ort.
 // Router, Agent und Adapter lesen nur diese Daten. Ein neuer Anbieter braucht
 // hier einen Eintrag in PROVIDERS, seine Modelle im CATALOG und einen Adapter in src/llm/.
@@ -59,18 +60,21 @@ const CATALOG = [
     efforts: [], caps: { vision: true, tools: true, computerUse: false, structured: true },
   },
   // ---- Google ----
+  // Google zieht ältere Versionen für neue Konten zurück (404 «no longer available to new users»).
+  // Darum stehen hier die offiziellen Aliase, die immer auf die aktuelle Version zeigen; mit
+  // Modellliste nimmt Buddy ohnehin die neueste verfügbare Version (siehe pickGemini).
   {
-    id: 'gemini-2.5-flash-lite', provider: 'gemini', tier: 'haiku', name: 'Gemini 2.5 Flash-Lite', short: 'Gemini Flash-Lite',
+    id: 'gemini-flash-lite-latest', provider: 'gemini', tier: 'haiku', name: 'Gemini Flash-Lite', short: 'Gemini Flash-Lite',
     price: { in: 0.10, out: 0.40, cacheWrite: 0.10, cacheRead: 0.01 }, priceEstimated: true,
     efforts: [], caps: { vision: true, tools: true, computerUse: false, structured: true },
   },
   {
-    id: 'gemini-2.5-flash', provider: 'gemini', tier: 'sonnet', name: 'Gemini 2.5 Flash', short: 'Gemini Flash',
+    id: 'gemini-flash-latest', provider: 'gemini', tier: 'sonnet', name: 'Gemini Flash', short: 'Gemini Flash',
     price: { in: 0.30, out: 2.5, cacheWrite: 0.30, cacheRead: 0.03 }, priceEstimated: true,
     efforts: [], caps: { vision: true, tools: true, computerUse: false, structured: true },
   },
   {
-    id: 'gemini-2.5-pro', provider: 'gemini', tier: 'opus', name: 'Gemini 2.5 Pro', short: 'Gemini Pro',
+    id: 'gemini-pro-latest', provider: 'gemini', tier: 'opus', name: 'Gemini Pro', short: 'Gemini Pro',
     price: { in: 1.25, out: 10, cacheWrite: 1.25, cacheRead: 0.125 }, priceEstimated: true,
     efforts: [], caps: { vision: true, tools: true, computerUse: false, structured: true },
   },
@@ -220,7 +224,9 @@ function costOf(modelId, usage = {}) {
  */
 function resolveTiers(available, providerId = 'anthropic') {
   const ids = (available || []).map((m) => (typeof m === 'string' ? m : m.id)).filter(Boolean)
-    .filter((id) => providerId === 'huggingface' || providerOf(id) === providerId || (providerId === 'gemini' && /gemini/i.test(id)));
+    .filter((id) => providerId === 'huggingface' || providerOf(id) === providerId || (providerId === 'gemini' && /gemini/i.test(id)))
+    // Vom Anbieter abgelehnte Modelle (404, «nicht mehr verfügbar») überspringen
+    .filter((id) => !learned.get(providerId, id, 'unavailable'));
   /** @type {Partial<Record<Tier,string>>} */
   const result = {};
   if (providerId === 'huggingface') {
@@ -230,8 +236,16 @@ function resolveTiers(available, providerId = 'anthropic') {
   const own = CATALOG.filter((m) => m.provider === providerId);
   for (const tier of TIERS) {
     const preferred = own.find((m) => m.tier === tier);
+    // Abgelehntes Katalogmodell: Nachfolger nehmen, den der Anbieter in der Fehlermeldung nannte
+    const replacement = preferred && learned.get(providerId, preferred.id, 'unavailable') ? learned.get(providerId, preferred.id, 'replacement') : null;
     if (!ids.length) {
-      if (preferred) result[tier] = preferred.id;
+      if (replacement) result[tier] = replacement;
+      else if (preferred && !learned.get(providerId, preferred.id, 'unavailable')) result[tier] = preferred.id;
+      continue;
+    }
+    if (providerId === 'gemini') {
+      const pick = pickGemini(ids, tier);
+      if (pick) result[tier] = pick;
       continue;
     }
     if (preferred && ids.includes(preferred.id)) {
@@ -249,6 +263,29 @@ function resolveTiers(available, providerId = 'anthropic') {
   // Fehlende Stufen bleiben leer: der Router nimmt dann die nächste vorhandene,
   // und eine Eskalation auf «dasselbe» Modell wird so vermieden.
   return result;
+}
+
+// Gemini: offizielles «-latest»-Alias oder die höchste Versionsnummer der passenden Familie
+// (Flash-Lite, Flash, Pro). Stabile Versionen vor Vorschauen, Spezialvarianten (Bild, Ton, Live …) nie.
+/** @param {string[]} ids @param {Tier} tier */
+function pickGemini(ids, tier) {
+  const fam = tier === 'haiku' ? 'flash-lite' : tier === 'sonnet' ? 'flash' : 'pro';
+  const clean = ids.map((id) => String(id).replace(/^models\//, ''));
+  const alias = `gemini-${fam}-latest`;
+  if (clean.includes(alias)) return alias;
+  const special = /(image|tts|audio|live|embedding|robotics|computer-use|native|learnlm|aqa|gemma|customtools)/i;
+  const re = new RegExp(`^gemini-(\\d+(?:\\.\\d+)?)-${fam}(?:-(.*))?$`, 'i');
+  const found = [];
+  for (const id of clean) {
+    if (special.test(id)) continue;
+    const m = id.match(re);
+    if (!m) continue;
+    const rest = m[2] || '';
+    if (fam === 'flash' && /^lite/i.test(rest)) continue;
+    found.push({ id, v: parseFloat(m[1]), preview: /preview|exp/i.test(rest) ? 1 : 0, extra: rest ? 1 : 0 });
+  }
+  found.sort((a, b) => b.v - a.v || a.preview - b.preview || a.extra - b.extra || a.id.length - b.id.length);
+  return found[0]?.id;
 }
 
 /** @param {Tier} tier @returns {Tier|null} */

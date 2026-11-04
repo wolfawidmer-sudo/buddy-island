@@ -9,6 +9,7 @@ const { createClient: createAnthropicClient } = require('../claude');
 const { createOpenAiCompatClient } = require('./openai-compat');
 const { createGeminiClient } = require('./gemini');
 const { createHuggingFaceClient } = require('./huggingface');
+const learned = require('./learned');
 const { ProviderError, diagnosticLine } = require('./errors');
 const models = require('../models');
 
@@ -42,6 +43,13 @@ function annotate(err, provider, model, stage) {
   if (!e.provider || (provider.kind !== 'anthropic' && e.provider === 'Claude')) e.provider = name;
   if (!e.model && model) e.model = model;
   if (!e.endpoint) e.endpoint = endpointFor(provider, model);
+  // Modell gibt es (für diesen Key) nicht mehr: merken, damit die Auswahl es überspringt.
+  // Nennt der Anbieter einen Nachfolger («use models/gemini-…»), merkt sich Buddy auch den.
+  if (model && e.category === 'model' && (e.status === 404 || e.status === 400)) {
+    learned.set(provider.id, model, 'unavailable', true);
+    const next = String(e.raw || '').match(/\buse\s+(?:models\/)?([a-z0-9][\w.-]*[a-z0-9])\b/i);
+    if (next && next[1] !== String(model).replace(/^models\//, '')) learned.set(provider.id, model, 'replacement', next[1]);
+  }
   if (stage && (!e.stage || e.stage === 'request' || e.stage === 'connect') && stage === 'models') e.stage = 'models';
   return e;
 }

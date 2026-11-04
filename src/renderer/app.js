@@ -1480,11 +1480,17 @@
           small.textContent = note;
           body.appendChild(small);
         }
+        // Rohe Anbieter-Meldung nur aufgeklappt (fürs Kopieren steht sie ohnehin im Bericht)
         if (st.error?.detail) {
+          const more = document.createElement('details');
+          more.className = 'notice-more health-more';
+          const summary = document.createElement('summary');
+          summary.textContent = t('Details');
           const small = document.createElement('small');
           small.className = 'health-detail';
           small.textContent = st.error.detail + (st.error.providerMessage ? ` · ${st.error.providerMessage}` : '');
-          body.appendChild(small);
+          more.append(summary, small);
+          body.appendChild(more);
         }
         row.append(mark, body);
         list.appendChild(row);
@@ -1521,6 +1527,8 @@
   }
   api.onHealth((ev) => {
     const g = health.groups.get(ev.providerId) || { name: ev.providerName, steps: [], state: 'running', ok: false };
+    // Neuer Durchlauf (z. B. mit einem anderen Modell, weil das alte nicht mehr angeboten wird)
+    if (ev.state === 'running') { g.state = 'running'; g.steps = []; }
     if (ev.state === 'step') g.steps.push(ev.step);
     if (ev.state === 'done') { g.state = 'done'; g.ok = ev.result.ok; g.steps = ev.result.steps; }
     health.groups.set(ev.providerId, g);

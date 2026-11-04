@@ -2087,10 +2087,24 @@ function setupIpc() {
           log(`Verbindungstest ${pid}: Modelle nicht ermittelbar: ${err.message}`);
         }
         const key = pid === 'huggingface' ? 'lokal' : getApiKey(pid);
-        const r = await runHealth({
-          client: llm.client(pid), providerId: pid, apiKey: key, workspaceId: pid === 'anthropic' ? settings.workspaceId : undefined, models: modelIds,
-          onStep: (step) => liveWin()?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'step', step }),
-        });
+        const manual = settings.autoModel === false && models.providerOf(settings.model) === pid;
+        let r = null;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          r = await runHealth({
+            client: llm.client(pid), providerId: pid, apiKey: key, workspaceId: pid === 'anthropic' ? settings.workspaceId : undefined, models: modelIds,
+            onStep: (step) => liveWin()?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'step', step }),
+          });
+          // Ein Modell gibt es nicht mehr (z. B. alte Gemini-Version für neue Konten): Buddy hat es sich
+          // gemerkt und wählt jetzt ein anderes. Dann den Test einmal mit der neuen Auswahl wiederholen.
+          const modelGone = r.steps.some((x) => x.ok === false && x.error?.category === 'model');
+          if (r.ok || !modelGone || manual || attempt) break;
+          const tiers = models.resolveTiers(await availableModels(pid).catch(() => []), pid);
+          const next = [...new Set([tiers.sonnet || tiers.haiku || tiers.opus, tiers.haiku].filter(Boolean))];
+          if (!next.length || next.join() === modelIds.join()) break;
+          log(`Verbindungstest ${pid}: ${modelIds.join(', ')} nicht verfügbar, neuer Versuch mit ${next.join(', ')}`);
+          modelIds = next;
+          liveWin()?.webContents.send('llm:health', { providerId: pid, providerName: name, state: 'running' });
+        }
         const result = { ...r, providerName: name };
         results.push(result);
         log(`Verbindungstest ${pid}: ${r.ok ? 'ok' : 'FEHLER'} (${r.steps.map((x) => `${x.id}=${x.ok === null ? 'skip' : x.ok ? 'ok' : x.error?.category || 'fail'}`).join(', ')})`);
