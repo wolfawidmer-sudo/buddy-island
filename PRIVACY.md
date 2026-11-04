@@ -37,7 +37,7 @@ Wie der Anbieter diese Daten behandelt, steht in seiner Datenschutzerklärung f�
 ## Erkennung und Visualizer
 
 - Buddy prüft, ob Programme wie Claude Code, Codex oder Python installiert sind (Pfade und Versionen, keine Inhalte).
-- Für den Musik-Visualizer liest Buddy nur den Pegel der Windows-Tonausgabe, wie der Lautstärkemixer. Nichts wird aufgenommen oder gespeichert.
+- Für den Musik-Visualizer und den Bildschirmrand wertet Buddy den Ton aus, den Windows gerade abspielt (Lautstärke in Bass, Mitten und Höhen), und zwar nur, solange Windows eine Wiedergabe meldet. Das passiert ausschliesslich auf dem PC: Es wird nichts aufgenommen, gespeichert oder verschickt.
 
 ## Sprache
 

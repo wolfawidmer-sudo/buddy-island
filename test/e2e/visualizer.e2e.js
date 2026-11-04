@@ -20,8 +20,9 @@ const helperCount = () => { try { return Number(execSync('pgrep -fc "[f]ake-audi
   const setAudio = (m) => fs.writeFileSync(stateFile, m);
   setAudio('pause');
   const app = await electron.launch({
-    executablePath: require('electron'),
-    args: [appDir, `--user-data-dir=${ud}`, '--no-sandbox', ...(process.env.E2E_ARGS ? process.env.E2E_ARGS.split(' ') : [])],
+    // Gepackte App: E2E_EXE=<Pfad zur ausführbaren Datei>
+    executablePath: process.env.E2E_EXE || require('electron'),
+    args: [...(process.env.E2E_EXE ? [] : [appDir]), `--user-data-dir=${ud}`, '--no-sandbox', ...(process.env.E2E_ARGS ? process.env.E2E_ARGS.split(' ') : [])],
     env: { ...process.env, LANG: 'de_CH.UTF-8', BUDDY_TEST_HOOKS: '1', BUDDY_FAKE_AUDIO: path.join(__dirname, 'fake-audio.js'), BUDDY_FAKE_AUDIO_STATE: stateFile },
   });
   await app.evaluate(() => { global.__errs = []; process.on('uncaughtException', (e) => global.__errs.push(e.message)); });

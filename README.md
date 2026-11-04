@@ -23,7 +23,7 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 - **Verbindungstest**: Einstellungen → «Provider & API-Keys» → «Verbindung testen» prüft jeden verbundenen Anbieter Schritt für Schritt (Key und Modellliste, einfache Antwort ohne Streaming, Streaming, Verlauf, Werkzeug mit Fortsetzung, parallele Werkzeuge, Router). Fehler nennen Anbieter, Modell, HTTP-Status und Stufe; der kopierbare Bericht enthält keine Keys.
 - **Spricht deine Sprache**: Oberfläche, Meldungen und Anweisungen an die KI folgen beim Start der Windows-Sprache (Deutsch, Englisch, Französisch; sonst englische Oberfläche, Antworten trotzdem in deiner Sprache).
 - **Erkennt deine Tools**: Claude Code, Codex, Gemini CLI, Grok CLI, ChatGPT, Hugging Face und mehr werden im Hintergrund erkannt. Was nicht installiert ist, erscheint nirgends.
-- **Musik-Visualizer**: Die Balken im Island folgen dem echten Pegel der Windows-Tonausgabe (WASAPI-Pegelanzeige, nichts wird aufgenommen).
+- **Musik-Visualizer**: Island-Balken und Bildschirmrand reagieren auf den echten Ton (WASAPI-Loopback mit Frequenzanalyse: Bass, Mitten, Höhen). Ist Spotify nur offen oder pausiert, bleibt alles ruhig. Ausgewertet wird nur auf dem PC, nichts wird aufgenommen.
 - **Automatische Modellwahl**: Claude Haiku prüft jede Anfrage und wählt das günstigste passende Modell (Haiku, Sonnet oder Opus) und die Denktiefe. Einzelne Schritte einer Aufgabe können verschiedene Modelle übernehmen. Hakt es, wechselt Buddy selbst auf ein stärkeres Modell.
 - **Agent mit Plan**: Mehrstufige Aufgaben plant Buddy in Schritten, prüft jedes Ergebnis und meldet nichts als erledigt, was er nicht geprüft hat.
 - **Dateien ordnen**: Dateien auflisten, Duplikate finden (per SHA-256), Ordner anlegen, verschieben, in den Papierkorb legen. Nur in deinen Benutzerordnern.
@@ -134,7 +134,7 @@ Im Leerlauf läuft keine einzige Endlos-Animation: Das Fenster ist dann nur so g
 | `src/claude.js` | Claude Messages API (Streaming, Prompt-Caching, Wiederholungen, Zeitlimits) |
 | `src/discovery.js` | Erkennt installierte KI-Tools und Laufzeiten |
 | `src/system-specs.js` | Liest die Hardware und empfiehlt lokale Modelle |
-| `src/audio-meter.js` | Pegel der Tonausgabe für den Visualizer |
+| `src/audio-meter.js` | Audio-Analyse (Loopback, FFT, Bänder) für Visualizer und Rand |
 | `src/i18n/` | Sprachen (Deutsch als Quelle, Englisch, Französisch) |
 | `src/models.js` | Anbieter, Modelle, Preise, Denktiefe |
 | `src/router.js` | Modellwahl: Regeln für Einfaches, sonst Haiku als Dispatcher, Budget |
