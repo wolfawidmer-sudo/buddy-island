@@ -763,4 +763,5 @@ module.exports = {
   "Das Zuhören auf «Hey Buddy» läuft nur auf deinem PC und braucht etwas Rechenleistung.": "Listening for “Hey Buddy” runs only on your PC and needs a little processing power.",
   "Geschätzt aus Arbeitsspeicher, Prozessor und Grafikkarte. Mit Grafikkarte laufen Modelle viel schneller.": "Estimated from memory, processor and graphics card. Models run much faster on a graphics card.",
   "Buddy zeigt nur Tools, die auf diesem PC installiert sind.": "Buddy only shows tools installed on this PC.",
+  "Medienwiedergabe": "Media Player",
 };

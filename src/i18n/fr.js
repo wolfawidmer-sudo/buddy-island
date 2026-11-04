@@ -775,4 +775,5 @@ module.exports = {
   "Das Zuhören auf «Hey Buddy» läuft nur auf deinem PC und braucht etwas Rechenleistung.": "L'écoute de « Hey Buddy » se fait uniquement sur ton PC et demande un peu de puissance.",
   "Geschätzt aus Arbeitsspeicher, Prozessor und Grafikkarte. Mit Grafikkarte laufen Modelle viel schneller.": "Estimé à partir de la mémoire, du processeur et de la carte graphique. Avec une carte graphique, les modèles sont bien plus rapides.",
   "Buddy zeigt nur Tools, die auf diesem PC installiert sind.": "Buddy ne montre que les outils installés sur ce PC.",
+  "Medienwiedergabe": "Lecteur multimédia",
 };

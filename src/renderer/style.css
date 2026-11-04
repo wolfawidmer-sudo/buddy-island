@@ -1390,7 +1390,7 @@ body { padding-top: var(--gap); }
 #chatView > .chat-cards {
   flex: 0 0.08 auto;   /* gibt nur nach, wenn es wirklich eng wird; vorher schrumpft die Unterhaltung */
   min-height: 0;
-  max-height: 32vh;
+  max-height: 40vh;
   overflow-y: auto;
   overscroll-behavior: contain;
   /* weicher Übergang statt harter Schnittkante, wenn die Karten scrollen (unten liegt ohnehin der Kartenabstand) */

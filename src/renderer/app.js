@@ -249,6 +249,15 @@
     }
   }
 
+  // «Spotify.exe», «Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic», «chrome» -> lesbarer Name
+  function appName(id) {
+    let n = String(id || '').split('!').pop().split('\\').pop();
+    n = n.replace(/\.exe$/i, '').replace(/_[a-z0-9]{10,}$/i, '').split('.').pop();
+    if (/^[0-9a-f]{12,}$/i.test(n)) return ''; // z. B. Firefox meldet nur eine Kennung
+    const known = { zunemusic: t('Medienwiedergabe'), msedge: 'Edge', chrome: 'Chrome', firefox: 'Firefox', vlc: 'VLC', spotify: 'Spotify' };
+    return known[n.toLowerCase()] || n.charAt(0).toUpperCase() + n.slice(1);
+  }
+
   function modelLabel(id) {
     const found = state.models.find((m) => m.id === id);
     if (found) return found.name.replace(/^Claude\s+/i, '');
@@ -1359,7 +1368,8 @@
     el.pillCover.hidden = !coverOk;
     if (!m) return;
     el.nowTitle.textContent = m.title;
-    el.nowSub.textContent = [m.artist, m.app].filter(Boolean).join(' · ');
+    // Künstler genügt; den App-Namen nur, wenn kein Künstler bekannt ist (und dann lesbar, nicht «Spotify.exe»)
+    el.nowSub.textContent = m.artist || appName(m.app);
     el.nowPlaying.classList.toggle('playing', Boolean(m.playing));
     el.nowCover.hidden = !coverOk;
     el.nowCoverEmpty.hidden = coverOk;
@@ -2441,12 +2451,18 @@
 
   // Bereichs-Navigation in den Einstellungen
   const catNav = document.querySelector('.cat-nav');
+  let catPinnedUntil = 0;
+  const markCat = (id) => { for (const b of catNav.querySelectorAll('button')) b.classList.toggle('on', b.dataset.cat === id); };
   catNav?.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-cat]');
     if (!b) return;
+    // Gewählten Bereich sofort markieren (der letzte Bereich erreicht beim Scrollen nie ganz den oberen Rand)
+    markCat(b.dataset.cat);
+    catPinnedUntil = performance.now() + 900;
     document.getElementById(b.dataset.cat)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   const catObserver = new IntersectionObserver((entries) => {
+    if (performance.now() < catPinnedUntil) return;
     for (const en of entries) {
       if (!en.isIntersecting) continue;
       for (const b of catNav.querySelectorAll('button')) b.classList.toggle('on', b.dataset.cat === en.target.id);
