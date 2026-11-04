@@ -59,8 +59,8 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           TAG="v$VERSION"
           if ! gh release view "$TAG" > /dev/null 2>&1; then
-            gh release create "$TAG" --target "$GITHUB_SHA" --title "Buddy Island $VERSION" \
-              --notes "Installer für Windows 10 und 11. Einfach herunterladen und doppelklicken. Bereits installierte Versionen aktualisieren sich automatisch, nachdem sie die Signatur geprüft haben."
+            node scripts/release-notes.js "$VERSION" > release-notes.md
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "Buddy Island $VERSION" --notes-file release-notes.md
           fi
           # Signatur vor latest.yml hochladen, damit Buddys sie schon finden, wenn sie das Update sehen
           gh release upload "$TAG" dist/BuddyIsland-Setup-*.exe dist/*.blockmap --clobber
