@@ -1,0 +1,13 @@
+{
+  "app": "buddy-island",
+  "version": "0.6.1",
+  "file": "BuddyIsland-Setup-0.6.1.exe",
+  "sha512": "nHu9/1CLFmJu/Ndx0roPpn8m73PUdGqiqc25BLiAgG2i8mdusZhMr+/+/xHtQW6uK3Nhj9HAgaQDCFoyIypdRA==",
+  "size": 121762165,
+  "minWindowsBuild": 17763,
+  "arch": "x64",
+  "minUpdateFrom": "0.2.0",
+  "created": "2026-11-04T06:48:18.810Z",
+  "keyId": "72db1fd0b545",
+  "signature": "nAhu4GAityAkWtXkzv8mCi7FozjukvXD2TsPJiem6NnTrF1/WeKk+V16IABs/KVINkPDBILimf3h3fwvP9lbBQ=="
+}
