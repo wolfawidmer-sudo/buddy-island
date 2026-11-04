@@ -90,6 +90,7 @@ const DEFAULTS = {
   keyHints: {}, // Anbieter -> letzte 4 Zeichen
   language: 'auto', // 'auto' = Systemsprache, sonst de | en | fr | it
   visualizer: true, // Musik-Balken nach dem Systemton
+  glowMusic: true, // Bildschirmrand reagiert auf laufende Musik
   providerChosen: false, // hat der Nutzer selbst einen Anbieter gewählt? Sonst lokal, falls möglich
   shortcutsCreated: false,
   settingsVersion: SETTINGS_VERSION,
@@ -115,7 +116,13 @@ let displayListeners = false;
 let glow = null;
 let glowReady = null;
 let glowMode = 'off';
+let glowWant = 'off'; // was Buddy gerade zeigen will (denkt/steuert); Musik kommt nur darunter
 let glowTimer = null;
+let glowTopTimer = null;
+let musicActive = false; // echtes Audiosignal hörbar (nicht bloss «Spotify offen»)
+let lastPlayingAt = 0;
+let audioStopTimer = null;
+const AUDIO_GRACE_MS = 2 * 60 * 1000; // nach einer Pause noch so lange zuhören, damit Weiterspielen sofort reagiert
 let tray = null;
 let tools = null;
 let computer = null;
@@ -185,6 +192,8 @@ let mouseCaptured = false;
 let agentInput = false; // Buddy bewegt gerade Maus/Tastatur
 let capturing = false; // Island ist für ein Bildschirmfoto kurz versteckt
 let controlling = 0; // Anzahl laufender Steuerungs-Aufgaben
+let controlGlowTimer = null;
+const CONTROL_GLOW_DELAY_MS = 3000;
 const running = new Map(); // chatId -> AbortController
 const confirms = new Map(); // chatId -> resolve(bool)
 const permissionAsks = new Map(); // `${chatId}:${reqId}` -> resolve(bool)
@@ -328,6 +337,7 @@ function publicSettings() {
     calendarStatus: calendar?.status() || null,
     canControl: process.platform === 'win32',
     meterAvailable: audioMeter ? audioMeter.available() : process.platform === 'win32',
+    musicActive,
     notifyStatus,
     mediaOk,
     game,
@@ -878,7 +888,7 @@ function createWindow() {
     displayListeners = true;
     const onDisplayChange = () => {
       placeWindow();
-      if (glow && !glow.isDestroyed()) glow.setBounds(targetDisplay().bounds);
+      fitGlow();
     };
     screen.on('display-metrics-changed', onDisplayChange);
     screen.on('display-added', onDisplayChange);
@@ -902,6 +912,34 @@ function openIsland(view) {
 
 // ---------- Leuchtender Rand ----------
 
+// Der Rand deckt den ganzen Bildschirm ab (display.bounds, nicht workArea), also auch
+// die Taskleiste. Er nimmt nie Klicks an und bekommt nie den Fokus.
+function fitGlow() {
+  if (!glow || glow.isDestroyed()) return;
+  const b = targetDisplay().bounds;
+  glow.setBounds(b);
+  // Bildschirme mit verschiedener Skalierung: Windows rechnet die erste Änderung noch mit
+  // dem alten Bildschirm um. Ein zweites Setzen landet dann genau.
+  // (Chromium lässt ein Fenster mit exakter Bildschirmgrösse teils 1 px kleiner; das ist gewollt.)
+  const got = glow.getBounds();
+  const off = Math.max(Math.abs(got.x - b.x), Math.abs(got.y - b.y), Math.abs(got.width - b.width), Math.abs(got.height - b.height));
+  if (off > 1) glow.setBounds(b);
+}
+
+// Klickt man auf die Taskleiste, holt Windows sie nach vorn. Solange der Rand sichtbar ist,
+// stellt Buddy ihn (und das Island darüber) regelmässig wieder an die Spitze, ohne Fokus.
+function keepGlowOnTop(on) {
+  clearInterval(glowTopTimer);
+  glowTopTimer = null;
+  if (!on) return;
+  glowTopTimer = setInterval(() => {
+    if (!glow || glow.isDestroyed() || !glow.isVisible()) return;
+    glow.moveTop();
+    const w = liveWin();
+    if (w && w.isVisible()) w.moveTop();
+  }, 700);
+}
+
 function ensureGlow() {
   if (glow && !glow.isDestroyed()) return glowReady;
   const { bounds } = targetDisplay();
@@ -920,7 +958,7 @@ function ensureGlow() {
     hasShadow: false,
     show: false,
     enableLargerThanScreen: true,
-    webPreferences: { sandbox: true, contextIsolation: true, spellcheck: false },
+    webPreferences: { sandbox: true, contextIsolation: true, spellcheck: false, preload: path.join(__dirname, 'glow', 'preload.js'), backgroundThrottling: false },
   });
   glow = w;
   w.setIgnoreMouseEvents(true);
@@ -929,10 +967,14 @@ function ensureGlow() {
   if (controlling && captureExclusion) w.setContentProtection(true);
   glowReady = w.loadFile(path.join(__dirname, 'glow', 'glow.html')).then(() => {
     if (w.isDestroyed()) return;
+    fitGlow();
     w.showInactive();
     liveWin()?.moveTop();
+    keepGlowOnTop(true);
   }).catch(() => {});
-  w.on('closed', () => { if (glow === w) { glow = null; glowReady = null; } });
+  w.on('closed', () => {
+    if (glow === w) { glow = null; glowReady = null; keepGlowOnTop(false); }
+  });
   return glowReady;
 }
 
@@ -940,7 +982,15 @@ function glowCall(code) {
   if (glow && !glow.isDestroyed()) glow.webContents.executeJavaScript(code).catch(() => {});
 }
 
+// Buddy-Zustände haben Vorrang (steuert > denkt); sonst zeigt der Rand die Musik, falls sie
+// wirklich hörbar ist.
 function setGlow(mode) {
+  glowWant = mode;
+  applyGlow();
+}
+
+function applyGlow() {
+  let mode = glowWant !== 'off' ? glowWant : (musicActive && settings.glowMusic !== false ? 'music' : 'off');
   if (!settings.glow || game.active) mode = 'off';
   if (mode === glowMode) return;
   glowMode = mode;
@@ -955,6 +1005,47 @@ function setGlow(mode) {
     glowCall(`setAccent(${JSON.stringify(settings.accent || '')})`);
     if (glowMode === mode) glowCall(`setMode(${JSON.stringify(mode)})`);
   });
+}
+
+// ---------- Musik: echte Audio-Analyse ----------
+
+// Die Analyse läuft nur, wenn Windows eine Wiedergabe meldet (oder kurz nach einer Pause)
+// und eine Anzeige sie braucht. Ob wirklich etwas klingt, entscheidet danach das Signal.
+function audioWanted() {
+  if (!audioMeter || !audioMeter.available() || game.active || !settings.media) return false;
+  const needed = settings.visualizer !== false || (settings.glow && settings.glowMusic !== false);
+  if (!needed) return false;
+  return Boolean(nowPlaying?.playing) || Date.now() - lastPlayingAt < AUDIO_GRACE_MS;
+}
+
+function syncAudio() {
+  clearTimeout(audioStopTimer);
+  audioStopTimer = null;
+  if (!audioWanted()) { audioMeter?.stop(); return; }
+  audioMeter.start();
+  if (!nowPlaying?.playing) audioStopTimer = setTimeout(syncAudio, Math.max(1000, AUDIO_GRACE_MS - (Date.now() - lastPlayingAt) + 50));
+}
+
+function handleMedia(np) {
+  if (nowPlaying?.playing || np?.playing) lastPlayingAt = Date.now();
+  nowPlaying = np;
+  liveWin()?.webContents.send('media', np);
+  syncAudio();
+}
+
+function onAudioActive(active) {
+  if (active === musicActive) return;
+  musicActive = active;
+  liveWin()?.webContents.send('audio:active', active);
+  applyGlow();
+}
+
+function onAudioFrame(frame) {
+  if (settings.visualizer !== false) {
+    const w = liveWin();
+    if (w && w.isVisible()) w.webContents.send('audio:level', frame);
+  }
+  if (glowMode === 'music' && glow && !glow.isDestroyed()) glow.webContents.send('glow:frame', frame);
 }
 
 // Island und Rand aus Buddys Bildschirmfotos heraushalten
@@ -1143,13 +1234,19 @@ function setControlling(active) {
     setCaptureHidden(true);
     liveWin()?.setFocusable(false);
     liveWin()?.blur();
-    setGlow('control');
+    // Der Rand erscheint erst, wenn Buddy wirklich länger als 3 Sekunden auf den
+    // Bildschirm schaut und ihn bedient (kurze Blicke lösen nichts aus).
+    if (controlling === 1) {
+      clearTimeout(controlGlowTimer);
+      controlGlowTimer = setTimeout(() => { if (controlling) setGlow('control'); }, CONTROL_GLOW_DELAY_MS);
+    }
   } else {
     controlling = Math.max(0, controlling - 1);
     if (!controlling) {
+      clearTimeout(controlGlowTimer);
       setCaptureHidden(false);
       liveWin()?.setFocusable(true);
-      setGlow(running.size ? 'think' : 'off');
+      setGlow('off');
     }
   }
 }
@@ -1161,14 +1258,12 @@ function computerAvailable() {
 async function runChat(id, messages, meta, send) {
   const controller = new AbortController();
   running.set(id, controller);
-  setGlow('think');
   try {
     await agent.run({ id, messages, meta, send, signal: controller.signal });
   } finally {
     running.delete(id);
     confirms.delete(id);
     resolvePermissions(id, false);
-    if (!running.size && !controlling) setGlow('off');
   }
 }
 
@@ -1307,10 +1402,12 @@ function setGame(focus) {
   if (active) {
     audioMeter?.stop();
     if (!layout.open) liveWin()?.hide();
-    setGlow('off');
+    applyGlow();
     if (settings.voiceWake) voice?.setWake(false);
   } else if (wasActive) {
     liveWin()?.showInactive();
+    syncAudio();
+    applyGlow();
     if (settings.voiceWake) voice?.setWake(true);
   }
 }
@@ -1757,10 +1854,8 @@ function setupIpc() {
     if ('showRouting' in patch) settings.showRouting = Boolean(patch.showRouting);
     if ('historyEnabled' in patch) settings.historyEnabled = Boolean(patch.historyEnabled);
     if ('memoryEnabled' in patch) settings.memoryEnabled = Boolean(patch.memoryEnabled);
-    if ('visualizer' in patch) {
-      settings.visualizer = Boolean(patch.visualizer);
-      if (!settings.visualizer) audioMeter?.stop();
-    }
+    if ('visualizer' in patch) settings.visualizer = Boolean(patch.visualizer);
+    if ('glowMusic' in patch) settings.glowMusic = Boolean(patch.glowMusic);
     if ('provider' in patch && models.PROVIDERS[patch.provider] && patch.provider !== settings.provider) {
       settings.provider = patch.provider;
       settings.providerChosen = true;
@@ -1809,13 +1904,16 @@ function setupIpc() {
       }
     }
     if ('autostart' in patch) applyAutostart();
-    if ('glow' in patch && !settings.glow) setGlow('off');
+    if ('glow' in patch || 'glowMusic' in patch) applyGlow();
+    // Neue Akzentfarbe sofort auch im Rand (falls er gerade sichtbar ist)
+    if ('accent' in patch) glowCall(`setAccent(${JSON.stringify(settings.accent || '')})`);
+    if ('visualizer' in patch || 'glowMusic' in patch || 'glow' in patch || 'media' in patch) syncAudio();
     if ('notifications' in patch || 'media' in patch || 'gameMode' in patch) startWatcher();
     if ('calendarLead' in patch) calendar?.setLead(settings.calendarLead);
     if ('voiceWake' in patch) voice?.setWake(settings.voiceWake && !game.active);
     if ('displayId' in patch) {
       placeWindow();
-      if (glow && !glow.isDestroyed()) glow.setBounds(targetDisplay().bounds);
+      fitGlow();
     }
     saveSettings();
     return { ok: !shortcutError, settings: publicSettings(), error: shortcutError };
@@ -1906,11 +2004,6 @@ function setupIpc() {
   });
   ipcMain.on('hf:warm', () => warmLocal());
 
-  // Musik-Visualizer: Pegel nur messen, solange die Balken sichtbar sind
-  ipcMain.on('audio:meter', (_e, on) => {
-    if (on && settings.visualizer !== false && !game.active) audioMeter?.start();
-    else audioMeter?.stop();
-  });
 
   // Hardware erkennen und lokale Modelle empfehlen
   ipcMain.handle('specs:get', async () => {
@@ -2163,8 +2256,10 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     });
     audioMeter = createAudioMeter({
       scriptDir: app.getPath('userData'),
+      fakeScript: process.env.BUDDY_FAKE_AUDIO || null, // nur für Tests: Ersatz-Helfer, der Zeilen ausgibt
       log,
-      onLevel: (lvl) => { if (win && !win.isDestroyed()) win.webContents.send('audio:level', lvl); },
+      onFrame: onAudioFrame,
+      onActive: onAudioActive,
     });
     // Im Hintergrund prüfen, welche KI-Tools installiert sind (blockiert den Start nicht).
     // Ohne API-Key wählt Buddy danach automatisch das passende lokale Modell.
@@ -2200,6 +2295,11 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       },
     });
 
+    // Nur für automatische Tests: Wiedergabe-Meldungen von aussen einspeisen
+    if (process.env.BUDDY_TEST_HOOKS) {
+      global.__buddyTest = { media: (np) => handleMedia(np), control: (on) => setControlling(on), glowMode: () => glowMode, musicActive: () => musicActive, audioRunning: () => Boolean(audioMeter?.running()) };
+    }
+
     if (isSelfTest) {
       selfTest();
       return;
@@ -2225,10 +2325,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
         if (error) log(`Mitteilungen: ${error}`);
         liveWin()?.webContents.send('notify:status', status);
       },
-      onMedia: (np) => {
-        nowPlaying = np;
-        liveWin()?.webContents.send('media', np);
-      },
+      onMedia: handleMedia,
       onMediaStatus: (ok, error) => {
         mediaOk = ok;
         if (error) log(`Medien: ${error}`);
@@ -2263,8 +2360,6 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       scriptDir: app.getPath('userData'),
       log,
       onEvent: (msg) => {
-        if (msg.kind === 'listening' && !running.size) setGlow('think');
-        if (['text', 'nothing', 'unavailable'].includes(msg.kind) && !running.size) setGlow('off');
         liveWin()?.webContents.send('voice', msg);
       },
     });
@@ -2288,6 +2383,8 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
   });
 
   app.on('will-quit', () => {
+    clearTimeout(audioStopTimer);
+    keepGlowOnTop(false);
     audioMeter?.stop();
     llm?.stopAll();
     usage?.flush();

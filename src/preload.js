@@ -38,7 +38,6 @@ contextBridge.exposeInMainWorld('buddy', {
   getSpecs: () => ipcRenderer.invoke('specs:get'),
   getDiscovery: (force) => ipcRenderer.invoke('discovery:get', { force: Boolean(force) }),
   getI18n: () => ipcRenderer.invoke('i18n:get'),
-  setAudioMeter: (on) => ipcRenderer.send('audio:meter', Boolean(on)),
   getAiUsage: (force) => ipcRenderer.invoke('aiusage:get', { force: Boolean(force) }),
   setUsageKey: (provider, key) => ipcRenderer.invoke('aiusage:key', { provider, key }),
 
@@ -95,6 +94,7 @@ contextBridge.exposeInMainWorld('buddy', {
   onDiscovery: (cb) => on('discovery', cb),
   onSettingsChanged: (cb) => on('settings:changed', cb),
   onAudioLevel: (cb) => on('audio:level', cb),
+  onAudioActive: (cb) => on('audio:active', cb),
   onI18n: (cb) => on('i18n', cb),
   onTimers: (cb) => on('timers:update', cb),
   onTimerDone: (cb) => on('timer:done', cb),

@@ -168,6 +168,7 @@
     toolsRescan: $('toolsRescan'),
     langSelect: $('langSelect'),
     visualizerToggle: $('visualizerToggle'),
+    glowMusicToggle: $('glowMusicToggle'),
     bannerHint: $('bannerHint'),
     bannerOpen: $('bannerOpen'),
     bannerDismiss: $('bannerDismiss'),
@@ -358,48 +359,63 @@
     syncVisualizer();
   }
 
-  // ---------- Musik-Visualizer (echter Pegel der Windows-Tonausgabe) ----------
+  // ---------- Musik-Visualizer (echte Frequenzbänder der Windows-Tonausgabe) ----------
+  // Die Balken bewegen sich nur, wenn der Hauptprozess echten Ton meldet (audio:active).
+  // Ohne Signal stehen sie still – es gibt keine Ersatz-Animation.
   const bars = [...el.island.querySelectorAll('.eq i')];
-  const viz = { on: false, levels: [0, 0, 0, 0], target: null, raf: 0, lastAt: 0 };
+  const viz = { on: false, live: false, levels: [0, 0, 0, 0], target: null, raf: 0, lastAt: 0, last: 0 };
 
   function syncVisualizer() {
-    const run = Boolean(state.settings?.visualizer !== false && state.media?.playing && visibleState() === 'music' && !state.game.active);
-    if (run === viz.on) return;
-    viz.on = run;
-    api.setAudioMeter(run && Boolean(state.settings?.meterAvailable));
-    el.island.classList.toggle('viz-fallback', run && !state.settings?.meterAvailable);
-    if (!run) {
-      cancelAnimationFrame(viz.raf);
-      viz.raf = 0;
-      el.island.classList.remove('viz-live');
-      bars.forEach((b) => { b.style.transform = ''; });
-    }
+    const on = Boolean(state.settings?.visualizer !== false && visibleState() === 'music' && !state.game.active);
+    if (on === viz.on) return;
+    viz.on = on;
+    if (on && viz.live && !viz.raf) viz.raf = requestAnimationFrame(paintViz);
+    if (!on) stopViz();
   }
 
-  api.onAudioLevel((lvl) => {
-    if (!viz.on) return;
-    viz.target = lvl;
-    viz.lastAt = performance.now();
-    el.island.classList.add('viz-live');
-    if (!viz.raf) viz.raf = requestAnimationFrame(paintViz);
+  function stopViz() {
+    cancelAnimationFrame(viz.raf);
+    viz.raf = 0;
+    viz.levels = [0, 0, 0, 0];
+    el.island.classList.remove('viz-live');
+    bars.forEach((b) => { b.style.transform = ''; });
+  }
+
+  api.onAudioActive((active) => {
+    viz.live = Boolean(active);
+    if (state.settings) state.settings.musicActive = viz.live;
+    // Pause/Ende: Balken sinken weich ab (paintViz läuft aus), danach Ruhe
+    if (viz.live && viz.on && !viz.raf) viz.raf = requestAnimationFrame(paintViz);
   });
 
-  // Jeder Balken reagiert anders schnell auf den Pegel (links, Mitte, rechts),
-  // so wirkt es wie eine Welle und folgt trotzdem genau der Musik.
-  const ATTACK = [0.55, 0.8, 0.9, 0.6];
-  const DECAY = [0.06, 0.12, 0.2, 0.09];
-  function paintViz() {
+  api.onAudioLevel((f) => {
+    viz.target = f;
+    viz.lastAt = performance.now();
+    if (viz.on && !viz.raf) viz.raf = requestAnimationFrame(paintViz);
+  });
+
+  // Vier Balken = vier Bereiche: Bass, untere Mitten, Mitten, Höhen.
+  // Schneller Anstieg, weiches Abklingen (Zeitkonstanten in Sekunden).
+  const VIZ_TAU = [[0.03, 0.2], [0.04, 0.24], [0.04, 0.22], [0.02, 0.14]];
+  function paintViz(now) {
     viz.raf = 0;
-    const tgt = viz.target || { p: 0, l: 0, r: 0 };
-    const shape = [Math.sqrt(tgt.l), Math.sqrt(tgt.p), Math.sqrt(Math.min(1, tgt.p * 1.25)), Math.sqrt(tgt.r)];
+    const dt = viz.last ? Math.min(0.05, (now - viz.last) / 1000) : 1 / 60;
+    viz.last = now;
+    const fresh = viz.live && now - viz.lastAt < 200 && viz.target;
+    const f = fresh ? viz.target : { bass: 0, mid: 0, treble: 0 };
+    const want = [f.bass, 0.55 * f.bass + 0.45 * f.mid, f.mid, f.treble];
+    let moving = false;
     for (let i = 0; i < bars.length; i += 1) {
       const cur = viz.levels[i];
-      const want = shape[i] || 0;
-      viz.levels[i] = want > cur ? cur + (want - cur) * ATTACK[i] : Math.max(want, cur - DECAY[i]);
-      bars[i].style.transform = `scaleY(${(0.16 + 0.84 * Math.min(1, viz.levels[i] * 1.1)).toFixed(3)})`;
+      const [up, down] = VIZ_TAU[i];
+      const next = cur + (want[i] - cur) * (1 - Math.exp(-dt / (want[i] > cur ? up : down)));
+      viz.levels[i] = next;
+      if (next > 0.01) moving = true;
+      bars[i].style.transform = `scaleY(${(0.18 + 0.82 * Math.min(1, next)).toFixed(3)})`;
     }
-    if (viz.on && performance.now() - viz.lastAt < 600) viz.raf = requestAnimationFrame(paintViz);
-    else el.island.classList.remove('viz-live');
+    el.island.classList.add('viz-live');
+    if (viz.on && (fresh || moving)) viz.raf = requestAnimationFrame(paintViz);
+    else { viz.last = 0; el.island.classList.remove('viz-live'); }
   }
 
   // ---------- Fenstergrösse (spart CPU: geschlossen = nur so gross wie das Island) ----------
@@ -1893,6 +1909,8 @@
     }
     el.langSelect.value = s.language || 'auto';
     el.visualizerToggle.checked = s.visualizer !== false;
+    el.glowMusicToggle.checked = s.glowMusic !== false;
+    el.glowMusicToggle.disabled = !s.glow;
   }
 
   function fillSettings() {
@@ -2407,6 +2425,7 @@
     location.reload();
   });
   el.visualizerToggle.addEventListener('change', async () => { await save({ visualizer: el.visualizerToggle.checked }); syncVisualizer(); });
+  el.glowMusicToggle.addEventListener('change', () => save({ glowMusic: el.glowMusicToggle.checked }));
 
   // Bereichs-Navigation in den Einstellungen
   const catNav = document.querySelector('.cat-nav');

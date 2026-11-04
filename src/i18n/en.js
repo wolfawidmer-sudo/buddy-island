@@ -110,7 +110,6 @@ module.exports = {
   "Laufende Musik im Island zeigen": "Show playing music in the island",
   "Musik-Visualizer": "Music visualizer",
   "Balken folgen dem Systemton": "Bars follow the system sound",
-  "Funktioniert mit Spotify, YouTube im Browser und allen Apps, die Windows als Wiedergabe meldet. Für den Visualizer analysiert Buddy den Systemton direkt auf dem PC, nichts wird aufgenommen oder gespeichert.": "Works with Spotify, YouTube in the browser and all apps that Windows reports as playing. For the visualizer Buddy analyses the system sound directly on the PC; nothing is recorded or stored.",
   "Darstellung und Ton": "Appearance and sound",
   "Leuchtender Bildschirmrand": "Glowing screen edge",
   "Ton, wenn etwas fertig ist": "Sound when something is done",
@@ -759,4 +758,8 @@ module.exports = {
   "Bleibt auf diesem PC. An die KI geht nur, was zur aktuellen Frage passt. Passwörter, Karten- und Kontonummern oder Schlüssel speichert Buddy nie.": "Stays on this PC. Only what fits the current question is sent to the AI. Buddy never stores passwords, card or account numbers or keys.",
   "Noch nichts gemerkt.": "Nothing remembered yet.",
   "Wirklich alles vergessen?": "Really forget everything?",
+  "Reagiert nur, wenn wirklich Ton läuft. Der Ton wird nur auf dem PC ausgewertet, nichts wird aufgenommen.": "Only reacts when sound is really playing. The sound is analysed on the PC only; nothing is recorded.",
+  "Rand leuchtet zur Musik": "Edge glows to the music",
+  "Bass, Mitten und Höhen": "Bass, mids and highs",
+  "Wenn Buddy den PC bedient": "When Buddy operates the PC",
 };

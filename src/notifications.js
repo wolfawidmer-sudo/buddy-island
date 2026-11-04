@@ -149,7 +149,7 @@ while ($true) {
     }
   }
 
-  # Medien: alle 2 Sekunden, solange etwas läuft, sonst alle 5 (spart Rechenzeit im Leerlauf).
+  # Medien: alle 2 Sekunden, solange etwas läuft oder pausiert ist, sonst alle 5 (spart Rechenzeit im Leerlauf).
   # Gemeldet wird nur bei Änderung.
   if ($mediaMgr -ne $null -and ($tick % $mediaEvery) -eq 0) {
     try {
@@ -160,7 +160,8 @@ while ($true) {
       } else {
         $info = $s.GetPlaybackInfo()
         $status = [string]$info.PlaybackStatus
-        if ($status -eq 'Playing') { $mediaEvery = 2 } else { $mediaEvery = 5 }
+        # Auch pausiert alle 2 s: Weiterspielen soll der Visualizer sofort merken
+        if ($status -eq 'Playing' -or $status -eq 'Paused') { $mediaEvery = 2 } else { $mediaEvery = 5 }
         $props = Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
         $key = $s.SourceAppUserModelId + '|' + $props.Title + '|' + $props.Artist + '|' + $status
         if ($key -ne $lastMedia) {

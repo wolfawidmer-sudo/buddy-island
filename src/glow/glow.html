@@ -7,10 +7,16 @@
   <link rel="stylesheet" href="glow.css">
 </head>
 <body data-mode="off">
-  <div class="edge top"><i></i></div>
-  <div class="edge right"><i></i></div>
-  <div class="edge bottom"><i></i></div>
-  <div class="edge left"><i></i></div>
+  <div class="shade"></div>
+  <!-- Jede Seite ist derselbe Streifen, gedreht an ihren Rand: oben im Streifen = Bildschirmkante -->
+  <div class="side top"><b class="haze"></b><b class="core"></b><b class="sheen"></b><b class="sheen two"></b><b class="grain"></b><b class="rim"></b></div>
+  <div class="side right"><b class="haze"></b><b class="core"></b><b class="sheen"></b><b class="sheen two"></b><b class="grain"></b><b class="rim"></b></div>
+  <div class="side bottom"><b class="haze"></b><b class="core"></b><b class="sheen"></b><b class="sheen two"></b><b class="grain"></b><b class="rim"></b></div>
+  <div class="side left"><b class="haze"></b><b class="core"></b><b class="sheen"></b><b class="sheen two"></b><b class="grain"></b><b class="rim"></b></div>
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner br"></div>
+  <div class="corner bl"></div>
   <script src="glow.js"></script>
 </body>
 </html>
