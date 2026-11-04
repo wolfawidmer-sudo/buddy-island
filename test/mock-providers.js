@@ -64,6 +64,14 @@ function createMock(provider, opts = {}) {
       if (provider === 'gemini') return json({ error: { code: 429, message: 'Resource has been exhausted (e.g. check quota).', status: 'RESOURCE_EXHAUSTED' } }, 429);
       return json({ error: { message: 'Rate limit reached for requests', type: 'requests', code: 'rate_limit_exceeded' } }, 429);
     }
+    // opts.busy: diese Modelle sind gerade überlastet (wie Gemini «high demand», 503)
+    const asked = provider === 'gemini' ? (u.pathname.split('/models/')[1] || '').split(':')[0] : body?.model;
+    if ((opts.busy || []).includes(asked) && /generateContent|messages|chat\/completions|responses/.test(u.pathname)) {
+      state.busyHits = (state.busyHits || 0) + 1;
+      if (provider === 'gemini') return json({ error: { code: 503, message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', status: 'UNAVAILABLE' } }, 503);
+      if (provider === 'anthropic') return json({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }, 529);
+      return json({ error: { message: 'The server is overloaded', type: 'server_error' } }, 503);
+    }
     if (provider === 'anthropic') return anthropic(u, headers, body);
     if (provider === 'gemini') return gemini(u, headers, body);
     return openaiLike(u, headers, body);

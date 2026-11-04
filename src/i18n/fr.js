@@ -776,4 +776,7 @@ module.exports = {
   "Geschätzt aus Arbeitsspeicher, Prozessor und Grafikkarte. Mit Grafikkarte laufen Modelle viel schneller.": "Estimé à partir de la mémoire, du processeur et de la carte graphique. Avec une carte graphique, les modèles sont bien plus rapides.",
   "Buddy zeigt nur Tools, die auf diesem PC installiert sind.": "Buddy ne montre que les outils installés sur ce PC.",
   "Medienwiedergabe": "Lecteur multimédia",
+  "funktioniert, mit Hinweis": "fonctionne, avec une remarque",
+  "Vorübergehend, Buddy weicht automatisch auf {m} aus.": "Temporaire, Buddy passe automatiquement à {m}.",
+  "{a} ist gerade überlastet. Buddy antwortet mit {b}.": "{a} est surchargé en ce moment. Buddy répond avec {b}.",
 };

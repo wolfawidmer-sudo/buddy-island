@@ -1471,20 +1471,22 @@
       const name = document.createElement('b');
       name.textContent = g.name;
       const state = document.createElement('span');
-      state.className = 'health-state ' + (g.state === 'done' ? (g.ok ? 'ok' : 'bad') : '');
-      state.textContent = g.state === 'done' ? (g.ok ? t('alles in Ordnung') : t('Fehler gefunden')) : t('prüft …');
+      const warned = g.steps.some((x) => x.temporary);
+      state.className = 'health-state ' + (g.state === 'done' ? (g.ok ? (warned ? 'warn' : 'ok') : 'bad') : '');
+      state.textContent = g.state === 'done' ? (g.ok ? (warned ? t('funktioniert, mit Hinweis') : t('alles in Ordnung')) : t('Fehler gefunden')) : t('prüft …');
       head.append(name, state);
       list.appendChild(head);
       for (const st of g.steps) {
         const row = document.createElement('div');
-        row.className = 'health-step ' + (st.ok === true ? 'ok' : st.ok === false ? 'bad' : 'skip');
+        row.className = 'health-step ' + (st.ok === true ? 'ok' : st.ok === false ? (st.temporary ? 'warn' : 'bad') : 'skip');
         const mark = document.createElement('i');
-        mark.textContent = st.ok === true ? '✓' : st.ok === false ? '✕' : '–';
+        mark.textContent = st.ok === true ? '✓' : st.ok === false ? (st.temporary ? '!' : '✕') : '–';
         const body = document.createElement('span');
         const label = document.createElement('span');
         label.textContent = st.label + (st.id.startsWith('basic:') && st.model ? ` (${st.model})` : '') + (st.ms ? ` · ${st.ms < 1000 ? `${st.ms} ms` : `${(st.ms / 1000).toFixed(1)} s`}` : '');
         body.appendChild(label);
-        const note = st.error ? st.error.message : st.note;
+        // Vorübergehende Störung: Meldung des Anbieters plus was Buddy tut
+        const note = st.error ? [st.error.message, st.temporary ? st.note : ''].filter(Boolean).join(' ') : st.note;
         if (note) {
           const small = document.createElement('small');
           small.textContent = note;
@@ -1539,7 +1541,11 @@
     const g = health.groups.get(ev.providerId) || { name: ev.providerName, steps: [], state: 'running', ok: false };
     // Neuer Durchlauf (z. B. mit einem anderen Modell, weil das alte nicht mehr angeboten wird)
     if (ev.state === 'running') { g.state = 'running'; g.steps = []; }
-    if (ev.state === 'step') g.steps.push(ev.step);
+    if (ev.state === 'step') {
+      // Ein Schritt kann nachträglich aktualisiert werden (z. B. «vorübergehend, Buddy weicht aus»)
+      const at = g.steps.findIndex((x) => x.id === ev.step.id);
+      if (at >= 0) g.steps[at] = ev.step; else g.steps.push(ev.step);
+    }
     if (ev.state === 'done') { g.state = 'done'; g.ok = ev.result.ok; g.steps = ev.result.steps; }
     health.groups.set(ev.providerId, g);
     if (state.view === 'settings') renderHealth();

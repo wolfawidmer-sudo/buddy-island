@@ -10,7 +10,7 @@ const models = require('../models');
 const { t } = require('../i18n');
 
 /** @typedef {import('./types').LlmClient} LlmClient */
-/** @typedef {{ id: string, label: string, model?: string, ok: boolean|null, ms?: number, note?: string, error?: ReturnType<typeof publicError> }} HealthStep */
+/** @typedef {{ id: string, label: string, model?: string, ok: boolean|null, ms?: number, note?: string, temporary?: boolean, error?: ReturnType<typeof publicError> }} HealthStep */
 
 const NUMBER_TOOL = {
   name: 'get_number',
@@ -23,13 +23,15 @@ const NUMBER_TOOL = {
  *   client: LlmClient, providerId: string, apiKey: string, workspaceId?: string,
  *   models: string[], signal?: AbortSignal, onStep?: (s: HealthStep) => void, stepTimeoutMs?: number,
  * }} opts
- * @returns {Promise<{ providerId: string, ok: boolean, steps: HealthStep[] }>}
+ * @returns {Promise<{ providerId: string, ok: boolean, warnings?: number, steps: HealthStep[] }>}
  */
 async function runHealth({ client, providerId, apiKey, workspaceId, models: modelIds, signal, onStep, stepTimeoutMs = 90000 }) {
   /** @type {HealthStep[]} */
   const steps = [];
   const local = providerId === 'huggingface';
-  const main = modelIds[0];
+  let main = modelIds[0];
+  // Vorübergehende Störungen beim Anbieter (überlastet, Limit, Serverfehler): kein Fehler von Buddy oder vom Key
+  const TEMPORARY = new Set(['overloaded', 'rate_limit', 'server']);
 
   /**
    * Führt einen Schritt mit eigenem Zeitlimit aus.
@@ -90,6 +92,8 @@ async function runHealth({ client, providerId, apiKey, workspaceId, models: mode
 
   // 3. Einfachste Anfrage, für jedes benutzte Modell einzeln
   let basicOk = false;
+  /** @type {string|null} */
+  let working = null;
   for (const model of modelIds) {
     const ok = await step(`basic:${model}`, t('Einfache Antwort ohne Streaming'), model, async (s) => {
       const r = await client.streamMessage({ ...base, model, messages: [{ role: 'user', content: 'Reply with OK.' }], stream: false, signal: s });
@@ -97,7 +101,20 @@ async function runHealth({ client, providerId, apiKey, workspaceId, models: mode
       if (!text) throw Object.assign(new Error(t('Leere Antwort (Grund: {r}).', { r: r.stopReason || '?' })), { name: 'EmptyAnswer' });
       return `«${text.slice(0, 40)}»`;
     });
+    if (ok && !working) working = model;
     if (ok && model === main) basicOk = true;
+  }
+  // Hauptmodell gerade überlastet, ein anderes antwortet: mit diesem weitertesten. So zeigt der Test,
+  // dass Buddy funktioniert; im Chat weicht Buddy genauso automatisch aus.
+  if (!basicOk && working) {
+    const failed = steps.find((x) => x.id === `basic:${main}`);
+    if (failed?.error && TEMPORARY.has(failed.error.category)) {
+      failed.temporary = true;
+      failed.note = t('Vorübergehend, Buddy weicht automatisch auf {m} aus.', { m: working });
+      onStep?.(failed);
+      main = working;
+      basicOk = true;
+    }
   }
   const later = [
     ['stream', t('Antwort mit Streaming')], ['history', t('Unterhaltung mit Verlauf')],
@@ -183,7 +200,8 @@ async function runHealth({ client, providerId, apiKey, workspaceId, models: mode
     });
   }
 
-  return { providerId, ok: steps.every((s) => s.ok !== false), steps };
+  const warnings = steps.filter((x) => x.ok === false && x.temporary).length;
+  return { providerId, ok: steps.every((x) => x.ok !== false || x.temporary), warnings, steps };
 }
 
 /**
@@ -194,9 +212,9 @@ async function runHealth({ client, providerId, apiKey, workspaceId, models: mode
 function healthReport(results, env = {}) {
   const lines = [`Buddy Island ${env.version || ''} · ${env.os || ''} · ${env.language || ''} · ${new Date().toISOString()}`];
   for (const r of results) {
-    lines.push('', `## ${r.providerName || r.providerId}: ${r.ok ? 'OK' : 'FEHLER'}`);
+    lines.push('', `## ${r.providerName || r.providerId}: ${r.ok ? (/** @type {any} */ (r).warnings ? 'OK mit Hinweis' : 'OK') : 'FEHLER'}`);
     for (const s of r.steps) {
-      const mark = s.ok === true ? '✓' : s.ok === false ? '✗' : '–';
+      const mark = s.ok === true ? '✓' : s.ok === false ? (s.temporary ? '!' : '✗') : '–';
       lines.push(`${mark} ${s.label}${s.model ? ` [${s.model}]` : ''}${s.ms ? ` ${s.ms} ms` : ''}${s.note ? ` · ${s.note}` : ''}`);
       if (s.error) {
         const e = s.error;

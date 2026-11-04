@@ -281,6 +281,38 @@ const errorOf = (events) => events.find((e) => e.c === 'chat:error')?.p;
     const used = mock.state.requests.filter((q) => q.body?.model).map((q) => q.body.model);
     assert.ok(used.includes('gpt-4o-mini') && used[used.length - 1] !== 'gpt-4o-mini', `danach anderes Modell (${used})`);
   }
+  // Gemini «high demand» (503) auf dem Hauptmodell: Test zeigt «funktioniert, mit Hinweis» und testet mit dem
+  // anderen Modell weiter; im Chat weicht Buddy nach einem kurzen Versuch aus und sagt es offen
+  {
+    require('../src/llm/learned').clear();
+    const list = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest'];
+    const { client } = registry('gemini', { models: list, busy: ['gemini-flash-latest'] });
+    const r = await runHealth({ client, providerId: 'gemini', apiKey: GOOD_KEY.gemini, models: ['gemini-flash-latest', 'gemini-flash-lite-latest'] });
+    const first = r.steps.find((x) => x.id === 'basic:gemini-flash-latest');
+    assert.ok(r.ok && r.warnings === 1 && first.temporary && first.error.category === 'overloaded', `Test mit Hinweis: ${healthReport([r])}`);
+    assert.ok(r.steps.filter((x) => ['stream', 'history', 'tools'].includes(x.id)).every((x) => x.ok && x.model === 'gemini-flash-lite-latest'), 'weiter mit Flash-Lite');
+    assert.ok(/OK mit Hinweis/.test(healthReport([r])) && /^! /m.test(healthReport([r])), 'Bericht markiert den Hinweis');
+    require('../src/llm/learned').clear();
+    const reg = registry('gemini', { models: list, busy: ['gemini-flash-latest'] });
+    const a = agentFor('gemini', reg.client);
+    const started = Date.now();
+    await a.run('Erklär mir kurz, was ein Router ist, mit zwei Beispielen.');
+    assert.ok(!errorOf(a.events), `kein Fehler: ${errorOf(a.events)?.message}`);
+    const notice = a.events.find((e) => e.c === 'chat:notice' && /überlastet/.test(e.p.text));
+    const used = reg.mock.state.requests.filter((q) => /:(stream)?[gG]enerateContent/.test(q.path)).map((q) => q.path.split('/models/')[1].split(':')[0]);
+    assert.ok(used[used.length - 1] !== 'gemini-flash-latest', `am Ende anderes Modell (${used})`);
+    assert.ok((reg.mock.state.busyHits || 0) <= 3, `nicht lange auf das überlastete Modell gewartet (${reg.mock.state.busyHits} Versuche)`);
+    if (used.includes('gemini-flash-latest')) assert.ok(notice, 'Ausweichen wird offen gesagt');
+    // Danach (innerhalb weniger Minuten) wählt Buddy das überlastete Modell gar nicht erst.
+    // (Hat der Router oben gleich Flash-Lite gewählt, kam die Überlastung noch nicht vor: einmal direkt fragen.)
+    if (!used.includes('gemini-flash-latest')) {
+      await reg.client.streamMessage({ apiKey: GOOD_KEY.gemini, model: 'gemini-flash-latest', messages: [{ role: 'user', content: 'hi' }], maxTokens: 10, stream: false, onRetry: (n, err) => { throw err; } }).catch(() => {});
+    }
+    const tiers = models.resolveTiers(list.map((id) => ({ id })), 'gemini');
+    assert.ok(tiers.sonnet !== 'gemini-flash-latest', `überlastetes Modell wird kurz gemieden (${JSON.stringify(tiers)})`);
+    require('../src/llm/learned').clear();
+    void started;
+  }
   // Manuell gewähltes, nicht verfügbares Modell: kein stiller Ersatz, klare Meldung mit dem Namen
   {
     const { client, mock } = registry('gemini', { retired: ['gemini-2.5-pro'] });

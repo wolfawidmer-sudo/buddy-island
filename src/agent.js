@@ -230,6 +230,19 @@ function createAgent(deps) {
     // Ersatz für ein nicht verfügbares Modell: nur unter den Modellen, die der Anbieter für
     // diesen Key wirklich anbietet, zuerst dieselbe Stufe, Opus nur wenn Opus gefragt war,
     // und nur Modelle mit den nötigen Fähigkeiten.
+    // Überlastung oder Limit pro Modell: ein anderes Modell hilft sofort, Warten oft nicht
+    const isBusyError = (err) => err?.category === 'overloaded' || err?.category === 'rate_limit' || err?.status === 529 || err?.type === 'overloaded_error';
+    function busyAlternative(failed, needTools) {
+      const cap = models.tierRank(budgetCap(usage.budget(limit)));
+      const fresh = models.resolveTiers(available, providerId); // überspringt gerade überlastete Modelle
+      const order = [st.tier || 'sonnet', 'sonnet', 'haiku', 'opus'];
+      for (const k of order) {
+        const m = fresh[k] || tiers[k];
+        if (m && m !== failed && models.tierRank(k) <= cap && (!needTools || models.capabilities(m).tools)) return { model: m, tier: k };
+      }
+      return null;
+    }
+
     function alternativeModel(list, failed, wantTier, needTools) {
       const ids = list.map((m) => m.id).filter((x) => x && x !== failed);
       const alt = models.resolveTiers(ids.map((x) => ({ id: x })), providerId);
@@ -611,6 +624,8 @@ function createAgent(deps) {
           const result = await client.streamMessage({
             apiKey, workspaceId: settings.workspaceId, model, system, messages: conversation, tools: toolList, maxTokens, effort, signal, onText,
             onRetry: (n, err) => {
+              // Überlastet und ein anderes Modell steht bereit: nach einem kurzen Versuch ausweichen statt lange zu warten
+              if (auto && isBusyError(err) && n >= 2 && busyAlternative(model, Boolean(toolList && toolList.length))) throw err;
               log(`API-Wiederholung ${n} (${err.status || ''} ${err.type || err.message})`);
               send('agent:action', { id, label: t('Verbindung, Versuch {n}', { n: n + 1 }) });
               task?.step('retry', `API-Wiederholung ${n}: ${err.message}`, 'warn');
@@ -760,13 +775,15 @@ function createAgent(deps) {
             tiers = alt.tiers;
             send('agent:route', routeInfo({ switched: true, why: t('Ersatz für ein nicht verfügbares Modell') }));
             call = await callModel({ model: st.model, effort: st.effort, system, toolList, maxTokens, holdText });
-          } else if (auto && (err?.status === 529 || err?.type === 'overloaded_error') && !st.overloadFallback) {
+          } else if (auto && isBusyError(err) && !st.overloadFallback) {
             st.overloadFallback = true;
-            const alt = ['sonnet', 'haiku', 'opus'].find((k) => tiers[k] && tiers[k] !== st.model && models.tierRank(k) <= models.tierRank(budgetCap(usage.budget(limit))));
+            const alt = busyAlternative(st.model, toolsAllowed);
             if (alt) {
-              task.step('model', `${models.info(st.model).short} überlastet, weiter mit ${models.info(tiers[alt]).short}`, 'warn');
-              st.model = tiers[alt];
-              st.tier = alt;
+              log(`Modell ${st.model} überlastet (${err.status || ''} ${err.category || ''}), Ausweichmodell: ${alt.model}`);
+              task.step('model', `${models.info(st.model).short} überlastet, weiter mit ${models.info(alt.model).short}`, 'warn');
+              send('chat:notice', { id, text: t('{a} ist gerade überlastet. Buddy antwortet mit {b}.', { a: models.info(st.model).short, b: models.info(alt.model).short }), soft: true });
+              st.model = alt.model;
+              st.tier = alt.tier;
               st.effort = models.supportedEffort(st.model, st.effort);
               send('agent:route', routeInfo({ switched: true, why: t('Ausweichmodell wegen Überlastung') }));
               call = await callModel({ model: st.model, effort: st.effort, system, toolList, maxTokens, holdText });

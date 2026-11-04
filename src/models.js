@@ -227,6 +227,13 @@ function resolveTiers(available, providerId = 'anthropic') {
     .filter((id) => providerId === 'huggingface' || providerOf(id) === providerId || (providerId === 'gemini' && /gemini/i.test(id)))
     // Vom Anbieter abgelehnte Modelle (404, «nicht mehr verfügbar») überspringen
     .filter((id) => !learned.get(providerId, id, 'unavailable'));
+  // Gerade überlastete Modelle nach hinten: nur nehmen, wenn es sonst nichts gibt
+  const busy = (id) => (learned.get(providerId, id, 'busyUntil') || 0) > Date.now();
+  if (ids.some(busy) && ids.some((id) => !busy(id))) {
+    const free = ids.filter((id) => !busy(id));
+    const result = resolveTiers(free, providerId);
+    if (Object.keys(result).length) return result;
+  }
   /** @type {Partial<Record<Tier,string>>} */
   const result = {};
   if (providerId === 'huggingface') {

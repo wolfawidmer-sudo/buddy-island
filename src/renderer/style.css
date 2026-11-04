@@ -1314,6 +1314,8 @@ body { padding-top: var(--gap); }
 .health-step i { flex: none; width: 14px; font-style: normal; text-align: center; }
 .health-step.ok i { color: var(--green, #30d158); }
 .health-step.bad i { color: var(--red, #ff453a); }
+.health-step.warn i { color: var(--orange, #ff9f0a); font-weight: 700; }
+.health-state.warn { color: var(--orange, #ff9f0a); }
 .health-step.skip { opacity: 0.55; }
 .health-step > span { display: flex; flex-direction: column; min-width: 0; }
 .health-step small { color: var(--label-3); font-size: 11.5px; overflow-wrap: anywhere; }
