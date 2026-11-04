@@ -30,6 +30,7 @@ const { createComputer, supportsCaptureExclusion } = require('./computer');
 const { createSystemWatcher } = require('./notifications');
 const { createCalendar } = require('./calendar');
 const { createVoice } = require('./voice');
+const { createPerception } = require('./perception');
 
 // ---------- Sparsam im Leerlauf ----------
 // Medientasten nicht abfangen (Buddy drückt sie selbst), keine
@@ -95,7 +96,7 @@ const DEFAULTS = {
   keyHints: {}, // Anbieter -> letzte 4 Zeichen
   language: 'auto', // 'auto' = Systemsprache, sonst de | en | fr | it
   visualizer: true, // Musik-Balken nach dem Systemton
-  glowMusic: true, // Bildschirmrand reagiert auf laufende Musik
+  glowMusic: false, // veraltet: der Rand reagiert nicht mehr auf Musik
   providerChosen: false, // hat der Nutzer selbst einen Anbieter gewählt? Sonst lokal, falls möglich
   // Lokale KI (Ollama): gewähltes Modell, Speicherort, erweiterte Einstellungen
   localModel: null,
@@ -129,7 +130,9 @@ let displayListeners = false;
 let glow = null;
 let glowReady = null;
 let glowMode = 'off';
-let glowWant = 'off'; // was Buddy gerade zeigen will (denkt/steuert); Musik kommt nur darunter
+let glowWant = 'off'; // 'perceive', solange Buddy den Bildschirm wirklich aufnimmt und auswertet
+// Der Rand hängt nur an echten Bildschirmaufnahmen (siehe src/perception.js), nie an Musik
+const perception = createPerception({ onChange: (active) => setGlow(active ? 'perceive' : 'off') });
 let glowTimer = null;
 let glowTopTimer = null;
 let musicActive = false; // echtes Audiosignal hörbar (nicht bloss «Spotify offen»)
@@ -211,8 +214,6 @@ let mouseCaptured = false;
 let agentInput = false; // Buddy bewegt gerade Maus/Tastatur
 let capturing = false; // Island ist für ein Bildschirmfoto kurz versteckt
 let controlling = 0; // Anzahl laufender Steuerungs-Aufgaben
-let controlGlowTimer = null;
-const CONTROL_GLOW_DELAY_MS = 3000;
 const running = new Map(); // chatId -> AbortController
 const confirms = new Map(); // chatId -> resolve(bool)
 const permissionAsks = new Map(); // `${chatId}:${reqId}` -> resolve(bool)
@@ -1080,16 +1081,16 @@ function glowCall(code) {
   if (glow && !glow.isDestroyed()) glow.webContents.executeJavaScript(code).catch(() => {});
 }
 
-// Buddy-Zustände haben Vorrang (steuert > denkt); sonst zeigt der Rand die Musik, falls sie
-// wirklich hörbar ist.
+// Der Rand zeigt genau einen Zustand: Buddy nimmt den Bildschirm auf und wertet ihn aus.
+// Er lässt sich nicht abschalten, solange Buddy hinschaut (Transparenz).
 function setGlow(mode) {
   glowWant = mode;
   applyGlow();
 }
 
 function applyGlow() {
-  let mode = glowWant !== 'off' ? glowWant : (musicActive && settings.glowMusic !== false ? 'music' : 'off');
-  if (!settings.glow || game.active) mode = 'off';
+  let mode = glowWant === 'perceive' ? 'perceive' : 'off';
+  if (game.active) mode = 'off'; // pausiert: es wird auch nichts aufgenommen
   if (mode === glowMode) return;
   glowMode = mode;
   clearTimeout(glowTimer);
@@ -1111,7 +1112,7 @@ function applyGlow() {
 // und eine Anzeige sie braucht. Ob wirklich etwas klingt, entscheidet danach das Signal.
 function audioWanted() {
   if (!audioMeter || !audioMeter.available() || game.active || !settings.media) return false;
-  const needed = settings.visualizer !== false || (settings.glow && settings.glowMusic !== false);
+  const needed = settings.visualizer !== false;
   if (!needed) return false;
   return Boolean(nowPlaying?.playing) || Date.now() - lastPlayingAt < AUDIO_GRACE_MS;
 }
@@ -1135,7 +1136,6 @@ function onAudioActive(active) {
   if (active === musicActive) return;
   musicActive = active;
   liveWin()?.webContents.send('audio:active', active);
-  applyGlow();
 }
 
 function onAudioFrame(frame) {
@@ -1143,7 +1143,6 @@ function onAudioFrame(frame) {
     const w = liveWin();
     if (w && w.isVisible()) w.webContents.send('audio:level', frame);
   }
-  if (glowMode === 'music' && glow && !glow.isDestroyed()) glow.webContents.send('glow:frame', frame);
 }
 
 // Island und Rand aus Buddys Bildschirmfotos heraushalten
@@ -1332,19 +1331,13 @@ function setControlling(active) {
     setCaptureHidden(true);
     liveWin()?.setFocusable(false);
     liveWin()?.blur();
-    // Der Rand erscheint erst, wenn Buddy wirklich länger als 3 Sekunden auf den
-    // Bildschirm schaut und ihn bedient (kurze Blicke lösen nichts aus).
-    if (controlling === 1) {
-      clearTimeout(controlGlowTimer);
-      controlGlowTimer = setTimeout(() => { if (controlling) setGlow('control'); }, CONTROL_GLOW_DELAY_MS);
-    }
+    // Den Rand schaltet die erste echte Aufnahme ein (perception), nicht die Steuerung allein
   } else {
     controlling = Math.max(0, controlling - 1);
     if (!controlling) {
-      clearTimeout(controlGlowTimer);
       setCaptureHidden(false);
       liveWin()?.setFocusable(true);
-      setGlow('off');
+      perception.stopAll();
     }
   }
 }
@@ -1360,6 +1353,8 @@ async function runChat(id, messages, meta, send) {
     await agent.run({ id, messages, meta, send, signal: controller.signal });
   } finally {
     running.delete(id);
+    // Aufgabe zu Ende: Buddy wertet keine Aufnahmen mehr aus
+    if (!running.size) perception.taskEnd();
     confirms.delete(id);
     resolvePermissions(id, false);
   }
@@ -1497,6 +1492,7 @@ function setGame(focus) {
   game = { active, name };
   log(`Spielmodus ${active ? `an (${focus.process}, Status ${focus.state})` : 'aus'}`);
   liveWin()?.webContents.send('game', game);
+  perception.setPaused(active);
   if (active) {
     audioMeter?.stop();
     if (!layout.open) liveWin()?.hide();
@@ -1863,6 +1859,8 @@ async function runDiagnostics() {
     add(t('Bildschirmfoto'), true, `${size.w}×${size.h} Pixel`);
   } catch (err) {
     add(t('Bildschirmfoto'), false, err.message);
+  } finally {
+    if (!running.size) perception.taskEnd();
   }
   if (process.platform === 'win32') {
     try {
@@ -2562,6 +2560,8 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       afterInput: () => { agentInput = false; applyMouseMode(); },
       // Ältere Windows-Versionen können Fenster nicht aus Fotos ausblenden: dann kurz verstecken.
       beforeCapture: async () => {
+        // Rand an, bevor das Bild entsteht. Pausiert (Spiel im Vordergrund): keine Aufnahme.
+        if (!perception.captureStart()) throw new Error(t('Bildschirmaufnahme ist pausiert.'));
         if (captureExclusion) return;
         capturing = true;
         glow?.hide();
@@ -2569,6 +2569,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
         await new Promise((r) => setTimeout(r, 120));
       },
       afterCapture: async () => {
+        perception.captureEnd();
         if (captureExclusion) return;
         if (glow && !glow.isDestroyed()) glow.showInactive();
         if (!game.active || layout.open) liveWin()?.showInactive();
@@ -2578,7 +2579,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
 
     // Nur für automatische Tests: Wiedergabe-Meldungen von aussen einspeisen
     if (process.env.BUDDY_TEST_HOOKS) {
-      global.__buddyTest = { media: (np) => handleMedia(np), control: (on) => setControlling(on), glowMode: () => glowMode, musicActive: () => musicActive, audioRunning: () => Boolean(audioMeter?.running()) };
+      global.__buddyTest = { media: (np) => handleMedia(np), control: (on) => setControlling(on), glowMode: () => glowMode, perceive: (what) => (what === 'start' ? perception.captureStart() : (perception.captureEnd(), perception.taskEnd())), musicActive: () => musicActive, audioRunning: () => Boolean(audioMeter?.running()) };
     }
 
     if (isSelfTest) {

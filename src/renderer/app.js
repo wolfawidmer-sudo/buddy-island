@@ -71,7 +71,6 @@
     effortSeg: $('effortSeg'),
     computerToggle: $('computerToggle'),
     confirmToggle: $('confirmToggle'),
-    glowToggle: $('glowToggle'),
     notifyToggle: $('notifyToggle'),
     notifyStatus: $('notifyStatus'),
     dndBtn: $('dndBtn'),
@@ -237,7 +236,6 @@
     toolsRescan: $('toolsRescan'),
     langSelect: $('langSelect'),
     visualizerToggle: $('visualizerToggle'),
-    glowMusicToggle: $('glowMusicToggle'),
     bannerHint: $('bannerHint'),
     bannerOpen: $('bannerOpen'),
     bannerDismiss: $('bannerDismiss'),
@@ -2835,8 +2833,6 @@
     }
     el.langSelect.value = s.language || 'auto';
     el.visualizerToggle.checked = s.visualizer !== false;
-    el.glowMusicToggle.checked = s.glowMusic !== false;
-    el.glowMusicToggle.disabled = !s.glow;
   }
 
   function fillSettings() {
@@ -2880,7 +2876,6 @@
     el.computerToggle.disabled = !s.canControl;
     el.confirmToggle.checked = Boolean(s.confirmControl);
     el.confirmToggle.disabled = !s.computerUse;
-    el.glowToggle.checked = Boolean(s.glow);
     el.notifyToggle.checked = Boolean(s.notifications);
     const status = s.notifications ? s.notifyStatus : 'Off';
     el.notifyStatus.textContent = NOTIFY_STATUS[status] || status || '–';
@@ -3352,7 +3347,6 @@
     location.reload();
   });
   el.visualizerToggle.addEventListener('change', async () => { await save({ visualizer: el.visualizerToggle.checked }); syncVisualizer(); });
-  el.glowMusicToggle.addEventListener('change', () => save({ glowMusic: el.glowMusicToggle.checked }));
 
   // Bereichs-Navigation in den Einstellungen
   const catNav = document.querySelector('.cat-nav');
@@ -3458,7 +3452,6 @@
   el.autostartToggle.addEventListener('change', () => save({ autostart: el.autostartToggle.checked }));
   el.computerToggle.addEventListener('change', async () => { await save({ computerUse: el.computerToggle.checked }); fillSettings(); });
   el.confirmToggle.addEventListener('change', () => save({ confirmControl: el.confirmToggle.checked }));
-  el.glowToggle.addEventListener('change', () => save({ glow: el.glowToggle.checked }));
   el.notifyToggle.addEventListener('change', async () => { await save({ notifications: el.notifyToggle.checked }); fillSettings(); });
   // Direkt zu den Windows-Einstellungen, um die Banner unten rechts auszuschalten
   el.bannerOpen.addEventListener('click', (event) => {

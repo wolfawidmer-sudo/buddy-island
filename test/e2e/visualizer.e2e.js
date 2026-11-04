@@ -55,23 +55,29 @@ const helperCount = () => { try { return Number(execSync('pgrep -fc "[f]ake-audi
   await sleep(350);
   check(await hook('musicActive'), 'Ton läuft: in < 350 ms aktiv');
   await sleep(900);
-  check((await hook('glowMode')) === 'music', 'Rand im Musik-Modus');
-  const g = await glowWin();
-  const near = (a, b) => a && b && Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1 && Math.abs(a.width - b.width) <= 1 && Math.abs(a.height - b.height) <= 1;
-  check(g && near(g.bounds, g.display), `Rand = ganzer Bildschirm (±1 px) ${JSON.stringify(g?.bounds)} (Arbeitsbereich ${JSON.stringify(g?.workArea)})`);
-  check(g && !g.focusable && g.top && g.visible, 'Rand: kein Fokus, immer oben, sichtbar');
+  check((await hook('glowMode')) === 'off' && !(await glowWin()), 'Musik läuft: KEIN Bildschirmrand (Rand nur, wenn Buddy hinschaut)');
   const samples = [];
   for (let i = 0; i < 6; i += 1) { samples.push((await bars())[0]); await sleep(90); }
   check(Math.max(...samples) - Math.min(...samples) > 0.15, `Bass-Balken folgt dem Takt (${samples.map((v) => v.toFixed(2)).join(' ')})`);
-  const glowPage = app.windows().find((p) => p.url().includes('glow.html'));
-  const layers = glowPage ? await glowPage.evaluate(() => ({ haze: document.querySelector('.haze').style.transform, sheen: document.querySelector('.sheen').style.transform, mode: document.body.dataset.mode })) : null;
-  check(layers && layers.mode === 'music' && /scaleY/.test(layers.haze) && /translateX/.test(layers.sheen), `Rand-Schichten reagieren (${JSON.stringify(layers)})`);
 
-  // Akzentfarbe
+  // Bildschirmaufnahme: Rand an, auch während Musik läuft; danach sofort weg
+  await hook('perceive', 'start');
+  await sleep(700);
+  const g = await glowWin();
+  const near = (a, b) => a && b && Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1 && Math.abs(a.width - b.width) <= 1 && Math.abs(a.height - b.height) <= 1;
+  check((await hook('glowMode')) === 'perceive', 'Aufnahme: Rand im Modus «schaut hin»');
+  check(g && near(g.bounds, g.display), `Rand = ganzer Bildschirm inkl. Taskleiste (±1 px) ${JSON.stringify(g?.bounds)} (Arbeitsbereich ${JSON.stringify(g?.workArea)})`);
+  check(g && !g.focusable && g.top && g.visible, 'Rand: kein Fokus, immer oben, sichtbar');
+  const glowPage = app.windows().find((p) => p.url().includes('glow.html'));
   await page.evaluate(() => window.buddy.setSettings({ accent: '#FF375F' }));
   await sleep(300);
   const accent = glowPage ? await glowPage.evaluate(() => document.documentElement.style.getPropertyValue('--accent')) : '';
   check(accent.toLowerCase() === '#ff375f', `Rand übernimmt Akzentfarbe (${accent})`);
+  await hook('perceive', 'end');
+  await sleep(50);
+  check((await hook('glowMode')) === 'off', 'Aufgabe zu Ende: Rand sofort aus');
+  await sleep(1200);
+  check(!(await glowWin()), 'Rand-Fenster danach geschlossen (keine Kosten)');
 
   // Pause
   setAudio('pause');
@@ -79,8 +85,6 @@ const helperCount = () => { try { return Number(execSync('pgrep -fc "[f]ake-audi
   check(await hook('musicActive'), 'kurze Stille (< 1,2 s) hält die Anzeige');
   await sleep(1000);
   check(!(await hook('musicActive')) && (await hook('glowMode')) === 'off', 'Pause: zurück in Ruhe');
-  await sleep(1200);
-  check(!(await glowWin()), 'Rand-Fenster danach geschlossen (keine Kosten)');
   const after = await bars();
   check(after.every((v) => v < 0.22), `Balken sanft auf Ruhe (${after.map((v) => v.toFixed(2)).join(', ')})`);
 
@@ -91,12 +95,9 @@ const helperCount = () => { try { return Number(execSync('pgrep -fc "[f]ake-audi
   check(helperCount() === 1, `genau ein Analyse-Prozess (${helperCount()})`);
 
   // Einstellungen
-  await page.evaluate(() => window.buddy.setSettings({ glowMusic: false }));
-  await sleep(400);
-  check((await hook('glowMode')) === 'off', 'Rand zur Musik ausgeschaltet: kein Rand');
   await page.evaluate(() => window.buddy.setSettings({ visualizer: false }));
   await sleep(400);
-  check(!(await hook('audioRunning')) && helperCount() === 0, 'Visualizer und Rand aus: Analyse beendet');
+  check(!(await hook('audioRunning')) && helperCount() === 0, 'Visualizer aus: Analyse beendet');
   await page.evaluate(() => window.buddy.setSettings({ visualizer: true, glowMusic: true }));
   await sleep(500);
   check(await hook('audioRunning'), 'wieder eingeschaltet: Analyse läuft');
