@@ -91,7 +91,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'buddy-local-'));
 }
 // Nur Prozessor: virtuelle Anzeigen werden ignoriert, AdapterRAM ≥ 4 GB gilt als unbekannt
 {
-  const r = hardware.parseWindowsProbe({ video: [{ name: 'Microsoft Basic Display Adapter', status: 'OK' }, { name: 'Parsec Virtual Display Adapter', status: 'OK' }], reg: [], vulkan: false }, []);
+  const r = hardware.parseWindowsProbe({ video: [{ name: 'Microsoft Basic Display Adapter', status: 'OK' }, { name: 'Parsec Virtual Display Adapter', status: 'OK' }, { name: 'Microsoft Hyper-V Video', status: 'OK' }], reg: [], vulkan: false }, []);
   assert.strictEqual(r.gpus.length, 0);
   assert.strictEqual(hardware.pickPrimary(r.gpus), null);
   const r2 = hardware.parseWindowsProbe({ video: [{ name: 'Some GPU', ram: 4293918720, status: 'OK' }], reg: [] }, []);

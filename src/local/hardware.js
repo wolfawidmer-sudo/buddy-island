@@ -179,7 +179,7 @@ function parseWindowsProbe(probe, smi = []) {
   const usedSmi = new Set();
   for (const v of video) {
     const name = String(v?.name || '').trim();
-    if (!name || /basic display|basic render|remote display|virtual|parsec|meta virtual|indirect display|displaylink|citrix|vnc|rdp/i.test(name)) continue;
+    if (!name || /basic display|basic render|remote display|virtual|hyper-v|vmware svga|virtualbox|parsec|meta virtual|indirect display|displaylink|citrix|vnc|rdp/i.test(name)) continue;
     const vendor = vendorOf(name);
     const integrated = isIntegrated(name, vendor);
     // Echter Grafikspeicher aus der Registry (gleiche Bezeichnung), sonst AdapterRAM (max. 4 GB)
