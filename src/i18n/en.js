@@ -1062,4 +1062,10 @@ module.exports = {
   "Unbekannter Fehler.": "Unknown error.",
   "Für die Nutzung aller Keys deiner Organisation braucht Buddy einen Key mit Admin-Rechten, der nicht auf einen Workspace beschränkt ist. Ohne ihn siehst du oben nur Buddys eigene Nutzung.": "To see the usage of all keys in your organization, Buddy needs a key with admin rights that is not limited to a workspace. Without it you only see Buddy's own usage above.",
   "{provider} schaltet {model} am {date} ab. Wähle ein neueres Modell, zum Beispiel {next}.": "{provider} retires {model} on {date}. Choose a newer model, for example {next}.",
+  "Erscheinungsbild": "Appearance",
+  "Dunkel": "Dark",
+  "Hell": "Light",
+  "Lagune": "Lagoon",
+  "Noch keine Anfragen.": "No requests yet.",
+  "Noch keine Aufgaben.": "No tasks yet.",
 };

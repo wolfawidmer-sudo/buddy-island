@@ -19,8 +19,8 @@
       const key = raw.replace(/\s+/g, ' ').trim();
       if (key && I18N.dict[key]) n.nodeValue = raw.replace(raw.trim(), I18N.dict[key]);
     }
-    for (const node of root.querySelectorAll('[placeholder],[title],[aria-label]')) {
-      for (const a of ['placeholder', 'title', 'aria-label']) {
+    for (const node of root.querySelectorAll('[placeholder],[title],[aria-label],[data-tip],[data-empty]')) {
+      for (const a of ['placeholder', 'title', 'aria-label', 'data-tip', 'data-empty']) {
         const v = node.getAttribute(a);
         if (v && I18N.dict[v]) node.setAttribute(a, I18N.dict[v]);
       }
@@ -69,6 +69,7 @@
     workspaceInput: $('workspaceInput'),
     modelSelect: $('modelSelect'),
     effortSeg: $('effortSeg'),
+    themeSeg: $('themeSeg'),
     computerToggle: $('computerToggle'),
     confirmToggle: $('confirmToggle'),
     notifyToggle: $('notifyToggle'),
@@ -258,7 +259,7 @@
 
   const STORE_KEY = 'buddy.chat.v1';
   const MAX_HISTORY = 40;
-  const GAP = 6; // Abstand zum oberen Rand (wie in style.css --gap)
+  const GAP = 6; // Abstand zum oberen Rand (wie in css/tokens.css --island-gap)
   const CLOSED_H = 36 + GAP;
   const PEEK_H = 54 + GAP;
   const NOTCH_H = 12 + GAP;
@@ -1906,14 +1907,61 @@
     Error: t('Nicht verfügbar'),
   };
 
-  // Text auf der Akzentfarbe: Schwarz bei hellen Farben, sonst Weiss
-  function applyAccent(color) {
-    const c = /^#[0-9a-f]{6}$/i.test(color || '') ? color : '#0A84FF';
-    const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255);
-    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    document.documentElement.style.setProperty('--accent', c);
-    document.documentElement.style.setProperty('--on-accent', lum > 0.6 ? '#000' : '#fff');
+  // ---------- Akzentfarbe (Design-Tokens, siehe css/tokens.css) ----------
+  // Aus einer frei gewählten Farbe werden Varianten mit genug Kontrast abgeleitet:
+  //   --accent-text   als Text/Icon auf der Fläche des Themes (mind. 4.5:1)
+  //   --accent-fill   als Fläche (Knopf, Schalter); bei fast unsichtbarer Farbe die Textfarbe
+  //   --on-accent     Text auf dieser Fläche (Schwarz oder Weiss, was besser lesbar ist)
+  //   --accent-on-ink auf dem schwarzen Island (Augen, mind. 3:1)
+  const BRAND_ACCENT = '#4CC9B8';
+  const INK_DARK = '#111215';
+  const INK_LIGHT = '#F3F4F6';
+  const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const rgbHex = (rgb) => '#' + rgb.map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+  const luminance = (rgb) => {
+    const [r, g, b] = rgb.map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+  // Farbe schrittweise zu Weiss bzw. Schwarz mischen, bis der Kontrast reicht
+  function reach(rgb, bg, min) {
+    const toward = luminance(bg) < 0.2 ? [255, 255, 255] : [0, 0, 0];
+    for (let k = 0; k <= 1.0001; k += 0.04) {
+      const mix = rgb.map((v, i) => v + (toward[i] - v) * k);
+      if (contrast(mix, bg) >= min) return mix;
+    }
+    return toward;
   }
+  // Erscheinungsbild: «dark», «light» oder «system» (folgt Windows)
+  const systemLight = window.matchMedia('(prefers-color-scheme: light)');
+  let accentNow = BRAND_ACCENT;
+  function resolvedTheme() {
+    const pref = state.settings?.theme || 'dark';
+    return pref === 'system' ? (systemLight.matches ? 'light' : 'dark') : pref === 'light' ? 'light' : 'dark';
+  }
+  function applyTheme() {
+    const theme = resolvedTheme();
+    if (document.documentElement.dataset.theme !== theme) document.documentElement.dataset.theme = theme;
+    applyAccent(accentNow);
+  }
+  function applyAccent(color) {
+    const c = /^#[0-9a-f]{6}$/i.test(color || '') ? color : BRAND_ACCENT;
+    accentNow = c;
+    const rgb = hexRgb(c);
+    const bg = hexRgb(resolvedTheme() === 'light' ? INK_LIGHT : INK_DARK);
+    const fill = contrast(rgb, bg) >= 1.6 ? rgb : reach(rgb, bg, 3);
+    const onFill = contrast(fill, [0, 0, 0]) >= contrast(fill, [255, 255, 255]) ? '#0b0c0f' : '#ffffff';
+    const root = document.documentElement.style;
+    root.setProperty('--accent', c);
+    root.setProperty('--accent-text', rgbHex(reach(rgb, bg, 4.5)));
+    root.setProperty('--accent-fill', rgbHex(fill));
+    root.setProperty('--on-accent', onFill);
+    root.setProperty('--accent-on-ink', rgbHex(reach(rgb, [0, 0, 0], 3)));
+    // Schalter-Knopf: weiss, ausser auf einer sehr hellen Fläche
+    root.setProperty('--knob', luminance(fill) > 0.7 ? '#0b0c0f' : '#ffffff');
+  }
+  // Wechselt Windows das Theme (bei «System»), Theme und Kontraste neu setzen
+  systemLight.addEventListener('change', applyTheme);
 
   function fillProvider() {
     const s = state.settings;
@@ -2929,6 +2977,11 @@
       b.classList.toggle('on', b.dataset.value === s.effort);
       b.setAttribute('aria-checked', String(b.dataset.value === s.effort));
     }
+    for (const b of el.themeSeg.querySelectorAll('button')) {
+      const on = b.dataset.value === (s.theme || 'dark');
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', String(on));
+    }
     let preset = false;
     for (const b of el.swatches.querySelectorAll('button')) {
       const on = b.dataset.color.toLowerCase() === (s.accent || '').toLowerCase();
@@ -2936,7 +2989,7 @@
       preset = preset || on;
     }
     el.customColor.parentElement.classList.toggle('on', !preset);
-    el.customColor.value = (s.accent || '#0a84ff').toLowerCase();
+    el.customColor.value = (s.accent || BRAND_ACCENT).toLowerCase();
     fillModels();
   }
 
@@ -3073,8 +3126,8 @@
         const bar = node('div', 'budget-bar');
         const fill = node('i');
         fill.style.width = `${Math.min(100, l.usedPercent || 0)}%`;
-        if ((l.usedPercent || 0) >= 90) fill.style.background = 'var(--red)';
-        else if ((l.usedPercent || 0) >= 70) fill.style.background = '#ffd60a';
+        if ((l.usedPercent || 0) >= 90) fill.className = 'bad';
+        else if ((l.usedPercent || 0) >= 70) fill.className = 'warn';
         bar.appendChild(fill);
         const meta = [l.detail, l.resetsAt ? t('setzt zurück {time}', { time: when(l.resetsAt) }) : null, l.asOf ? t('Stand {time}', { time: ago(l.asOf) }) : null, l.note].filter(Boolean).join(' · ');
         lim.append(top, bar, node('small', '', meta));
@@ -3242,7 +3295,8 @@
   async function save(patch) {
     const result = await api.setSettings(patch);
     state.settings = result.settings;
-    applyAccent(state.settings.accent);
+    accentNow = state.settings.accent || BRAND_ACCENT;
+    applyTheme();
     render();
     updateFootnote();
     return result;
@@ -3339,6 +3393,8 @@
   });
   api.onSettingsChanged((s) => {
     state.settings = s;
+    accentNow = s.accent || accentNow;
+    applyTheme();
     if (state.view === 'settings') fillSettings();
     renderEmpty();
     updateFootnote();
@@ -3447,6 +3503,12 @@
     const b = e.target.closest('button');
     if (!b) return;
     await save({ effort: b.dataset.value });
+    fillSettings();
+  });
+  el.themeSeg.addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    await save({ theme: b.dataset.value });
     fillSettings();
   });
   el.nameInput.addEventListener('change', () => save({ name: el.nameInput.value.trim() || t('Buddy') }));
@@ -3828,7 +3890,8 @@
 
   (async function init() {
     state.settings = await api.getSettings();
-    applyAccent(state.settings.accent);
+    accentNow = state.settings.accent || BRAND_ACCENT;
+    applyTheme();
     renderHistory();
     updateSendButton();
     state.timers = await api.getTimers();

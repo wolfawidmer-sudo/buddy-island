@@ -1,6 +1,6 @@
 const {
   app, BrowserWindow, globalShortcut, ipcMain, screen, Tray, Menu,
-  nativeImage, safeStorage, shell, net, clipboard,
+  nativeImage, nativeTheme, safeStorage, shell, net, clipboard,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -73,7 +73,8 @@ const DEFAULTS = {
   customShortcuts: [], // [{ id, keys, prompt, open }]
   sound: true,
   autostart: false,
-  accent: '#F2F2F7',
+  accent: '#4CC9B8', // «Lagune», Buddys Markenfarbe
+  theme: 'dark', // dark | light | system: Erscheinungsbild des offenen Islands (geschlossen immer schwarz)
   computerUse: true,
   confirmControl: true,
   glow: true,
@@ -229,6 +230,11 @@ const startedAt = Date.now();
 // ---------- Einstellungen ----------
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
+
+// Erscheinungsbild: Electron meldet es der Oberfläche als prefers-color-scheme (css/tokens.css)
+function applyTheme() {
+  nativeTheme.themeSource = ['system', 'dark', 'light'].includes(settings.theme) ? settings.theme : 'dark';
+}
 
 function loadSettings() {
   let saved = null;
@@ -1932,6 +1938,10 @@ function setupIpc() {
     // KI-Einstellungen mit Prüfung
     if ('effort' in patch && ['auto', 'low', 'medium', 'high'].includes(patch.effort)) settings.effort = patch.effort;
     if ('autoModel' in patch) settings.autoModel = Boolean(patch.autoModel);
+    if ('theme' in patch && ['system', 'dark', 'light'].includes(patch.theme)) {
+      settings.theme = patch.theme;
+      applyTheme();
+    }
     if ('modelFallback' in patch) settings.modelFallback = Boolean(patch.modelFallback);
     if ('fallbackModels' in patch && Array.isArray(patch.fallbackModels)) {
       settings.fallbackModels = patch.fallbackModels.filter((x) => typeof x === 'string' && /^[\w.:/-]{1,120}$/.test(x)).slice(0, 5);
@@ -2483,6 +2493,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     if (process.platform === 'win32') app.setAppUserModelId('ch.wolfwidmer.buddyisland');
     loadSettings();
+    applyTheme();
     applyLanguage();
     discovery = createDiscovery({ home: os.homedir(), log });
     const runtime = createRuntime('ollama', { remoteFetch: (url, init) => net.fetch(url, init), log });

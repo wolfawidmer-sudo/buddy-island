@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Buddy Island · Styleguide</title>
+  <!-- Lebende Übersicht aller Komponenten und Zustände. Öffnen im Browser;
+       ?theme=light zeigt das helle Theme. Nutzt genau die CSS-Dateien der App. -->
+  <link rel="stylesheet" href="../src/renderer/css/tokens.css">
+  <link rel="stylesheet" href="../src/renderer/css/base.css">
+  <link rel="stylesheet" href="../src/renderer/css/components.css">
+  <link rel="stylesheet" href="../src/renderer/css/island.css">
+  <link rel="stylesheet" href="../src/renderer/css/views.css">
+  <style>
+    html, body { height: auto; overflow: auto; }
+    body { display: block; padding: var(--space-6); background: var(--bg); user-select: text; }
+    .sg { display: grid; grid-template-columns: repeat(2, 468px); gap: var(--space-6); align-items: start; }
+    .sg h2 { margin: 0 0 var(--space-2); font: var(--type-h3); color: var(--text-2); }
+    .line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+    .swatch { width: 56px; height: 40px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--border); }
+    .demo-island { display: flex; gap: var(--space-4); padding: var(--space-4); border-radius: var(--radius-lg); background: #5d6b7c; }
+    .demo-island .island { position: relative; --w: 96px; }
+  </style>
+</head>
+<body>
+  <div class="sg">
+    <section>
+      <h2>Flächen und Text</h2>
+      <div class="line">
+        <div class="swatch" style="background:var(--bg)"></div><div class="swatch" style="background:var(--surface-1)"></div>
+        <div class="swatch" style="background:var(--surface-2)"></div><div class="swatch" style="background:var(--fill-2)"></div>
+        <div class="swatch" style="background:var(--accent-fill)"></div><div class="swatch" style="background:var(--success)"></div>
+        <div class="swatch" style="background:var(--warning)"></div><div class="swatch" style="background:var(--danger)"></div>
+      </div>
+      <p style="font:var(--type-display)">Display 22</p>
+      <p style="font:var(--type-h1)">Überschrift 1 · 18</p>
+      <p style="font:var(--type-h2)">Überschrift 2 · 15</p>
+      <p style="font:var(--type-h3);color:var(--text-2)">Überschrift 3 · 12.5</p>
+      <p>Fliesstext 14 <span style="color:var(--text-2)">sekundär</span> <span style="color:var(--text-3)">gedämpft</span> <span style="color:var(--accent-text)">Akzent</span></p>
+      <p style="font:var(--type-caption);color:var(--text-3)">Bildunterschrift 12 · <span style="font:var(--type-meta)">Metadaten 11</span></p>
+
+      <h2 style="margin-top:24px">Knöpfe</h2>
+      <div class="line">
+        <button class="button primary">Primär</button><button class="button">Standard</button><button class="button quiet">Leise</button>
+        <button class="button danger">Löschen</button>
+      </div>
+      <div class="line">
+        <button class="button small primary">Klein</button><button class="button small">Klein</button>
+        <button class="button" disabled>Deaktiviert</button><button class="button primary" aria-busy="true">Lädt</button>
+        <button class="link">Textknopf</button><button class="link danger">Entfernen</button>
+      </div>
+      <div class="line">
+        <button class="icon-btn" aria-label="Neu" data-tip="Neuer Chat"><svg viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11"/></svg></button>
+        <button class="icon-btn active" aria-label="Einstellungen"><svg viewBox="0 0 20 20"><path d="M3.5 6h8M15.5 6h1M3.5 14h1M8.5 14h8"/><circle cx="13.5" cy="6" r="2"/><circle cx="6.5" cy="14" r="2"/></svg></button>
+        <button class="icon-btn small" aria-label="Schliessen"><svg viewBox="0 0 20 20"><path d="M6 6l8 8M14 6l-8 8"/></svg></button>
+        <button class="send" aria-label="Senden"><svg class="i-send" viewBox="0 0 20 20"><path d="M10 15V5M5.5 9.5L10 5l4.5 4.5"/></svg></button>
+        <button class="send" disabled aria-label="Senden"><svg class="i-send" viewBox="0 0 20 20"><path d="M10 15V5M5.5 9.5L10 5l4.5 4.5"/></svg></button>
+        <span class="spinner"></span>
+      </div>
+
+      <h2 style="margin-top:24px">Eingaben</h2>
+      <div class="line"><input type="text" placeholder="Textfeld"></div>
+      <div class="line"><input type="search" placeholder="Suchen"></div>
+      <div class="line"><input type="text" value="Ungültig" aria-invalid="true"></div>
+      <div class="line">
+        <input class="check" type="checkbox" checked aria-label="a"><input class="check" type="checkbox" aria-label="b">
+        <input class="radio" type="radio" name="r" checked aria-label="c"><input class="radio" type="radio" name="r" aria-label="d">
+        <span class="switch"><input type="checkbox" checked aria-label="e"><span></span></span>
+        <span class="switch"><input type="checkbox" aria-label="f"><span></span></span>
+        <span class="switch small"><input type="checkbox" checked aria-label="g"><span></span></span>
+      </div>
+      <div class="line"><input type="range" style="--fill:62%" value="62" aria-label="Regler"></div>
+      <div class="segmented" style="margin-bottom:12px"><button class="on">Auto</button><button>Schnell</button><button>Normal</button><button>Gründlich</button></div>
+    </section>
+
+    <section>
+      <h2>Liste in einer Karte</h2>
+      <div class="group">
+        <label class="row"><span class="row-label">Schalter</span><span class="switch"><input type="checkbox" checked><span></span></span></label>
+        <label class="row"><span class="row-label">Auswahl</span><select class="row-select"><option>Automatisch</option></select></label>
+        <div class="row"><span class="row-label two">Zwei Zeilen<small>Mit einer Erklärung darunter</small></span><span class="row-value ok">Verbunden</span></div>
+        <div class="row field-row"><input type="password" placeholder="sk-…"><button class="button small primary">Verbinden</button></div>
+        <details class="row disclosure"><summary><span class="row-label">Aufklappen</span><span class="row-value">nur falls nötig</span></summary><input type="text" placeholder="Wert"></details>
+        <button class="row row-button left">Aktion</button>
+        <button class="row row-button left danger">Löschen …</button>
+      </div>
+      <p class="footer">Fussnote unter einer Gruppe.</p>
+
+      <h2 style="margin-top:24px">Badges, Chips, Meldungen</h2>
+      <div class="line"><span class="tag">Neutral</span><span class="tag ok">Live</span><span class="tag warn">Eingeschränkt</span><span class="tag error">Fehler</span><span class="tag accent">Neu</span><span class="tag off">Aus</span></div>
+      <div class="line"><button class="chip">Vorschlag</button><span class="tool-chip">Timer 10:00</span><span class="tool-chip err">Wetter · Fehler</span></div>
+      <div class="notice" style="margin-bottom:8px"><span>Fehler: Keine Verbindung zu Gemini.</span><details class="notice-more"><summary>Details</summary><small class="notice-detail">Gemini · HTTP 503</small></details></div>
+      <div class="notice soft" style="margin-bottom:8px"><span>Hinweis: Buddy antwortet diesmal mit Flash-Lite.</span></div>
+      <div class="notice warning" style="margin-bottom:8px"><span>Warnung: Ausgabenlimit fast erreicht.</span></div>
+      <div class="notice success" style="margin-bottom:12px"><span>Erfolg: Modell heruntergeladen.</span></div>
+      <div class="line" style="display:grid;gap:8px"><div class="progress"><i style="width:40%"></i></div><div class="progress indeterminate"><i></i></div><div class="budget-bar"><i class="warn" style="width:78%"></i></div></div>
+
+      <h2 style="margin-top:24px">Dialog und Menü</h2>
+      <div class="confirm high" style="margin-bottom:12px"><span class="risk">Hohes Risiko · Löschen</span><p class="confirm-title">Buddy möchte etwas Riskantes tun</p><p class="confirm-text">3 Dateien in den Papierkorb verschieben.</p><div class="confirm-actions"><button class="button">Ablehnen</button><button class="button primary">Ja, ausführen</button></div></div>
+      <div style="position:relative;height:120px"><div class="menu" style="position:static;width:200px"><button class="menu-item">Kopieren</button><button class="menu-item">Neu generieren</button><div class="menu-sep"></div><button class="menu-item danger">Löschen</button></div></div>
+
+      <h2 style="margin-top:12px">Island</h2>
+      <div class="demo-island">
+        <div class="island" data-state="idle"><div class="top"><button class="face-btn"><span class="face"><i class="eye"></i><i class="eye"></i></span></button></div></div>
+        <div class="island" data-state="busy"><div class="top"><button class="face-btn"><span class="face"><i class="eye"></i><i class="eye"></i></span></button></div></div>
+        <div class="island" data-state="done"><div class="top"><button class="face-btn"><span class="face"><i class="eye"></i><i class="eye"></i></span></button></div></div>
+        <div class="island" data-state="error"><div class="top"><button class="face-btn"><span class="face"><i class="eye"></i><i class="eye"></i></span></button></div></div>
+      </div>
+    </section>
+  </div>
+  <script>
+    // Theme aus der Adresse (?theme=light); Range-Füllung zeigt den Wert
+    document.documentElement.dataset.theme = new URLSearchParams(location.search).get('theme') === 'light' ? 'light' : 'dark';
+    for (const r of document.querySelectorAll('input[type=range]')) r.addEventListener('input', () => r.style.setProperty('--fill', r.value + '%'));
+  </script>
+</body>
+</html>

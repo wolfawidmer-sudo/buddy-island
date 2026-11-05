@@ -1,0 +1,309 @@
+/* ==========================================================================
+   Buddy Island · Das Island
+   Das zentrale Element. Geschlossen ist es ein Stück Hardware: schwarz, ohne
+   Text, nur Buddys Augen in der Mitte. Offen wird es zur Fläche des Themes.
+
+   Zustände (data-state, gesetzt von app.js)
+     idle    geschlossen, Augen zu (zwei Striche); beim Darüberfahren wach
+     busy    Buddy denkt/antwortet: Augen schauen hin und her
+     control Buddy steuert den PC: wie busy, plus Stopp-Knopf
+     done    fertig: fröhliche Augen ^ ^ (kurzes Hüpfen: .pop)
+     error   Fehler: flache Augen in Gefahrenfarbe
+     timer   Timer läuft: runde Augen, feine Fortschrittslinie unten
+     alarm   Timer abgelaufen: wie timer, Augen wackeln kurz
+     listen  Sprache: hohe Augen, roter Aufnahmepunkt, Stopp
+     music   Musik: Cover links, Pegel rechts, Augen zu
+     peek    Mitteilung: einzige Ausnahme mit Text, ein paar Sekunden
+     notch   minimiert: winzig, bündig am oberen Rand
+   .open = aufgeklappt, .streaming = Antwort läuft, .listening = Mikrofon an
+
+   Stabile Übergänge: Alles im Kopf ist absolut positioniert und an der Mitte
+   verankert. Beim Öffnen wächst der Rahmen symmetrisch, jeder Inhalt bleibt an
+   seinem Platz auf dem Bildschirm und wird nur auf- bzw. zugedeckt. Animiert
+   werden nur Breite/Höhe des Rahmens, Deckkraft und transform.
+   ========================================================================== */
+
+/* ---------- Rahmen ---------- */
+.island {
+  --w: 148px;                 /* geschlossene Breite, von app.js je Zustand gesetzt */
+  position: relative;
+  flex: none;
+  width: var(--w);
+  overflow: hidden;
+  border-radius: var(--island-radius-closed);
+  background: var(--ink);
+  box-shadow: none;
+  touch-action: none;         /* Ziehen am geschlossenen Island ist eine Geste */
+  will-change: width;
+  transform: translateZ(0);
+  transition:
+    width var(--dur-slow) var(--ease-island-close),
+    border-radius var(--dur-slow) var(--ease-island-close),
+    box-shadow var(--dur-slow) var(--ease-island-close),
+    background-color var(--dur-base) var(--ease-island-close) 60ms,
+    transform var(--dur-slow) var(--ease-island-close);
+}
+.island.open {
+  width: var(--island-open-w);
+  max-height: calc(var(--win-h) - var(--island-gap));
+  border-radius: var(--island-radius-open);
+  background: var(--bg);
+  box-shadow: var(--island-edge);
+  touch-action: auto;
+  transition:
+    width var(--dur-island) var(--ease-island-open),
+    border-radius var(--dur-island) var(--ease-standard),
+    box-shadow var(--dur-island) var(--ease-standard),
+    background-color var(--dur-base) var(--ease-standard),
+    transform var(--dur-island) var(--ease-standard);
+}
+.island.dragging, .island.dragging .top { transition: none !important; }
+
+/* ---------- Kopfzeile ---------- */
+.top {
+  position: relative;
+  height: var(--island-closed-h);
+  transition: height var(--dur-slow) var(--ease-island-close);
+}
+.island.open .top { height: var(--island-head-h); transition: height var(--dur-island) var(--ease-island-open); }
+
+/* Augen: geschlossen exakt in der Mitte, offen links neben dem Titel */
+.face-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-round);
+  background: transparent;
+  transform: translate(-50%, -50%);
+  transition: left var(--dur-slow) var(--ease-island-close), opacity var(--dur-base) var(--ease-standard);
+}
+.island.open .face-btn { left: calc(50% - 220px); transition: left var(--dur-island) var(--ease-island-open); }
+.face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--eye-gap);
+  width: 28px;
+  height: 24px;
+  transition: transform var(--dur-island) var(--ease-standard);
+}
+.island.open .face { transform: scale(1.1); }
+
+.eye {
+  display: block;
+  width: var(--eye-w);
+  height: var(--eye-h);
+  border-radius: 3px;
+  background: var(--accent-text);
+  transition: width var(--dur-base) var(--ease-standard), height var(--dur-base) var(--ease-standard),
+    border-radius var(--dur-base) var(--ease-standard), background-color var(--dur-base) var(--ease-standard),
+    transform var(--dur-base) var(--ease-standard);
+}
+.eye.blink { animation: blink 160ms var(--ease-standard); }
+@keyframes blink { 50% { transform: scaleY(0.1); } }
+
+/* Ruhe: geschlossene Augen; beim Darüberfahren blinzelt Buddy wach */
+.island:not(.open):is([data-state="idle"], [data-state="music"], [data-state="notch"]) .eye { width: 9px; height: 2.5px; border-radius: 2px; }
+.island:not(.open)[data-state="idle"]:hover .eye { width: var(--eye-w); height: var(--eye-h); border-radius: 3px; }
+
+/* Denkt / steuert: Augen schauen ruhig hin und her */
+.island:is([data-state="busy"], [data-state="control"]) .eye { animation: look 1.8s var(--ease-standard) infinite; }
+@keyframes look { 0%, 100% { transform: translateX(-1.5px); } 50% { transform: translateX(1.5px); } }
+
+/* Fertig: ^ ^ */
+.island[data-state="done"] .eye {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: transparent;
+  border-top: 2.5px solid var(--accent-text);
+  border-left: 2.5px solid var(--accent-text);
+  transform: translateY(2px) rotate(45deg);
+}
+/* Fehler: flache Augen */
+.island[data-state="error"] .eye { width: 7px; height: 2.5px; background: var(--danger); }
+/* Timer, Alarm, Mitteilung: runde Augen */
+.island:is([data-state="timer"], [data-state="alarm"], [data-state="peek"]) .eye { width: 6px; height: 6px; border-radius: var(--radius-round); }
+/* Zuhören: aufmerksame, hohe Augen */
+.island[data-state="listen"] .eye { height: 13px; }
+
+/* Kurzes Aufhüpfen, wenn etwas fertig ist */
+.island.pop .face { animation: hop 0.5s var(--ease-island-open); }
+@keyframes hop { 30% { transform: translateY(-3px) scale(1.08); } 100% { transform: none; } }
+/* Alarm: Augen wackeln viermal, dann Ruhe */
+.island[data-state="alarm"]:not(.open) .face { animation: wiggle 0.5s var(--ease-standard) 4; }
+@keyframes wiggle { 25% { transform: rotate(-12deg); } 75% { transform: rotate(12deg); } }
+
+/* Titel: nur offen. Er erscheint, wenn der Rahmen fast offen ist, und ist beim Schliessen sofort weg */
+.label {
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 196px);
+  right: calc(50% - 80px);
+  overflow: hidden;
+  font: var(--type-h2);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-1);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+  transform: translateY(-50%);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 60ms linear, visibility 0s linear 60ms;
+}
+.island.open .label { opacity: 1; visibility: visible; transition: opacity var(--dur-base) var(--ease-enter) 160ms, visibility 0s; }
+.island[data-state="error"] .label { color: var(--danger-text); }
+.island:is([data-state="timer"], [data-state="alarm"]) .label { color: var(--accent-text); }
+
+/* Aktionen rechts (Neu, Nutzung, Einstellungen, Schliessen) */
+.actions {
+  position: absolute;
+  top: 50%;
+  right: calc(50% - 238px);
+  display: flex;
+  gap: var(--space-0);
+  transform: translateY(-50%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 60ms linear, visibility 0s linear 60ms;
+}
+.island.open .actions { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity var(--dur-base) var(--ease-enter) 160ms, visibility 0s; }
+
+/* Seitenplätze: links Cover, rechts Pegel, Aufnahmepunkt, Stopp */
+.side {
+  position: absolute;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  transform: translateY(-50%);
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.side-l { left: 9px; }
+.side-r { right: 9px; }
+.island.open .side-l { opacity: 0; pointer-events: none; }
+.island.open .side-r { right: calc(50% - 88px); }
+
+.pill-cover { display: none; width: 22px; height: 22px; border-radius: var(--radius-sm); object-fit: cover; }
+.island:not(.open)[data-state="music"] .pill-cover.has { display: block; }
+
+/* Musik-Pegel: echte Frequenzbänder, nur per transform skaliert (Compositor, 60 FPS) */
+.eq { display: none; align-items: center; gap: var(--space-0); height: 14px; }
+.island:not(.open)[data-state="music"] .eq { display: flex; }
+.eq i {
+  width: 3px;
+  height: 100%;
+  border-radius: 1.5px;
+  background: var(--accent-text);
+  transform-origin: 50% 50%;   /* wächst aus der Mitte: in Ruhe auf Augenhöhe */
+  transform: scaleY(0.18);
+  will-change: transform;
+  transition: transform 0.3s var(--ease-standard);
+}
+.island.viz-live .eq i { transition: none; }
+.island[data-state="music"].paused .eq i { transform: scaleY(0.2) !important; opacity: 0.6; }
+
+/* Aufnahmepunkt beim Zuhören */
+.mic-dot { display: none; width: 8px; height: 8px; border-radius: var(--radius-round); background: var(--danger); animation: ping 1.4s var(--ease-standard) infinite; }
+.island[data-state="listen"] .mic-dot { display: block; }
+@keyframes ping {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 55%, transparent); }
+  80%, 100% { box-shadow: 0 0 0 6px transparent; }
+}
+
+/* Stopp: während Buddy den PC steuert oder zuhört */
+.stop { display: none; width: 26px; height: 26px; background: var(--fill-2); }
+.stop i { width: 9px; height: 9px; border-radius: 2px; background: var(--text-1); }
+.stop:hover { background: var(--danger); }
+.stop:hover i { background: var(--on-status); }
+.island[data-state="control"] .stop,
+.island[data-state="listen"]:not(.open) .stop { display: grid; }
+.island.open .stop { margin-right: var(--space-1); }
+
+/* Timer-Fortschritt: feine Linie unten im geschlossenen Island */
+.pill-progress {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 4px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent-text);
+  transform-origin: left;
+  transform: scaleX(var(--progress, 0));
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-standard), transform 1s linear;
+}
+.island:not(.open):is([data-state="timer"], [data-state="alarm"]) .pill-progress { opacity: 0.9; }
+
+/* Mitteilung: zwei Zeilen Text, nur ein paar Sekunden */
+.peek {
+  position: absolute;
+  top: 50%;
+  left: 48px;
+  right: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+  transform: translateY(-50%);
+  animation: fade-in var(--dur-base) var(--ease-enter);
+}
+.peek-app { overflow: hidden; font: var(--type-meta); color: var(--text-2); white-space: nowrap; text-overflow: ellipsis; }
+.peek-text { overflow: hidden; font: 600 13px/16px var(--font-text); color: var(--text-1); white-space: nowrap; text-overflow: ellipsis; }
+.island:not(.open)[data-state="peek"] { border-radius: var(--island-radius-peek); }
+.island:not(.open)[data-state="peek"] .top { height: var(--island-head-h); }
+.island:not(.open)[data-state="peek"] .face-btn { left: 26px; }
+.island.open .peek { display: none; }
+
+/* Minimiert (Notch): bündig am oberen Rand, ohne Inhalt. Das Island ragt 2 px über
+   den Fensterrand hinaus und wird dort abgeschnitten: kein Subpixel-Spalt. */
+.island[data-state="notch"]:not(.open) {
+  border-radius: 0 0 var(--island-radius-notch) var(--island-radius-notch);
+  transform: translateY(calc(-1 * var(--island-gap) - 2px));
+}
+.island[data-state="notch"]:not(.open) .top { height: 14px; }
+.island[data-state="notch"]:not(.open) .face-btn { opacity: 0; }
+.island[data-state="notch"]:not(.open) :is(.side, .pill-progress) { opacity: 0; pointer-events: none; }
+
+/* ---------- Aufklappbereich ----------
+   Feste Spalte in voller Breite, mittig im Raster: der Inhalt bricht beim
+   Aufziehen nie neu um, er wird nur aufgedeckt. */
+.body {
+  display: grid;
+  grid-template-rows: 0fr;
+  grid-template-columns: var(--island-open-w);
+  justify-content: center;
+  transition: grid-template-rows var(--dur-slow) var(--ease-island-close);
+}
+.island.open .body { grid-template-rows: 1fr; transition: grid-template-rows var(--dur-island) var(--ease-island-open); }
+.body-inner {
+  width: var(--island-open-w);
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 80ms linear;
+}
+.island.open .body-inner { opacity: 1; transition: opacity var(--dur-base) var(--ease-enter) 140ms; }
+
+.view { padding: 0 var(--view-x) var(--view-x); }
+
+/* ---------- Höhe: höchstens 75 % des Bildschirms ----------
+   Das Fenster ist schon begrenzt (main.js). Im offenen Island ist der Chat eine Spalte:
+   Kopf oben, Eingabe unten fest, dazwischen teilen sich Karten und Unterhaltung den
+   Platz und scrollen selbst. Das Eingabefeld wird nie abgeschnitten. */
+.island.open #chatView:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: calc(var(--win-h) - var(--island-gap) - 58px);
+}
+.settings-scroll { max-height: min(520px, max(180px, calc(var(--win-h) - 146px))); }

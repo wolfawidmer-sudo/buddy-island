@@ -1,0 +1,236 @@
+/* ==========================================================================
+   Buddy Island · Design-Tokens
+   Die einzige Quelle für Farben, Schrift, Abstände, Formen, Tiefe und Bewegung.
+   Komponenten und Ansichten benutzen nur diese Variablen, keine eigenen Werte.
+
+   Formsprache «Lagune»
+   - Tinte statt Schwarz: offene Flächen sind ein tiefes, leicht kühles Graphit.
+     Nur das geschlossene Island ist reines Schwarz, wie ein Teil der Hardware.
+   - Konzentrische Radien: jede innere Rundung ist die äussere minus den Abstand
+     dazwischen (Island 32 → Karte 16 → Bedienelement 10 → Inline 6).
+   - Ein einziges Signal: die Akzentfarbe gehört Buddys Augen, dem Fokus und dem,
+     was gerade aktiv ist. Status (ok, Warnung, Fehler) hat eigene, ruhige Farben.
+
+   Die Akzentfarbe wählt man in den Einstellungen. app.js setzt --accent und leitet
+   daraus --accent-text, --accent-fill, --on-accent und --accent-on-ink ab
+   (jeweils mit genug Kontrast zum aktuellen Hintergrund).
+   ========================================================================== */
+
+:root {
+  /* ---------- Marke ---------- */
+  --brand-lagoon: #4cc9b8;          /* Standard-Akzent «Lagune» */
+  --accent: var(--brand-lagoon);
+  --accent-text: #6bd6c7;           /* Akzent als Text/Icon auf der Fläche (von app.js nachgeführt) */
+  --accent-fill: var(--accent);     /* Akzent als Fläche (Knöpfe, Schalter) */
+  --on-accent: #06211d;             /* Text auf --accent-fill */
+  --accent-on-ink: var(--accent);   /* Akzent auf dem schwarzen Island (Augen) */
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+
+  /* ---------- Flächen (dunkel) ---------- */
+  --ink: #000;                      /* geschlossenes Island, Notch */
+  --bg: #111215;                    /* offenes Island, Ebene 0 */
+  --surface-1: #1b1c20;             /* Karten, Gruppen, Eingabe */
+  --surface-2: #26272c;             /* erhöht: Hover in Listen, Popover, Menü */
+  --surface-3: #313238;             /* ausgewähltes Segment */
+  --fill-1: rgba(160, 166, 184, 0.14);   /* Bedienflächen: Knopf, Chip, Feld */
+  --fill-2: rgba(160, 166, 184, 0.24);   /* Hover/aktiv darauf */
+  --fill-3: rgba(160, 166, 184, 0.34);
+  --separator: rgba(255, 255, 255, 0.075);
+  --border: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --scrim: rgba(0, 0, 0, 0.5);
+
+  /* ---------- Text (dunkel) ---------- */
+  --text-1: #f2f3f5;                         /* primär, ≥ 13:1 */
+  --text-2: rgba(232, 235, 242, 0.68);       /* sekundär, ≥ 6.5:1 */
+  --text-3: rgba(232, 235, 242, 0.54);       /* gedämpft, Metadaten, ≥ 4.5:1 auf allen Flächen */
+  --text-4: rgba(232, 235, 242, 0.40);       /* nur Platzhalter und deaktiviert, ≥ 3:1 */
+
+  /* ---------- Status (dunkel) ---------- */
+  --success: #3ccf86;
+  --warning: #f2b544;
+  --danger: #ff5d55;
+  --success-text: #5fdc9c;
+  --warning-text: #f5c66a;
+  --danger-text: #ff8a83;
+  --success-soft: rgba(60, 207, 134, 0.14);
+  --warning-soft: rgba(242, 181, 68, 0.14);
+  --danger-soft: rgba(255, 93, 85, 0.14);
+  --info-soft: var(--fill-1);
+  --on-status: #fff;
+
+  /* Fokus: immer sichtbar, unabhängig von der Akzentfarbe gut lesbar */
+  --focus-ring: color-mix(in srgb, var(--accent-text) 85%, #fff);
+
+  /* Code-Hervorhebung */
+  --code-keyword: #8fb4ff;
+  --code-string: #8fd6a2;
+  --code-number: #e6b673;
+  --code-comment: var(--text-3);
+
+  /* Musik-Cover ohne Bild, Schalter-Knopf */
+  --knob: #fff;
+
+  /* ---------- Schrift ---------- */
+  --font-text: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+
+  /*                    Grösse / Zeilenhöhe / Gewicht / Laufweite */
+  --type-display: 650 22px/28px var(--font-display);   /* Willkommen, grosse Zahl */
+  --type-h1: 650 18px/24px var(--font-display);        /* Bereich in den Einstellungen */
+  --type-h2: 600 15px/20px var(--font-display);        /* Kartentitel, Dialogtitel, Island-Titel */
+  --type-h3: 600 12.5px/16px var(--font-text);         /* Abschnitt über einer Gruppe */
+  --type-body: 400 14px/20px var(--font-text);
+  --type-body-strong: 600 14px/20px var(--font-text);
+  --type-body-2: 400 13px/18px var(--font-text);       /* sekundärer Text, Listen */
+  --type-label: 600 13px/18px var(--font-text);        /* Knöpfe, Tabs */
+  --type-caption: 400 12px/16px var(--font-text);      /* Fussnoten, Untertitel */
+  --type-meta: 400 11px/14px var(--font-text);         /* Zeit, Quelle, Tokens */
+  --type-badge: 600 11px/16px var(--font-text);
+  --type-code: 400 12.5px/1.55 var(--font-mono);
+  --tracking-display: -0.012em;
+  --tracking-tight: -0.004em;
+  --tracking-badge: 0.01em;
+
+  /* ---------- Abstände: 4er-Raster (2 nur für Feinheiten) ---------- */
+  --space-0: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  /* ---------- Masse ---------- */
+  --control-sm: 28px;      /* kleiner Knopf, Chip, Tag in Zeilen */
+  --control-md: 36px;      /* Standardknopf, Eingabefeld */
+  --control-lg: 44px;      /* Listenzeile, grosses Ziel */
+  --icon-btn: 32px;
+  --icon-sm: 14px;
+  --icon-md: 18px;
+  --icon-lg: 20px;
+  --icon-stroke: 1.75;
+  --icon-stroke-sm: 2;
+  --row-x: var(--space-4); /* Innenabstand links/rechts in Gruppen */
+  --row-min: var(--control-lg);
+  --view-x: var(--space-4);/* Rand der Ansichten im offenen Island */
+
+  /* ---------- Formen: konzentrisch ---------- */
+  --radius-xs: 4px;        /* Fortschrittsbalken, Mini-Marken */
+  --radius-sm: 6px;        /* Inline-Code, Mini-Cover, Kurz-Tags */
+  --radius-md: 10px;       /* Knöpfe, Felder, Segmente */
+  --radius-lg: 16px;       /* Karten und Gruppen (= Island 32 − Rand 16) */
+  --radius-xl: 22px;       /* Eingabezeile (pillenartig bei einer Zeile) */
+  --radius-pill: 999px;    /* Chips, Badges, Schalter */
+  --radius-round: 50%;     /* Icon-Knöpfe, Avatare */
+
+  /* ---------- Tiefe: im Dunkeln über Flächentöne, Schatten nur wo nötig ---------- */
+  --shadow-0: none;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28);                                        /* Schalter-Knopf, gewähltes Segment */
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.36), 0 0 0 1px var(--border);              /* Tooltip, Popover, Menü */
+  --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.42), 0 0 0 1px var(--border);             /* Dialog */
+  --island-edge: none;                                                              /* Rand des offenen Islands */
+  --card-edge: none;                                                                /* Kontur der Karten (nur hell) */
+
+  /* ---------- Ebenen ---------- */
+  --z-sticky: 3;
+  --z-island-head: 4;
+  --z-popover: 20;
+  --z-tooltip: 30;
+
+  /* ---------- Bewegung ---------- */
+  --dur-press: 90ms;       /* Druck auf einen Knopf */
+  --dur-fast: 150ms;       /* Hover, Farbe */
+  --dur-base: 220ms;       /* Zustandswechsel, Einblenden */
+  --dur-slow: 340ms;       /* Zuklappen, Island schliessen */
+  --dur-island: 460ms;     /* Island öffnen */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);      /* Zustandswechsel */
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);      /* Hereinkommen: schnell, weich auslaufend */
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);          /* Hinausgehen: zügig */
+  --ease-island-open: cubic-bezier(0.32, 1.12, 0.5, 1); /* ein Hauch Federung: das Island «sitzt» */
+  --ease-island-close: cubic-bezier(0.4, 0, 0.2, 1);
+  --enter-distance: 4px;   /* Einblenden: so weit kommt etwas von unten */
+  --press-scale: 0.97;
+
+  /* ---------- Island ---------- */
+  --island-gap: 6px;           /* Abstand zum oberen Bildschirmrand */
+  --island-closed-h: 36px;
+  --island-head-h: 54px;
+  --island-open-w: 500px;
+  --island-radius-closed: 18px;  /* = halbe Höhe: Pille */
+  --island-radius-open: 32px;
+  --island-radius-peek: 27px;
+  --island-radius-notch: 11px;
+  --island-pad: var(--space-4);
+  --eye-w: 5px;
+  --eye-h: 11px;
+  --eye-gap: 6px;
+
+  --win-h: 666px;              /* Fensterhöhe, von app.js gesetzt */
+  color-scheme: dark;
+}
+
+/* ---------- Helles Theme ----------
+   Klar und gut lesbar, nicht grell: ein gebrochenes Weiss als Grund,
+   reines Weiss nur für Karten, Tiefe über feine Linien statt Schatten.
+   app.js setzt data-theme auf <html> (Einstellung «Erscheinungsbild»;
+   bei «System» nach der Windows-Einstellung). */
+:root[data-theme="light"] {
+  --accent-text: #0b7a6e;
+  --on-accent: #06211d;
+  --bg: #f3f4f6;
+  --surface-1: #ffffff;
+  --surface-2: #eceef1;
+  --surface-3: #ffffff;
+  --fill-1: rgba(22, 28, 40, 0.06);
+  --fill-2: rgba(22, 28, 40, 0.10);
+  --fill-3: rgba(22, 28, 40, 0.16);
+  --separator: rgba(22, 28, 40, 0.09);
+  --border: rgba(22, 28, 40, 0.10);
+  --border-strong: rgba(22, 28, 40, 0.18);
+  --scrim: rgba(22, 28, 40, 0.28);
+
+  --text-1: #15171c;
+  --text-2: rgba(21, 23, 28, 0.70);
+  --text-3: rgba(21, 23, 28, 0.62);
+  --text-4: rgba(21, 23, 28, 0.46);
+
+  --success: #1f9d5c;
+  --warning: #c27c0e;
+  --danger: #d93a32;
+  --success-text: #12733f;
+  --warning-text: #95600a;
+  --danger-text: #c0302a;
+  --success-soft: rgba(31, 157, 92, 0.11);
+  --warning-soft: rgba(194, 124, 14, 0.12);
+  --danger-soft: rgba(217, 58, 50, 0.10);
+
+  --focus-ring: color-mix(in srgb, var(--accent-text) 90%, #000);
+
+  --code-keyword: #2f5fd0;
+  --code-string: #1b7f45;
+  --code-number: #9a5b06;
+
+  --shadow-1: 0 1px 2px rgba(22, 28, 40, 0.16), 0 0 0 0.5px rgba(22, 28, 40, 0.06);
+  --shadow-2: 0 8px 22px rgba(22, 28, 40, 0.14), 0 0 0 1px var(--border);
+  --shadow-3: 0 14px 36px rgba(22, 28, 40, 0.18), 0 0 0 1px var(--border);
+  --island-edge: 0 0 0 1px rgba(22, 28, 40, 0.10), 0 10px 28px rgba(22, 28, 40, 0.16);
+  --card-edge: inset 0 0 0 1px rgba(22, 28, 40, 0.06);
+  color-scheme: light;
+}
+
+/* Das geschlossene Island ist immer Hardware-Schwarz, auch im hellen Theme:
+   dort gelten die dunklen Text- und Flächenwerte. */
+.island:not(.open) {
+  --text-1: #f2f3f5;
+  --text-2: rgba(232, 235, 242, 0.68);
+  --text-3: rgba(232, 235, 242, 0.54);
+  --fill-1: rgba(160, 166, 184, 0.14);
+  --fill-2: rgba(160, 166, 184, 0.24);
+  --fill-3: rgba(160, 166, 184, 0.34);
+  --danger: #ff5d55;
+  --accent-text: var(--accent-on-ink);
+}

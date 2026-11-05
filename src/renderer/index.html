@@ -5,7 +5,12 @@
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none';">
   <title>Buddy Island</title>
-  <link rel="stylesheet" href="style.css">
+  <!-- Design-System: Tokens → Basis → Komponenten → Island → Ansichten -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/island.css">
+  <link rel="stylesheet" href="css/views.css">
 </head>
 <body>
   <main id="island" class="island" data-state="idle">
@@ -17,8 +22,6 @@
       <span class="label" id="label">Buddy</span>
       <span class="peek" id="peek" hidden><span class="peek-app" id="peekApp"></span><span class="peek-text" id="peekText"></span></span>
       <span class="side side-r">
-        <span class="meter" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span class="badge" aria-hidden="true"></span>
         <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
         <span class="mic-dot" aria-hidden="true"></span>
         <button class="stop" id="stopBtn" type="button" title="Stoppen" aria-label="Stoppen"><i></i></button>
@@ -26,16 +29,16 @@
       <i class="pill-progress" id="pillProgress" aria-hidden="true"></i>
 
       <div class="actions">
-        <button class="icon-btn" id="newBtn" type="button" title="Neuer Chat (Strg+N)" aria-label="Neuer Chat">
+        <button class="icon-btn" id="newBtn" type="button" data-tip="Neuer Chat (Strg+N)" data-tip-align="end" aria-label="Neuer Chat">
           <svg viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11"/></svg>
         </button>
-        <button class="icon-btn" id="usageBtn" type="button" title="KI-Nutzung" aria-label="KI-Nutzung">
+        <button class="icon-btn" id="usageBtn" type="button" data-tip="KI-Nutzung" data-tip-align="end" aria-label="KI-Nutzung">
           <svg viewBox="0 0 20 20"><path d="M4 16V11M8.5 16V6M13 16v-7M17 16V4"/></svg>
         </button>
-        <button class="icon-btn" id="settingsBtn" type="button" title="Einstellungen (Strg+,)" aria-label="Einstellungen">
+        <button class="icon-btn" id="settingsBtn" type="button" data-tip="Einstellungen (Strg+,)" data-tip-align="end" aria-label="Einstellungen">
           <svg viewBox="0 0 20 20"><path d="M3.5 6h8M15.5 6h1M3.5 14h1M8.5 14h8"/><circle cx="13.5" cy="6" r="2"/><circle cx="6.5" cy="14" r="2"/></svg>
         </button>
-        <button class="icon-btn" id="closeBtn" type="button" title="Schliessen (Esc)" aria-label="Schliessen">
+        <button class="icon-btn" id="closeBtn" type="button" data-tip="Schliessen (Esc)" data-tip-align="end" aria-label="Schliessen">
           <svg viewBox="0 0 20 20"><path d="M6 8.5l4 4 4-4"/></svg>
         </button>
       </div>
@@ -53,12 +56,12 @@
             <span class="now-cover now-cover-empty" id="nowCoverEmpty"><svg viewBox="0 0 20 20"><path d="M8 14.5V5l7-1.5v9.5"/><circle cx="6" cy="14.5" r="2"/><circle cx="13" cy="13" r="2"/></svg></span>
             <div class="now-text"><span class="now-title" id="nowTitle"></span><span class="now-sub" id="nowSub"></span></div>
             <div class="now-controls">
-              <button type="button" class="icon-btn" data-media="previous" aria-label="Zurück"><svg viewBox="0 0 20 20"><path d="M6 5v10M15 5l-6.5 5 6.5 5z"/></svg></button>
+              <button type="button" class="icon-btn" data-media="previous" aria-label="Zurück"><svg viewBox="0 0 20 20"><path d="M6 5v10"/><path class="fill" d="M15.5 5.2v9.6a.6.6 0 0 1-.95.5L8.4 10.5a.6.6 0 0 1 0-1l6.15-4.8a.6.6 0 0 1 .95.5z"/></svg></button>
               <button type="button" class="icon-btn play" data-media="playpause" aria-label="Wiedergabe oder Pause">
-                <svg class="i-play" viewBox="0 0 20 20"><path d="M7 4.5l9 5.5-9 5.5z"/></svg>
-                <svg class="i-pause" viewBox="0 0 20 20"><path d="M7 5v10M13 5v10"/></svg>
+                <svg class="i-play" viewBox="0 0 20 20"><path class="fill" d="M6.5 4.6v10.8a.7.7 0 0 0 1.06.6l8.7-5.4a.7.7 0 0 0 0-1.2l-8.7-5.4a.7.7 0 0 0-1.06.6z"/></svg>
+                <svg class="i-pause" viewBox="0 0 20 20"><rect class="fill" x="5.5" y="4.5" width="3" height="11" rx="1"/><rect class="fill" x="11.5" y="4.5" width="3" height="11" rx="1"/></svg>
               </button>
-              <button type="button" class="icon-btn" data-media="next" aria-label="Weiter"><svg viewBox="0 0 20 20"><path d="M14 5v10M5 5l6.5 5L5 15z"/></svg></button>
+              <button type="button" class="icon-btn" data-media="next" aria-label="Weiter"><svg viewBox="0 0 20 20"><path d="M14 5v10"/><path class="fill" d="M4.5 5.2v9.6a.6.6 0 0 0 .95.5l6.15-4.8a.6.6 0 0 0 0-1L5.45 4.7a.6.6 0 0 0-.95.5z"/></svg></button>
             </div>
           </div>
           <div class="inbox agenda" id="agenda" hidden>
@@ -126,7 +129,7 @@
 
           <form class="composer" id="composer" autocomplete="off">
             <textarea id="input" rows="1" placeholder="Frag Buddy etwas" spellcheck="false"></textarea>
-            <button class="mic" id="micBtn" type="button" aria-label="Sprechen" title="Sprechen">
+            <button class="mic" id="micBtn" type="button" aria-label="Sprechen" data-tip="Sprechen">
               <svg viewBox="0 0 20 20"><rect x="7.5" y="3" width="5" height="9" rx="2.5"/><path d="M5 9.5a5 5 0 0 0 10 0M10 14.5V17"/></svg>
             </button>
             <button class="send" id="sendBtn" type="submit" aria-label="Senden">
@@ -419,7 +422,7 @@
               <div id="modelUsage"></div>
               <details class="row disclosure" id="recentBox">
                 <summary><span class="row-label">Letzte Anfragen</span><span class="row-value" id="recentCount"></span></summary>
-                <div class="mini-list" id="recentList"></div>
+                <div class="mini-list" id="recentList" data-empty="Noch keine Anfragen."></div>
               </details>
               <button type="button" class="row row-button left danger" id="usageReset">Statistik zurücksetzen</button>
             </div>
@@ -467,7 +470,7 @@
                 <span class="row-label">Verlauf speichern</span>
                 <span class="switch"><input type="checkbox" id="historyToggle"><span></span></span>
               </label>
-              <div id="historyList" class="history"></div>
+              <div id="historyList" class="history" data-empty="Noch keine Aufgaben."></div>
               <button type="button" class="row row-button left danger" id="historyClear">Verlauf löschen</button>
             </div>
             <p class="footer">Bleibt auf diesem PC. Gespeichert werden ein kurzer Titel, die Schritte, Modelle und Kosten, aber keine Antworten.</p>
@@ -510,6 +513,14 @@
 
             <h3 class="section">Darstellung und Ton</h3>
             <div class="group">
+              <div class="row stacked">
+                <span class="row-label">Erscheinungsbild</span>
+                <div class="segmented" id="themeSeg" role="radiogroup" aria-label="Erscheinungsbild">
+                  <button type="button" role="radio" data-value="system">System</button>
+                  <button type="button" role="radio" data-value="dark">Dunkel</button>
+                  <button type="button" role="radio" data-value="light">Hell</button>
+                </div>
+              </div>
               <label class="row">
                 <span class="row-label">Ton, wenn etwas fertig ist</span>
                 <span class="switch"><input type="checkbox" id="soundToggle"><span></span></span>
@@ -542,6 +553,7 @@
               <div class="row stacked">
                 <span class="row-label">Akzentfarbe</span>
                 <div class="swatches" id="swatches">
+                  <button type="button" data-color="#4CC9B8" style="--c:#4CC9B8" aria-label="Lagune" title="Lagune"></button>
                   <button type="button" data-color="#F2F2F7" style="--c:#F2F2F7" aria-label="Weiss" title="Weiss"></button>
                   <button type="button" data-color="#8E8E93" style="--c:#8E8E93" aria-label="Grau" title="Grau"></button>
                   <button type="button" data-color="#0A84FF" style="--c:#0A84FF" aria-label="Blau" title="Blau"></button>

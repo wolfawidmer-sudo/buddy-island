@@ -1,0 +1,702 @@
+/* ==========================================================================
+   Buddy Island · Komponenten
+   Jede Komponente gibt es genau einmal. Ältere Klassennamen aus app.js und
+   index.html sind hier als Aliase derselben Komponente aufgeführt.
+
+   Zustände überall gleich:
+   hover   → eine Stufe mehr Fläche (fill-1 → fill-2) oder Text heller
+   active  → leicht eingedrückt (scale), sofort
+   focus   → Fokusring (base.css), nur per Tastatur
+   disabled→ 40 % Deckkraft, keine Reaktion
+   loading → aria-busy="true": Spinner statt Inhalt, Grösse bleibt
+   error   → aria-invalid="true" bzw. Status «danger»
+   selected→ .on / .active / aria-pressed / aria-selected / :checked
+   ========================================================================== */
+
+/* ---------- Knopf ---------- */
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--control-md);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--fill-1);
+  color: var(--text-1);
+  font: var(--type-label);
+  white-space: nowrap;
+  transition: background-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard),
+    opacity var(--dur-fast) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
+}
+.button:hover { background: var(--fill-2); }
+.button:active { transform: scale(var(--press-scale)); }
+.button.primary { background: var(--accent-fill); color: var(--on-accent); }
+.button.primary:hover { background: color-mix(in srgb, var(--accent-fill) 86%, var(--text-1)); }
+.button.danger { background: var(--danger); color: var(--on-status); }
+.button.danger:hover { background: color-mix(in srgb, var(--danger) 86%, var(--text-1)); }
+.button.quiet { background: transparent; color: var(--accent-text); }
+.button.quiet:hover { background: var(--fill-1); }
+.button.small { min-height: var(--control-sm); padding: 0 var(--space-3); font: var(--type-label); }
+.button:disabled, .button[aria-disabled="true"] { opacity: 0.4; pointer-events: none; }
+.button[aria-busy="true"] { color: transparent; pointer-events: none; }
+.button[aria-busy="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-round);
+  border: 2px solid currentColor;
+  border-color: var(--text-2) var(--text-2) transparent transparent;
+  animation: spin 0.8s linear infinite;
+}
+.button.primary[aria-busy="true"]::after { border-color: var(--on-accent) var(--on-accent) transparent transparent; }
+
+/* ---------- Textknopf / Link ---------- */
+.link, .link-btn {
+  display: inline;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent-text);
+  font: inherit;
+  border-radius: var(--radius-xs);
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.link:hover, .link-btn:hover { text-decoration: underline; text-underline-offset: 2px; }
+.link:active, .link-btn:active { opacity: 0.7; }
+.link.danger { color: var(--danger-text); }
+.link:disabled { opacity: 0.4; pointer-events: none; }
+
+/* ---------- Icon-Knopf (auch Mikrofon, Senden, Stopp, Timer schliessen) ---------- */
+.icon-btn, .mic, .send, .stop, .timer button {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--icon-btn);
+  height: var(--icon-btn);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-round);
+  background: transparent;
+  color: var(--text-2);
+  transition: background-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard),
+    transform var(--dur-press) var(--ease-standard);
+}
+.icon-btn:hover, .mic:hover { background: var(--fill-1); color: var(--text-1); }
+.icon-btn:active, .mic:active, .send:active, .stop:active, .timer button:active { transform: scale(0.92); }
+.icon-btn.active, .icon-btn[aria-pressed="true"] { color: var(--accent-text); }
+.icon-btn:disabled { opacity: 0.4; pointer-events: none; }
+
+/* klein: in Karten (Timer schliessen, Kopieren) */
+.timer button, .icon-btn.small { width: var(--control-sm); height: var(--control-sm); background: var(--fill-1); }
+.timer button:hover, .icon-btn.small:hover { background: var(--fill-2); color: var(--text-1); }
+.timer button svg, .icon-btn.small svg { width: var(--icon-sm); height: var(--icon-sm); stroke-width: var(--icon-stroke-sm); }
+
+/* Senden: die einzige gefüllte Aktion in der Eingabezeile */
+.send { width: var(--control-sm); height: var(--control-sm); background: var(--accent-fill); color: var(--on-accent); }
+.send svg { width: 16px; height: 16px; stroke-width: var(--icon-stroke-sm); }
+.send:disabled { background: var(--fill-2); color: var(--text-4); }
+.mic { width: var(--control-sm); height: var(--control-sm); }
+
+/* ---------- Tooltip (für Icon-Knöpfe): data-tip, nach kurzer Pause ---------- */
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 50%;
+  z-index: var(--z-tooltip);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-2);
+  color: var(--text-1);
+  font: var(--type-meta);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -2px);
+  transition: opacity var(--dur-fast) var(--ease-exit), transform var(--dur-fast) var(--ease-exit);
+}
+[data-tip]:hover::after, [data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition: opacity var(--dur-fast) var(--ease-enter) 500ms, transform var(--dur-fast) var(--ease-enter) 500ms;
+}
+[data-tip][data-tip-align="end"]::after { left: auto; right: 0; transform: translateY(-2px); }
+[data-tip][data-tip-align="end"]:hover::after, [data-tip][data-tip-align="end"]:focus-visible::after { transform: none; }
+
+/* ---------- Eingabefelder ---------- */
+input[type="text"], input[type="password"], input[type="number"], input[type="search"], input[type="url"],
+.settings textarea, .textarea {
+  width: 100%;
+  min-height: var(--control-md);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--fill-1);
+  color: var(--text-1);
+  font: var(--type-body);
+  user-select: text;
+  transition: border-color var(--dur-fast) var(--ease-standard), background-color var(--dur-fast) var(--ease-standard);
+}
+input[type="text"]:hover, input[type="password"]:hover, input[type="number"]:hover, input[type="search"]:hover,
+.settings textarea:hover { background: var(--fill-2); }
+input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus, input[type="search"]:focus,
+.settings textarea:focus, .textarea:focus {
+  outline: none;
+  border-color: var(--focus-ring);
+  background: var(--fill-1);
+}
+input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--danger); }
+input:disabled, textarea:disabled, select:disabled { opacity: 0.4; }
+input::placeholder, textarea::placeholder { color: var(--text-4); opacity: 1; }
+.settings textarea, .textarea { resize: vertical; min-height: 80px; line-height: 20px; }
+input[type="number"]::-webkit-inner-spin-button { opacity: 0.5; }
+
+/* Suchfeld: Lupe links */
+input[type="search"] {
+  padding-left: calc(var(--space-3) + 18px);
+  background-image: radial-gradient(circle at 6px 6px, transparent 4.2px, var(--text-3) 4.4px, var(--text-3) 5.6px, transparent 5.8px),
+    linear-gradient(45deg, transparent 47%, var(--text-3) 47%, var(--text-3) 60%, transparent 60%);
+  background-size: 14px 14px, 5px 5px;
+  background-position: var(--space-3) 50%, calc(var(--space-3) + 9px) calc(50% + 4.5px);
+  background-repeat: no-repeat;
+}
+
+/* Feld direkt in einer Zeile: ohne Fläche, rechtsbündig */
+input.row-input {
+  max-width: 180px;
+  min-height: 0;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  text-align: right;
+}
+input.row-input:is(:hover, :focus) { background: transparent; border: 0; color: var(--text-1); }
+
+/* ---------- Auswahl (Dropdown in einer Zeile) ---------- */
+.row-select, .select {
+  appearance: none;
+  max-width: 230px;
+  min-height: var(--control-sm);
+  padding: var(--space-1) calc(var(--space-4) + 2px) var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background-color: transparent;
+  color: var(--text-2);
+  font: var(--type-body);
+  text-align: right;
+  text-align-last: right;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-3) 50%), linear-gradient(135deg, var(--text-3) 50%, transparent 50%);
+  background-position: calc(100% - 9px) 52%, calc(100% - 4px) 52%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  transition: background-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+}
+.row-select:hover, .select:hover { background-color: var(--fill-1); color: var(--text-1); }
+.row-select:disabled { opacity: 0.4; background-color: transparent; }
+.row-select option, .select option { background: var(--surface-2); color: var(--text-1); }
+.select { text-align: left; text-align-last: left; background-color: var(--fill-1); min-height: var(--control-md); padding-left: var(--space-3); }
+
+/* ---------- Schalter ---------- */
+.switch { position: relative; flex: none; width: 42px; height: 26px; }
+.switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; }
+.switch span {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-pill);
+  background: var(--fill-3);
+  pointer-events: none;
+  transition: background-color var(--dur-base) var(--ease-standard);
+}
+.switch span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-round);
+  background: var(--knob);
+  box-shadow: var(--shadow-1);
+  transition: transform var(--dur-base) var(--ease-standard), width var(--dur-press) var(--ease-standard);
+}
+.switch input:active + span::after { width: 24px; }
+.switch input:checked + span { background: var(--accent-fill); }
+.switch input:checked + span::after { transform: translateX(16px); }
+.switch input:checked:active + span::after { transform: translateX(12px); }
+.switch input:focus-visible + span { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.switch input:disabled + span { opacity: 0.4; }
+.switch.small { width: 34px; height: 20px; }
+.switch.small span::after { top: 2px; left: 2px; width: 16px; height: 16px; }
+.switch.small input:active + span::after { width: 19px; }
+.switch.small input:checked + span::after { transform: translateX(14px); }
+.switch.small input:checked:active + span::after { transform: translateX(11px); }
+
+/* ---------- Checkbox und Radio ---------- */
+.check, .radio {
+  appearance: none;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 5px;
+  background: transparent;
+  transition: background-color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+.radio { border-radius: var(--radius-round); }
+.check:hover, .radio:hover { border-color: var(--text-3); }
+.check:checked, .radio:checked { border-color: var(--accent-fill); background: var(--accent-fill); }
+.check:checked::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  margin-top: -2px;
+  border-left: 2px solid var(--on-accent);
+  border-bottom: 2px solid var(--on-accent);
+  transform: rotate(-45deg);
+}
+.radio:checked::after { content: ""; width: 6px; height: 6px; border-radius: var(--radius-round); background: var(--on-accent); }
+.check:disabled, .radio:disabled { opacity: 0.4; }
+.check[aria-invalid="true"], .radio[aria-invalid="true"] { border-color: var(--danger); }
+
+/* ---------- Schieberegler ---------- */
+input[type="range"] {
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  --fill: 50%;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(to right, var(--accent-fill) var(--fill), var(--fill-2) var(--fill));
+}
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: var(--radius-round);
+  background: var(--knob);
+  box-shadow: var(--shadow-1);
+  transition: transform var(--dur-press) var(--ease-standard);
+}
+input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
+input[type="range"]:focus-visible { outline: none; }
+input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+input[type="range"]:disabled { opacity: 0.4; }
+
+/* ---------- Segmente / Tabs (auch Bereichsleiste der Einstellungen) ---------- */
+.segmented, .cat-nav {
+  display: flex;
+  gap: var(--space-0);
+  padding: var(--space-0);
+  border-radius: var(--radius-md);
+  background: var(--fill-1);
+}
+.segmented button, .cat-nav button {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--control-sm);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: calc(var(--radius-md) - var(--space-0));
+  background: transparent;
+  color: var(--text-2);
+  font: var(--type-label);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+.segmented button:hover, .cat-nav button:hover { color: var(--text-1); }
+.segmented button.on, .cat-nav button.on, .segmented button[aria-checked="true"], .segmented button[aria-selected="true"] {
+  background: var(--surface-3);
+  color: var(--text-1);
+  box-shadow: var(--shadow-1);
+}
+.segmented button:disabled { opacity: 0.4; }
+
+/* ---------- Badge / Tag ---------- */
+.tag, .role, .risk, .health-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: var(--space-1);
+  min-height: 18px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--fill-1);
+  color: var(--text-2);
+  font: var(--type-badge);
+  letter-spacing: var(--tracking-badge);
+  white-space: nowrap;
+}
+:is(.tag, .role, .health-badge).ok, .reco.current .role { background: var(--success-soft); color: var(--success-text); }
+:is(.tag, .health-badge).warn, .tag.partial { background: var(--warning-soft); color: var(--warning-text); }
+:is(.tag, .health-badge).bad, .tag.error, .confirm.high .risk { background: var(--danger-soft); color: var(--danger-text); }
+.tag.setup, .tag.accent { background: var(--accent-soft); color: var(--accent-text); }
+.tag.unavailable, .tag.empty, .tag.off, .health-badge.skip { background: transparent; color: var(--text-3); box-shadow: inset 0 0 0 1px var(--separator); }
+
+/* ---------- Chip: Vorschlag (Knopf) und Status (Werkzeug) ---------- */
+.chip, .tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--fill-1);
+  color: var(--text-1);
+  font: var(--type-body-2);
+}
+.chip { transition: background-color var(--dur-fast) var(--ease-standard), transform var(--dur-press) var(--ease-standard); }
+.chip:hover { background: var(--fill-2); }
+.chip:active { transform: scale(var(--press-scale)); }
+.tool-chip { min-height: 24px; padding: 0 var(--space-2) 0 var(--space-2); color: var(--text-2); font: var(--type-caption); animation: enter var(--dur-base) var(--ease-enter); }
+.tool-chip::before { content: ""; width: 6px; height: 6px; border-radius: var(--radius-round); background: var(--success); }
+.tool-chip.err::before { background: var(--danger); }
+
+/* ---------- Statuspunkt ---------- */
+.dot, .hist-dot, .tool-item i, .route .tier {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-round);
+  background: var(--text-4);
+}
+
+/* ---------- Karte ---------- */
+.card, .group, .ucard, .local-card, .now, .inbox, .timer, .plan, .confirm, .codeblock {
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  box-shadow: var(--card-edge);
+}
+
+/* ---------- Liste in einer Karte: Zeilen mit Trennlinien ---------- */
+.group { overflow: hidden; }
+.row, .reco, .hist, .tool-item, .usage-row, .memory-item, .memory-empty, .custom-sc, .note, .urow, .ulimit, .health-step {
+  position: relative;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-min);
+  padding: var(--space-1) var(--row-x);
+}
+/* Trennlinie oben, eingerückt; nicht an der ersten Zeile einer Liste */
+:is(.group, .inbox-list) :is(.row, .reco, .hist, .tool-item, .usage-row, .memory-item, .memory-empty, .custom-sc, .note)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--row-x);
+  right: 0;
+  border-top: 1px solid var(--separator);
+  pointer-events: none;
+}
+:is(.group, .inbox-list) > :is(.row, .reco, .hist, .tool-item, .usage-row, .memory-item, .memory-empty, .custom-sc, .note):first-child::before,
+.group > :first-child > :is(.row, .reco, .hist, .tool-item, .usage-row, .memory-item, .memory-empty, .custom-sc, .note):first-child::before,
+.group > :is(:empty, [hidden]):first-child + :is(.row, .reco, .hist, .tool-item, .usage-row, .memory-item, .memory-empty, .custom-sc, .note)::before,
+.group > :is(:empty, [hidden]):first-child + * > :is(.row, .reco, .hist, .tool-item, .usage-row, .memory-item, .memory-empty, .custom-sc, .note):first-child::before,
+.disclosure > summary + * > .row:first-child::before { display: none; }
+/* Zeilen in einer aufgeklappten Zeile haben selbst eine Trennlinie zum Titel */
+.disclosure > summary + * > .row:first-child::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--row-x);
+  right: 0;
+  border-top: 1px solid var(--separator);
+}
+
+.row.stacked { flex-direction: column; align-items: stretch; gap: var(--space-2); padding: var(--space-3) var(--row-x); }
+.row-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row.stacked .row-label { white-space: normal; }
+.row-label.two { display: flex; flex-direction: column; gap: var(--space-0); white-space: normal; padding: var(--space-1) 0; }
+.row-label.two small { font: var(--type-caption); color: var(--text-3); }
+.row-value { min-width: 0; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-value.ok { color: var(--success-text); }
+.row-value.bad { color: var(--danger-text); }
+.row .button.small { flex: none; }
+.field-row { gap: var(--space-2); padding-block: var(--space-2); }
+.field-row input { flex: 1; min-height: var(--control-sm); padding-block: var(--space-1); }
+
+/* Zeile als Knopf */
+.row-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: var(--type-body);
+  justify-content: center;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+.row-button:hover { background: var(--fill-1); }
+.row-button:active { background: var(--fill-2); }
+.row-button.left { justify-content: flex-start; color: var(--accent-text); }
+.row-button.danger, .row-button.left.danger { color: var(--danger-text); }
+.row-button:disabled { opacity: 0.4; pointer-events: none; }
+.row-button:focus-visible, .row:focus-visible, .disclosure summary:focus-visible { outline-offset: -2px; border-radius: var(--radius-lg); }
+
+/* Abschnitt über einer Gruppe, Fussnote darunter, Bereichstitel */
+.section {
+  margin: var(--space-6) var(--row-x) var(--space-2);
+  font: var(--type-h3);
+  color: var(--text-2);
+}
+.section:first-child { margin-top: var(--space-1); }
+.footer {
+  margin: var(--space-2) var(--row-x) 0;
+  font: var(--type-caption);
+  color: var(--text-3);
+}
+.footer:empty { display: none; }
+.footer + .footer { margin-top: var(--space-1); }
+.footer.err { color: var(--danger-text); }
+.footer.ok { color: var(--success-text); }
+.footer a { color: var(--text-2); text-decoration: underline; text-decoration-color: var(--text-4); text-underline-offset: 2px; }
+.category {
+  margin: var(--space-7) var(--space-1) var(--space-1);
+  font: var(--type-h1);
+  letter-spacing: var(--tracking-display);
+}
+.category + .section { margin-top: var(--space-3); }
+
+/* ---------- Aufklappen ---------- */
+.disclosure { display: block; padding: 0; }
+.disclosure summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-min);
+  padding: var(--space-1) var(--row-x);
+  list-style: none;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+.disclosure summary:hover { background: var(--fill-1); }
+.disclosure summary::-webkit-details-marker { display: none; }
+.disclosure summary::after, .more summary::after {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: 2px;
+  border-right: 1.75px solid var(--text-3);
+  border-bottom: 1.75px solid var(--text-3);
+  transform: rotate(-45deg);
+  transition: transform var(--dur-base) var(--ease-standard);
+}
+.disclosure[open] summary::after { transform: rotate(45deg); }
+.disclosure[open] > summary + * { animation: fade-in var(--dur-base) var(--ease-enter); }
+.disclosure input { display: block; width: calc(100% - 2 * var(--row-x)); margin: 0 var(--row-x) var(--space-3); }
+
+/* «Details» unter einer Meldung: technische Angaben erst auf Wunsch */
+.notice-more, .health-more { flex-basis: 100%; font: var(--type-meta); }
+.notice-more summary, .health-more summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-3);
+  list-style: none;
+  border-radius: var(--radius-xs);
+}
+.notice-more summary:hover, .health-more summary:hover { color: var(--text-2); }
+.notice-more summary::-webkit-details-marker, .health-more summary::-webkit-details-marker { display: none; }
+.notice-more summary::after, .health-more summary::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--dur-base) var(--ease-standard);
+}
+.notice-more[open] summary::after, .health-more[open] summary::after { transform: rotate(45deg) translate(-1px, -1px); }
+.notice-detail, .health-more small { display: block; margin-top: var(--space-1); font: var(--type-meta); color: var(--text-3); overflow-wrap: anywhere; user-select: text; font-variant-numeric: tabular-nums; }
+
+/* ---------- Meldung (Fehler, Hinweis, Erfolg, Warnung) ---------- */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--danger-soft);
+  color: var(--danger-text);
+  font: var(--type-body-2);
+  user-select: text;
+  animation: enter var(--dur-base) var(--ease-enter);
+}
+.notice > span { flex: 1; min-width: 0; }
+.notice.soft, .notice.info { background: var(--fill-1); color: var(--text-2); }
+.notice.success { background: var(--success-soft); color: var(--success-text); }
+.notice.warning { background: var(--warning-soft); color: var(--warning-text); }
+.notice .notice-more summary { color: inherit; opacity: 0.75; }
+.notice .notice-detail { color: inherit; opacity: 0.75; }
+
+/* ---------- Fortschritt (Tätigkeit) und Pegel (Menge) ---------- */
+.progress, .setup-progress, #emptyProgress, .budget-bar {
+  position: relative;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--fill-2);
+  overflow: hidden;
+}
+.progress i, .setup-progress i, #emptyBar, .budget-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--accent-fill);
+  transition: width var(--dur-slow) var(--ease-standard);
+}
+.progress.indeterminate i, .setup-progress.indeterminate i { width: 30%; animation: indeterminate 1.3s var(--ease-standard) infinite; }
+@keyframes indeterminate { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+/* Pegel: neutral, ab 70 % Warnung, ab 90 % bzw. am Limit Gefahr */
+.budget-bar i { background: var(--text-2); }
+.budget-bar i.warn, .budget.warn .budget-bar i { background: var(--warning); }
+.budget-bar i.bad, .budget.tight .budget-bar i, .budget.blocked .budget-bar i { background: var(--danger); }
+
+.spinner {
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-round);
+  border: 2px solid var(--fill-3);
+  border-top-color: var(--accent-text);
+  animation: spin 0.8s linear infinite;
+}
+
+/* Tippt gerade: drei ruhige Punkte */
+.typing { display: inline-flex; gap: var(--space-1); padding: var(--space-2) var(--space-0); }
+.typing i { width: 6px; height: 6px; border-radius: var(--radius-round); background: var(--text-3); animation: typing 1.2s var(--ease-standard) infinite; }
+.typing i:nth-child(2) { animation-delay: 0.15s; }
+.typing i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typing { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
+
+/* Schreibmarke beim Streamen */
+.cursor::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: var(--space-0);
+  vertical-align: -0.15em;
+  border-radius: 1px;
+  background: var(--accent-text);
+  animation: caret 1s steps(2) infinite;
+}
+@keyframes caret { 50% { opacity: 0; } }
+
+/* ---------- Popover, Menü, Dialog ---------- */
+.popover, .menu {
+  position: absolute;
+  z-index: var(--z-popover);
+  min-width: 180px;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-2);
+  animation: popover-in var(--dur-fast) var(--ease-enter);
+}
+@keyframes popover-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--control-sm);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: calc(var(--radius-md) - var(--space-1));
+  background: transparent;
+  color: var(--text-1);
+  font: var(--type-body-2);
+  text-align: left;
+}
+.menu-item:hover, .menu-item:focus-visible { background: var(--fill-1); outline: none; }
+.menu-item.danger { color: var(--danger-text); }
+.menu-item:disabled { opacity: 0.4; }
+.menu-sep { height: 1px; margin: var(--space-1) var(--space-2); background: var(--separator); }
+
+/* Dialog im Fluss (z. B. Freigabe vor einer Aktion) */
+.dialog, .confirm {
+  padding: var(--space-4);
+  animation: enter var(--dur-base) var(--ease-enter);
+}
+.dialog-title, .confirm-title { margin: 0 0 var(--space-1); font: var(--type-h2); letter-spacing: var(--tracking-tight); }
+.dialog-text, .confirm-text { margin: 0 0 var(--space-3); color: var(--text-2); font: var(--type-body-2); }
+.dialog-actions, .confirm-actions { display: flex; gap: var(--space-2); }
+.dialog-actions .button, .confirm-actions .button { flex: 1; }
+.confirm .risk { margin: 0 0 var(--space-2); }
+.confirm.high { box-shadow: var(--card-edge), inset 0 0 0 1px color-mix(in srgb, var(--danger) 40%, transparent); }
+.confirm.high .button.primary { background: var(--danger); color: var(--on-status); }
+.confirm-detail {
+  margin: calc(-1 * var(--space-1)) 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--fill-1);
+  color: var(--text-2);
+  font: 400 12px/1.45 var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+/* ---------- Tastenkürzel (Tastenkappe als Knopf) ---------- */
+.hotkey {
+  flex: none;
+  min-width: 96px;
+  min-height: var(--control-sm);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--fill-1);
+  color: var(--text-2);
+  font: var(--type-body-2);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  transition: background-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+.hotkey:hover { background: var(--fill-2); color: var(--text-1); }
+.hotkey.empty { color: var(--text-3); }
+.hotkey.recording { color: var(--accent-text); box-shadow: inset 0 0 0 1.5px var(--accent-text); }
+
+/* ---------- Farbwahl ---------- */
+.swatches { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.swatches button, .custom-color {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-round);
+  background: var(--c);
+  box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--surface-1), 0 0 0 3.5px transparent;
+  transition: box-shadow var(--dur-fast) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
+}
+.swatches button:active { transform: scale(0.9); }
+.swatches button.on { box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--surface-1), 0 0 0 3.5px var(--text-1); }
+.custom-color { background: conic-gradient(#ff5d55, #f2b544, #ffd84a, #3ccf86, #4cc9b8, #3d8bff, #b066f2, #ff5d8a, #ff5d55); }
+.custom-color.on { box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 3.5px var(--text-1); }
+.custom-color input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; }
+
+/* ---------- Leerzustand ---------- */
+.empty-state { display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-6) var(--space-4); text-align: center; color: var(--text-3); font: var(--type-body-2); }
+.empty-state b { color: var(--text-1); font: var(--type-h2); }

@@ -1073,4 +1073,10 @@ module.exports = {
   "Unbekannter Fehler.": "Erreur inconnue.",
   "Für die Nutzung aller Keys deiner Organisation braucht Buddy einen Key mit Admin-Rechten, der nicht auf einen Workspace beschränkt ist. Ohne ihn siehst du oben nur Buddys eigene Nutzung.": "Pour l'utilisation de toutes les clés de ton organisation, Buddy a besoin d'une clé avec droits admin non limitée à un workspace. Sans elle, tu ne vois ci-dessus que l'utilisation propre de Buddy.",
   "{provider} schaltet {model} am {date} ab. Wähle ein neueres Modell, zum Beispiel {next}.": "{provider} retire {model} le {date}. Choisis un modèle plus récent, par exemple {next}.",
+  "Erscheinungsbild": "Apparence",
+  "Dunkel": "Sombre",
+  "Hell": "Clair",
+  "Lagune": "Lagon",
+  "Noch keine Anfragen.": "Aucune requête pour l’instant.",
+  "Noch keine Aufgaben.": "Aucune tâche pour l’instant.",
 };

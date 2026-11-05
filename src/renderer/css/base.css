@@ -1,0 +1,97 @@
+/* ==========================================================================
+   Buddy Island · Basis
+   Grundregeln für alle Elemente: Schrift, Fokus, Auswahl, Icons, Scrollbalken,
+   reduzierte Bewegung. Keine Komponenten, keine Ansichten.
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: var(--island-gap);
+  font: var(--type-body);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-1);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; letter-spacing: inherit; }
+button { cursor: default; }
+
+a { color: var(--accent-text); text-decoration: none; border-radius: var(--radius-xs); }
+a:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+::selection { background: color-mix(in srgb, var(--accent) 34%, transparent); color: inherit; }
+
+/* Fokus: nur bei Tastaturbedienung, immer gleich */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Icons: eine Strichstärke, runde Enden, Farbe vom Text */
+svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--icon-stroke);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+svg.icon-sm { width: var(--icon-sm); height: var(--icon-sm); stroke-width: var(--icon-stroke-sm); }
+svg .fill { fill: currentColor; stroke: none; }
+
+/* Zahlen in Tabellen und Zeiten springen nicht */
+.num, time { font-variant-numeric: tabular-nums; }
+
+/* Scrollbalken: schmal, ohne Pfeile, nur Daumen */
+* { scrollbar-width: auto; scrollbar-color: auto; }
+::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--fill-2); border-radius: var(--radius-xs); }
+::-webkit-scrollbar-thumb:hover { background: var(--fill-3); }
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-corner { display: none; background: transparent; }
+
+/* Gemeinsame Einblende-Bewegung für neue Inhalte */
+@keyframes enter {
+  from { opacity: 0; transform: translateY(var(--enter-distance)); }
+}
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Bewegung reduzieren: Übergänge bleiben als kurzes Überblenden, nichts bewegt sich */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Nur für Screenreader */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
