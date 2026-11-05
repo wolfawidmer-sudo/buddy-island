@@ -32,8 +32,8 @@
 
 :root {
   /* ---------- Marke ---------- */
-  --brand-lagoon: #8ee0d2;          /* Lagune hell: Standard-Akzent, die Augen */
-  --accent: var(--brand-lagoon);
+  --brand-lagoon: #8ee0d2;          /* Lagune hell: wählbare Markenfarbe */
+  --accent: #f2f2f7;                /* Standard-Akzent Weiss (app.js setzt die gewählte Farbe) */
   --accent-text: var(--accent);     /* Akzent als Text/Icon auf der Fläche (von app.js nachgeführt) */
   --accent-fill: var(--accent);     /* Akzent als Fläche (Knöpfe, Schalter) */
   --on-accent: #04110f;             /* Text auf --accent-fill */

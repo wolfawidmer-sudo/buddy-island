@@ -2,6 +2,19 @@
   "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Für Kundinnen und Kunden geschrieben: Nutzen statt Technik, keine Fachbegriffe.",
   "versions": [
     {
+      "version": "0.11.1",
+      "highlights": [
+        {
+          "title": "Dieselbe Schrift wie die Website",
+          "text": "Überschriften in Buddy sehen jetzt aus wie auf der Website, der Text bleibt in der vertrauten Windows-Schrift."
+        },
+        {
+          "title": "Weiss als Standardfarbe",
+          "text": "Buddys Augen sind wieder weiss. «Lagune» und die anderen Farben findest du weiterhin unter Einstellungen › Akzentfarbe."
+        }
+      ]
+    },
+    {
       "version": "0.11.0",
       "since": "0.7.1",
       "highlights": [

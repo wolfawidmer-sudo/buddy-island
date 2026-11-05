@@ -1913,7 +1913,7 @@
   //   --accent-fill   als Fläche (Knopf, Schalter); bei fast unsichtbarer Farbe die Textfarbe
   //   --on-accent     Text auf dieser Fläche (Schwarz oder Weiss, was besser lesbar ist)
   //   --accent-on-ink auf dem schwarzen Island (Augen, mind. 3:1)
-  const BRAND_ACCENT = '#8EE0D2';
+  const BRAND_ACCENT = '#F2F2F7';
   const INK_DARK = '#000000';
   const INK_LIGHT = '#F7F8F7';
   const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));

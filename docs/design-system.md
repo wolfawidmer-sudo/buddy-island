@@ -27,7 +27,7 @@ Buddy ist ein kleiner Begleiter, der im oberen Bildschirmrand wohnt: eine schwar
    | Statuspunkte, Meldungen | senkrechte Kapsel |
    | Schalter an (dunkles Theme) | dunkles «Auge» auf heller Lagune |
 
-4. **Ein Signal.** Lagune (`#8EE0D2`, entsättigt) gehört den Augen, dem Fokus und dem, was gerade aktiv ist. Alles andere bleibt Nebel auf Schwarz.
+4. **Ein Signal.** Die Akzentfarbe gehört den Augen, dem Fokus und dem, was gerade aktiv ist. Standard ist Weiss (`#F2F2F7`); «Lagune» (`#8EE0D2`) und weitere Farben sind wählbar. Alles andere bleibt Nebel auf Schwarz.
 5. **Bewegung antwortet.** Es gibt eine orchestrierte Folge beim Öffnen:
    - Der Rahmen wächst, die Augen reiten auf der Kante nach links.
    - Danach erscheint der Inhalt, zuletzt der Titel, wenn die Augen angekommen sind.
@@ -51,7 +51,8 @@ Buddy ist ein kleiner Begleiter, der im oberen Bildschirmrand wohnt: eine schwar
 | Tinte | `#000000` | `#F7F8F7` (Papier) | Fläche des Islands |
 | Graphit | `#161618` | `#ECEEED` | Bedienflächen |
 | Nebel | `#E9ECEB` | `#121816` | Text |
-| Lagune | `#8EE0D2` | `#0B6F64` (abgeleitet) | Augen, Fokus, aktiv |
+| Akzent (Standard Weiss) | `#F2F2F7` | abgeleitet für Kontrast | Augen, Fokus, aktiv |
+| Lagune (wählbar) | `#8EE0D2` | `#0B6F64` (abgeleitet) | Markenfarbe |
 | Koralle | `#FF7A6B` | `#CF3E30` | Fehler, Gefahr |
 | Bernstein | `#F2C14E` | `#B07208` | Warnung |
 | Seegras | `#5ED39A` | `#1D8A55` | Erfolg |
