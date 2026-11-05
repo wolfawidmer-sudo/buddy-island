@@ -1,7 +1,7 @@
 {
   "name": "buddy-island",
   "productName": "Buddy Island",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Ein kleiner Claude-Assistent im Dynamic-Island-Stil für Windows: Chat, Timer, Musik, Kalender, Mitteilungen, Sprache und PC-Steuerung.",
   "main": "src/main.js",
   "author": "Wolf Widmer",

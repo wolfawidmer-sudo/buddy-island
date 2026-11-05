@@ -2,6 +2,28 @@
   "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Für Kundinnen und Kunden geschrieben: Nutzen statt Technik, keine Fachbegriffe.",
   "versions": [
     {
+      "version": "0.11.0",
+      "since": "0.7.1",
+      "highlights": [
+        {
+          "title": "Ein ruhigeres Aussehen",
+          "text": "Buddy ist jetzt offen wie geschlossen eine schwarze Insel. Weniger Kästen, mehr Ruhe: Inhalte stehen direkt da, und Buddys Augen zeigen, was gerade aktiv ist."
+        },
+        {
+          "title": "Leichter zu lesen",
+          "text": "Eine neue Schrift, gemacht für gute Lesbarkeit, auch bei kleinen Texten. Sie ist in Buddy eingebaut und braucht kein Internet."
+        },
+        {
+          "title": "Hell oder dunkel",
+          "text": "Unter Einstellungen › Erscheinungsbild wählst du Dunkel, Hell oder wie Windows. Geschlossen bleibt die Insel immer schwarz."
+        },
+        {
+          "title": "Neue Farbe «Lagune»",
+          "text": "Buddys neue Standardfarbe für die Augen. Jede Akzentfarbe bleibt jetzt in Hell und Dunkel gut lesbar."
+        }
+      ]
+    },
+    {
       "version": "0.10.0",
       "highlights": [
         {
