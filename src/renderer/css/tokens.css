@@ -12,45 +12,22 @@
    - Das Auge ist das Motiv: Die Kapselform der Augen markiert Zustände
      (aktiver Tab, Planschritte, Tippen, Statuspunkte).
    - Ein Signal: Lagune gehört den Augen, dem Fokus und dem, was gerade aktiv ist.
-   - Eine Schrift: Atkinson Hyperlegible Next, gebaut für Lesbarkeit kleiner Texte;
-     Atkinson Hyperlegible Mono nur für Code und Protokolle.
+   - Schriften wie auf der Website: Bricolage Grotesque für Überschriften,
+     Segoe UI Variable für Text, Cascadia Mono für Code.
 
    app.js setzt --accent (Einstellung «Akzentfarbe») und leitet --accent-text,
    --accent-fill, --on-accent, --accent-on-ink und --knob mit genug Kontrast ab.
    ========================================================================== */
 
-/* ---------- Schriften (OFL, liegen im Programm, kein Netz nötig) ---------- */
+/* ---------- Schriften: dieselben wie auf der Website ----------
+   Überschriften Bricolage Grotesque (OFL, liegt im Programm), Text Segoe UI Variable
+   (Windows), Code Cascadia Mono (Windows). */
 @font-face {
-  font-family: "Atkinson Hyperlegible Next";
+  font-family: "Bricolage Grotesque";
   font-style: normal;
   font-weight: 200 800;
   font-display: block;
-  src: url("../fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2") format("woff2-variations");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: "Atkinson Hyperlegible Next";
-  font-style: normal;
-  font-weight: 200 800;
-  font-display: block;
-  src: url("../fonts/atkinson-hyperlegible-next-latin-ext-wght-normal.woff2") format("woff2-variations");
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-  font-family: "Atkinson Hyperlegible Next";
-  font-style: italic;
-  font-weight: 200 800;
-  font-display: swap;
-  src: url("../fonts/atkinson-hyperlegible-next-latin-wght-italic.woff2") format("woff2-variations");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC;
-}
-@font-face {
-  font-family: "Atkinson Hyperlegible Mono";
-  font-style: normal;
-  font-weight: 200 800;
-  font-display: swap;
-  src: url("../fonts/atkinson-hyperlegible-mono-latin-wght-normal.woff2") format("woff2-variations");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC;
+  src: url("../fonts/bricolage-grotesque.woff2") format("woff2-variations");
 }
 
 :root {
@@ -108,16 +85,16 @@
   --knob: #e9eceb;
 
   /* ---------- Schrift ---------- */
-  --font-text: "Atkinson Hyperlegible Next", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --font-display: var(--font-text);
-  --font-mono: "Atkinson Hyperlegible Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+  --font-text: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
 
   /* Skala nach Bringhurst (11 · 12 · 13 · 14 · 16 · 20 · 26), Zeilenhöhe auf 4er-Raster.
      Gewichte bewusst: 400 Lesen, 560 Bedienen, 680 Titel, 760 die eine grosse Zeile. */
-  --type-display: 760 26px/30px var(--font-display);   /* «Hoi, ich bin Buddy.» */
-  --type-h1: 680 20px/24px var(--font-display);        /* Bereich in den Einstellungen */
-  --type-h2: 680 16px/20px var(--font-display);        /* Island-Titel, Dialogtitel */
-  --type-h3: 600 13px/16px var(--font-text);           /* Abschnitt über einer Liste */
+  --type-display: 700 27px/30px var(--font-display);   /* «Hoi, ich bin Buddy.» */
+  --type-h1: 650 20px/24px var(--font-display);        /* Bereich in den Einstellungen */
+  --type-h2: 650 16px/20px var(--font-display);        /* Island-Titel, Dialogtitel */
+  --type-h3: 650 13.5px/16px var(--font-display);           /* Abschnitt über einer Liste */
   --type-body: 400 14px/20px var(--font-text);
   --type-body-strong: 600 14px/20px var(--font-text);
   --type-body-2: 400 13px/18px var(--font-text);
@@ -126,7 +103,7 @@
   --type-meta: 400 11px/14px var(--font-text);
   --type-badge: 600 11px/16px var(--font-text);
   --type-code: 400 12.5px/1.6 var(--font-mono);
-  --tracking-display: -0.022em;
+  --tracking-display: -0.02em;
   --tracking-tight: -0.006em;
   --tracking-badge: 0.01em;
 

@@ -69,18 +69,16 @@ So bleibt jede Farbe in beiden Themes lesbar. Das geschlossene Island ist immer 
 
 ## Schrift
 
-**Atkinson Hyperlegible Next** (variabel 200–800) für alles, **Atkinson Hyperlegible Mono** nur für Code und Protokolle. Beide stehen unter der OFL, liegen in `src/renderer/fonts/` und brauchen kein Netz.
-
-Die Schrift ist für Lesbarkeit kleiner Texte gebaut und unterscheidet I, l, 1 und 0, O deutlich (die Null ist durchgestrichen). Das passt zu einem Helfer, der vor allem kleine Texte zeigt.
+Dieselben Schriften wie auf der Website: **Bricolage Grotesque** für Überschriften (Display, Bereich, Titel, Abschnitte; OFL, liegt in `src/renderer/fonts/`), **Segoe UI Variable** für Text und Bedienelemente (in Windows eingebaut), **Cascadia Mono** für Code und Protokolle.
 
 Skala nach Bringhurst:
 
 | Token | Grösse/Zeile | Gewicht | Wofür |
 |---|---|---|---|
-| `--type-display` | 26/30 | 760 | «Hoi, ich bin Buddy.» als die eine grosse Zeile |
-| `--type-h1` | 20/24 | 680 | Bereich |
-| `--type-h2` | 16/20 | 680 | Island-Titel, Dialog |
-| `--type-h3` | 13/16 | 600 | Abschnitt |
+| `--type-display` | 27/30 | 700 | «Hoi, ich bin Buddy.» als die eine grosse Zeile |
+| `--type-h1` | 20/24 | 650 | Bereich |
+| `--type-h2` | 16/20 | 650 | Island-Titel, Dialog |
+| `--type-h3` | 13.5/16 | 650 | Abschnitt |
 | `--type-body` | 14/20 | 400 | Fliesstext (Antworten 21 px Zeile, max. 68 Zeichen) |
 | `--type-body-2` | 13/18 | 400 | Listen |
 | `--type-label` | 13/16 | 560 | Knöpfe, Tabs |

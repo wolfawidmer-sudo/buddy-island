@@ -502,7 +502,7 @@
   // ---------- Fenstergrösse (spart CPU: geschlossen = nur so gross wie das Island) ----------
 
   const measure = document.createElement('span');
-  measure.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:600 13px/1 "Atkinson Hyperlegible Next","Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums';
+  measure.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:600 13px/1 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums';
   document.body.appendChild(measure);
 
   function textWidth(text) {
