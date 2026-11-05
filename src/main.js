@@ -73,7 +73,7 @@ const DEFAULTS = {
   customShortcuts: [], // [{ id, keys, prompt, open }]
   sound: true,
   autostart: false,
-  accent: '#4CC9B8', // «Lagune», Buddys Markenfarbe
+  accent: '#8EE0D2', // «Lagune», Buddys Markenfarbe (die Augen)
   theme: 'dark', // dark | light | system: Erscheinungsbild des offenen Islands (geschlossen immer schwarz)
   computerUse: true,
   confirmControl: true,

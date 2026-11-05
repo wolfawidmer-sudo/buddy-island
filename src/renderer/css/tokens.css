@@ -1,99 +1,136 @@
 /* ==========================================================================
-   Buddy Island · Design-Tokens
+   Buddy Island · Design-Tokens «Nachtinsel»
    Die einzige Quelle für Farben, Schrift, Abstände, Formen, Tiefe und Bewegung.
    Komponenten und Ansichten benutzen nur diese Variablen, keine eigenen Werte.
 
-   Formsprache «Lagune»
-   - Tinte statt Schwarz: offene Flächen sind ein tiefes, leicht kühles Graphit.
-     Nur das geschlossene Island ist reines Schwarz, wie ein Teil der Hardware.
-   - Konzentrische Radien: jede innere Rundung ist die äussere minus den Abstand
-     dazwischen (Island 32 → Karte 16 → Bedienelement 10 → Inline 6).
-   - Ein einziges Signal: die Akzentfarbe gehört Buddys Augen, dem Fokus und dem,
-     was gerade aktiv ist. Status (ok, Warnung, Fehler) hat eigene, ruhige Farben.
+   Gegenstand: ein kleiner Begleiter, der im oberen Bildschirmrand wohnt – eine
+   schwarze Pille mit zwei Augen, die sich zu einer Arbeitsfläche öffnet.
 
-   Die Akzentfarbe wählt man in den Einstellungen. app.js setzt --accent und leitet
-   daraus --accent-text, --accent-fill, --on-accent und --accent-on-ink ab
-   (jeweils mit genug Kontrast zum aktuellen Hintergrund).
+   - Ein Objekt: Das Island ist offen wie geschlossen echtes Schwarz. Inhalte
+     stehen direkt darauf (Haarlinien statt Karten). Gefüllte Flächen gibt es nur
+     für Bedienelemente: Eingabe, Code, eigene Nachricht, Chips, Knöpfe.
+   - Das Auge ist das Motiv: Die Kapselform der Augen markiert Zustände
+     (aktiver Tab, Planschritte, Tippen, Statuspunkte).
+   - Ein Signal: Lagune gehört den Augen, dem Fokus und dem, was gerade aktiv ist.
+   - Eine Schrift: Atkinson Hyperlegible Next, gebaut für Lesbarkeit kleiner Texte;
+     Atkinson Hyperlegible Mono nur für Code und Protokolle.
+
+   app.js setzt --accent (Einstellung «Akzentfarbe») und leitet --accent-text,
+   --accent-fill, --on-accent, --accent-on-ink und --knob mit genug Kontrast ab.
    ========================================================================== */
+
+/* ---------- Schriften (OFL, liegen im Programm, kein Netz nötig) ---------- */
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: block;
+  src: url("../fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: block;
+  src: url("../fonts/atkinson-hyperlegible-next-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: italic;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("../fonts/atkinson-hyperlegible-next-latin-wght-italic.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC;
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Mono";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("../fonts/atkinson-hyperlegible-mono-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC;
+}
 
 :root {
   /* ---------- Marke ---------- */
-  --brand-lagoon: #4cc9b8;          /* Standard-Akzent «Lagune» */
+  --brand-lagoon: #8ee0d2;          /* Lagune hell: Standard-Akzent, die Augen */
   --accent: var(--brand-lagoon);
-  --accent-text: #6bd6c7;           /* Akzent als Text/Icon auf der Fläche (von app.js nachgeführt) */
+  --accent-text: var(--accent);     /* Akzent als Text/Icon auf der Fläche (von app.js nachgeführt) */
   --accent-fill: var(--accent);     /* Akzent als Fläche (Knöpfe, Schalter) */
-  --on-accent: #06211d;             /* Text auf --accent-fill */
+  --on-accent: #04110f;             /* Text auf --accent-fill */
   --accent-on-ink: var(--accent);   /* Akzent auf dem schwarzen Island (Augen) */
-  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
 
-  /* ---------- Flächen (dunkel) ---------- */
-  --ink: #000;                      /* geschlossenes Island, Notch */
-  --bg: #111215;                    /* offenes Island, Ebene 0 */
-  --surface-1: #1b1c20;             /* Karten, Gruppen, Eingabe */
-  --surface-2: #26272c;             /* erhöht: Hover in Listen, Popover, Menü */
-  --surface-3: #313238;             /* ausgewähltes Segment */
-  --fill-1: rgba(160, 166, 184, 0.14);   /* Bedienflächen: Knopf, Chip, Feld */
-  --fill-2: rgba(160, 166, 184, 0.24);   /* Hover/aktiv darauf */
-  --fill-3: rgba(160, 166, 184, 0.34);
-  --separator: rgba(255, 255, 255, 0.075);
-  --border: rgba(255, 255, 255, 0.10);
-  --border-strong: rgba(255, 255, 255, 0.18);
-  --scrim: rgba(0, 0, 0, 0.5);
+  /* ---------- Material (dunkel) ---------- */
+  --ink: #000;                      /* das Island, geschlossen und offen */
+  --bg: #000;                       /* Fläche des offenen Islands: dasselbe Schwarz */
+  --surface-1: #161618;             /* Graphit: Bedienflächen (Eingabe, Code, eigene Nachricht) */
+  --surface-2: #202023;             /* erhöht: Tooltip, Menü, Hover in Listen */
+  --surface-3: #2b2b2f;             /* gewählt auf Graphit */
+  --fill-1: rgba(233, 236, 235, 0.08);   /* Knopf, Chip, Feld */
+  --fill-2: rgba(233, 236, 235, 0.13);   /* Hover darauf */
+  --fill-3: rgba(233, 236, 235, 0.22);   /* Schalter aus, Druck */
+  --separator: rgba(233, 236, 235, 0.10);/* Haarlinie zwischen Zeilen */
+  --rule: rgba(233, 236, 235, 0.16);     /* Linie über/unter einer Liste */
+  --border: rgba(233, 236, 235, 0.12);
+  --border-strong: rgba(233, 236, 235, 0.24);
+  --scrim: rgba(0, 0, 0, 0.6);
 
-  /* ---------- Text (dunkel) ---------- */
-  --text-1: #f2f3f5;                         /* primär, ≥ 13:1 */
-  --text-2: rgba(232, 235, 242, 0.68);       /* sekundär, ≥ 6.5:1 */
-  --text-3: rgba(232, 235, 242, 0.54);       /* gedämpft, Metadaten, ≥ 4.5:1 auf allen Flächen */
-  --text-4: rgba(232, 235, 242, 0.40);       /* nur Platzhalter und deaktiviert, ≥ 3:1 */
+  /* ---------- Text (dunkel): Nebel, leicht kühl ---------- */
+  --text-1: #e9eceb;                         /* primär, 17:1 */
+  --text-2: rgba(233, 236, 235, 0.70);       /* sekundär, ≥ 8:1 */
+  --text-3: rgba(233, 236, 235, 0.54);       /* gedämpft, Metadaten, ≥ 4.8:1 */
+  --text-4: rgba(233, 236, 235, 0.38);       /* nur Platzhalter und deaktiviert */
 
   /* ---------- Status (dunkel) ---------- */
-  --success: #3ccf86;
-  --warning: #f2b544;
-  --danger: #ff5d55;
-  --success-text: #5fdc9c;
-  --warning-text: #f5c66a;
-  --danger-text: #ff8a83;
-  --success-soft: rgba(60, 207, 134, 0.14);
-  --warning-soft: rgba(242, 181, 68, 0.14);
-  --danger-soft: rgba(255, 93, 85, 0.14);
+  --success: #5ed39a;               /* Seegras */
+  --warning: #f2c14e;               /* Bernstein */
+  --danger: #ff7a6b;                /* Koralle */
+  --success-text: #74dca9;
+  --warning-text: #f5cd6f;
+  --danger-text: #ff9387;
+  --success-soft: rgba(94, 211, 154, 0.12);
+  --warning-soft: rgba(242, 193, 78, 0.12);
+  --danger-soft: rgba(255, 122, 107, 0.12);
   --info-soft: var(--fill-1);
-  --on-status: #fff;
+  --on-status: #0b0505;
 
-  /* Fokus: immer sichtbar, unabhängig von der Akzentfarbe gut lesbar */
-  --focus-ring: color-mix(in srgb, var(--accent-text) 85%, #fff);
+  --focus-ring: var(--accent-text);
 
-  /* Code-Hervorhebung */
-  --code-keyword: #8fb4ff;
-  --code-string: #8fd6a2;
-  --code-number: #e6b673;
+  /* Code-Hervorhebung: ruhig, aus der Palette */
+  --code-keyword: #9fc3ff;
+  --code-string: #9fdcb8;
+  --code-number: #f0c987;
   --code-comment: var(--text-3);
 
-  /* Musik-Cover ohne Bild, Schalter-Knopf */
-  --knob: #fff;
+  --knob: #e9eceb;
 
   /* ---------- Schrift ---------- */
-  --font-text: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  --font-text: "Atkinson Hyperlegible Next", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: var(--font-text);
+  --font-mono: "Atkinson Hyperlegible Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
 
-  /*                    Grösse / Zeilenhöhe / Gewicht / Laufweite */
-  --type-display: 650 22px/28px var(--font-display);   /* Willkommen, grosse Zahl */
-  --type-h1: 650 18px/24px var(--font-display);        /* Bereich in den Einstellungen */
-  --type-h2: 600 15px/20px var(--font-display);        /* Kartentitel, Dialogtitel, Island-Titel */
-  --type-h3: 600 12.5px/16px var(--font-text);         /* Abschnitt über einer Gruppe */
+  /* Skala nach Bringhurst (11 · 12 · 13 · 14 · 16 · 20 · 26), Zeilenhöhe auf 4er-Raster.
+     Gewichte bewusst: 400 Lesen, 560 Bedienen, 680 Titel, 760 die eine grosse Zeile. */
+  --type-display: 760 26px/30px var(--font-display);   /* «Hoi, ich bin Buddy.» */
+  --type-h1: 680 20px/24px var(--font-display);        /* Bereich in den Einstellungen */
+  --type-h2: 680 16px/20px var(--font-display);        /* Island-Titel, Dialogtitel */
+  --type-h3: 600 13px/16px var(--font-text);           /* Abschnitt über einer Liste */
   --type-body: 400 14px/20px var(--font-text);
   --type-body-strong: 600 14px/20px var(--font-text);
-  --type-body-2: 400 13px/18px var(--font-text);       /* sekundärer Text, Listen */
-  --type-label: 600 13px/18px var(--font-text);        /* Knöpfe, Tabs */
-  --type-caption: 400 12px/16px var(--font-text);      /* Fussnoten, Untertitel */
-  --type-meta: 400 11px/14px var(--font-text);         /* Zeit, Quelle, Tokens */
+  --type-body-2: 400 13px/18px var(--font-text);
+  --type-label: 560 13px/16px var(--font-text);        /* Knöpfe, Tabs */
+  --type-caption: 400 12px/16px var(--font-text);
+  --type-meta: 400 11px/14px var(--font-text);
   --type-badge: 600 11px/16px var(--font-text);
-  --type-code: 400 12.5px/1.55 var(--font-mono);
-  --tracking-display: -0.012em;
-  --tracking-tight: -0.004em;
+  --type-code: 400 12.5px/1.6 var(--font-mono);
+  --tracking-display: -0.022em;
+  --tracking-tight: -0.006em;
   --tracking-badge: 0.01em;
 
-  /* ---------- Abstände: 4er-Raster (2 nur für Feinheiten) ---------- */
+  /* ---------- Abstände: 4er-Raster ---------- */
   --space-0: 2px;
   --space-1: 4px;
   --space-2: 8px;
@@ -105,35 +142,36 @@
   --space-8: 40px;
 
   /* ---------- Masse ---------- */
-  --control-sm: 28px;      /* kleiner Knopf, Chip, Tag in Zeilen */
-  --control-md: 36px;      /* Standardknopf, Eingabefeld */
-  --control-lg: 44px;      /* Listenzeile, grosses Ziel */
+  --control-sm: 28px;
+  --control-md: 36px;
+  --control-lg: 44px;
   --icon-btn: 32px;
   --icon-sm: 14px;
   --icon-md: 18px;
   --icon-lg: 20px;
-  --icon-stroke: 1.75;
+  --icon-stroke: 1.6;
   --icon-stroke-sm: 2;
-  --row-x: var(--space-4); /* Innenabstand links/rechts in Gruppen */
+  --row-x: 0px;            /* Listen stehen bündig auf der Ansicht, ohne Karte */
   --row-min: var(--control-lg);
-  --view-x: var(--space-4);/* Rand der Ansichten im offenen Island */
+  --view-x: 20px;          /* Rand im offenen Island: innen bündig mit dem Titel */
 
-  /* ---------- Formen: konzentrisch ---------- */
-  --radius-xs: 4px;        /* Fortschrittsbalken, Mini-Marken */
-  --radius-sm: 6px;        /* Inline-Code, Mini-Cover, Kurz-Tags */
-  --radius-md: 10px;       /* Knöpfe, Felder, Segmente */
-  --radius-lg: 16px;       /* Karten und Gruppen (= Island 32 − Rand 16) */
-  --radius-xl: 22px;       /* Eingabezeile (pillenartig bei einer Zeile) */
+  /* ---------- Formen: nach Rang, nicht ein Radius für alles ---------- */
+  --radius-xs: 2px;        /* Pegel, Fortschritt */
+  --radius-sm: 6px;        /* Inline-Code, Mini-Cover */
+  --radius-md: 10px;       /* Knöpfe, Felder */
+  --radius-lg: 14px;       /* Code, Dialog, eigene Nachricht */
+  --radius-xl: 20px;       /* Eingabezeile */
   --radius-pill: 999px;    /* Chips, Badges, Schalter */
-  --radius-round: 50%;     /* Icon-Knöpfe, Avatare */
+  --radius-round: 50%;
+  --radius-eye: 3px;       /* die Kapsel der Augen: Motiv für Zustände */
 
-  /* ---------- Tiefe: im Dunkeln über Flächentöne, Schatten nur wo nötig ---------- */
+  /* ---------- Tiefe: Schwarz braucht keine Schatten ---------- */
   --shadow-0: none;
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28);                                        /* Schalter-Knopf, gewähltes Segment */
-  --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.36), 0 0 0 1px var(--border);              /* Tooltip, Popover, Menü */
-  --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.42), 0 0 0 1px var(--border);             /* Dialog */
-  --island-edge: none;                                                              /* Rand des offenen Islands */
-  --card-edge: none;                                                                /* Kontur der Karten (nur hell) */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border);
+  --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border);
+  --island-edge: none;
+  --card-edge: none;
 
   /* ---------- Ebenen ---------- */
   --z-sticky: 3;
@@ -141,96 +179,95 @@
   --z-popover: 20;
   --z-tooltip: 30;
 
-  /* ---------- Bewegung ---------- */
-  --dur-press: 90ms;       /* Druck auf einen Knopf */
-  --dur-fast: 150ms;       /* Hover, Farbe */
-  --dur-base: 220ms;       /* Zustandswechsel, Einblenden */
-  --dur-slow: 340ms;       /* Zuklappen, Island schliessen */
-  --dur-island: 460ms;     /* Island öffnen */
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);      /* Zustandswechsel */
-  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);      /* Hereinkommen: schnell, weich auslaufend */
-  --ease-exit: cubic-bezier(0.4, 0, 1, 1);          /* Hinausgehen: zügig */
-  --ease-island-open: cubic-bezier(0.32, 1.12, 0.5, 1); /* ein Hauch Federung: das Island «sitzt» */
-  --ease-island-close: cubic-bezier(0.4, 0, 0.2, 1);
-  --enter-distance: 4px;   /* Einblenden: so weit kommt etwas von unten */
+  /* ---------- Bewegung: antwortet auf Handlungen, sonst Ruhe ---------- */
+  --dur-press: 90ms;
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 320ms;
+  --dur-island: 480ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-island-open: cubic-bezier(0.3, 1.1, 0.4, 1);
+  --ease-island-close: cubic-bezier(0.45, 0, 0.2, 1);
+  --enter-distance: 3px;
   --press-scale: 0.97;
 
   /* ---------- Island ---------- */
-  --island-gap: 6px;           /* Abstand zum oberen Bildschirmrand */
+  --island-gap: 6px;
   --island-closed-h: 36px;
-  --island-head-h: 54px;
+  --island-head-h: 56px;
   --island-open-w: 500px;
-  --island-radius-closed: 18px;  /* = halbe Höhe: Pille */
-  --island-radius-open: 32px;
+  --island-radius-closed: 18px;
+  --island-radius-open: 34px;
   --island-radius-peek: 27px;
   --island-radius-notch: 11px;
-  --island-pad: var(--space-4);
+  --island-pad: var(--view-x);
   --eye-w: 5px;
   --eye-h: 11px;
   --eye-gap: 6px;
 
-  --win-h: 666px;              /* Fensterhöhe, von app.js gesetzt */
+  --win-h: 666px;
   color-scheme: dark;
 }
 
-/* ---------- Helles Theme ----------
-   Klar und gut lesbar, nicht grell: ein gebrochenes Weiss als Grund,
-   reines Weiss nur für Karten, Tiefe über feine Linien statt Schatten.
-   app.js setzt data-theme auf <html> (Einstellung «Erscheinungsbild»;
-   bei «System» nach der Windows-Einstellung). */
+/* ---------- Helles Theme «Tag» ----------
+   Für helle Arbeitsplätze: Papier statt Schwarz, Tinte statt Nebel. Das geschlossene
+   Island bleibt schwarz; offen wird es zu einem hellen Blatt mit feiner Kante.
+   app.js setzt data-theme auf <html> (Einstellung «Erscheinungsbild»). */
 :root[data-theme="light"] {
-  --accent-text: #0b7a6e;
-  --on-accent: #06211d;
-  --bg: #f3f4f6;
-  --surface-1: #ffffff;
-  --surface-2: #eceef1;
+  --accent-text: #0b6f64;
+  --on-accent: #04110f;
+  --bg: #f7f8f7;
+  --surface-1: #eceeed;
+  --surface-2: #ffffff;
   --surface-3: #ffffff;
-  --fill-1: rgba(22, 28, 40, 0.06);
-  --fill-2: rgba(22, 28, 40, 0.10);
-  --fill-3: rgba(22, 28, 40, 0.16);
-  --separator: rgba(22, 28, 40, 0.09);
-  --border: rgba(22, 28, 40, 0.10);
-  --border-strong: rgba(22, 28, 40, 0.18);
-  --scrim: rgba(22, 28, 40, 0.28);
+  --fill-1: rgba(18, 24, 22, 0.06);
+  --fill-2: rgba(18, 24, 22, 0.10);
+  --fill-3: rgba(18, 24, 22, 0.18);
+  --separator: rgba(18, 24, 22, 0.10);
+  --rule: rgba(18, 24, 22, 0.18);
+  --border: rgba(18, 24, 22, 0.12);
+  --border-strong: rgba(18, 24, 22, 0.24);
+  --scrim: rgba(18, 24, 22, 0.28);
 
-  --text-1: #15171c;
-  --text-2: rgba(21, 23, 28, 0.70);
-  --text-3: rgba(21, 23, 28, 0.62);
-  --text-4: rgba(21, 23, 28, 0.46);
+  --text-1: #121816;
+  --text-2: rgba(18, 24, 22, 0.72);
+  --text-3: rgba(18, 24, 22, 0.62);
+  --text-4: rgba(18, 24, 22, 0.44);
 
-  --success: #1f9d5c;
-  --warning: #c27c0e;
-  --danger: #d93a32;
-  --success-text: #12733f;
-  --warning-text: #95600a;
-  --danger-text: #c0302a;
-  --success-soft: rgba(31, 157, 92, 0.11);
-  --warning-soft: rgba(194, 124, 14, 0.12);
-  --danger-soft: rgba(217, 58, 50, 0.10);
+  --success: #1d8a55;
+  --warning: #b07208;
+  --danger: #cf3e30;
+  --success-text: #146c42;
+  --warning-text: #8a5a06;
+  --danger-text: #b5342a;
+  --success-soft: rgba(29, 138, 85, 0.10);
+  --warning-soft: rgba(176, 114, 8, 0.11);
+  --danger-soft: rgba(207, 62, 48, 0.09);
+  --on-status: #ffffff;
 
-  --focus-ring: color-mix(in srgb, var(--accent-text) 90%, #000);
+  --code-keyword: #2a59c4;
+  --code-string: #1a7343;
+  --code-number: #8f5506;
+  --knob: #ffffff;
 
-  --code-keyword: #2f5fd0;
-  --code-string: #1b7f45;
-  --code-number: #9a5b06;
-
-  --shadow-1: 0 1px 2px rgba(22, 28, 40, 0.16), 0 0 0 0.5px rgba(22, 28, 40, 0.06);
-  --shadow-2: 0 8px 22px rgba(22, 28, 40, 0.14), 0 0 0 1px var(--border);
-  --shadow-3: 0 14px 36px rgba(22, 28, 40, 0.18), 0 0 0 1px var(--border);
-  --island-edge: 0 0 0 1px rgba(22, 28, 40, 0.10), 0 10px 28px rgba(22, 28, 40, 0.16);
-  --card-edge: inset 0 0 0 1px rgba(22, 28, 40, 0.06);
+  --shadow-1: 0 1px 2px rgba(18, 24, 22, 0.22);
+  --shadow-2: 0 8px 22px rgba(18, 24, 22, 0.14), 0 0 0 1px var(--border);
+  --shadow-3: 0 14px 36px rgba(18, 24, 22, 0.18), 0 0 0 1px var(--border);
+  --island-edge: 0 0 0 1px rgba(18, 24, 22, 0.12), 0 10px 28px rgba(18, 24, 22, 0.16);
   color-scheme: light;
 }
 
-/* Das geschlossene Island ist immer Hardware-Schwarz, auch im hellen Theme:
-   dort gelten die dunklen Text- und Flächenwerte. */
+/* Das geschlossene Island ist immer schwarz: dort gelten die dunklen Werte. */
 .island:not(.open) {
-  --text-1: #f2f3f5;
-  --text-2: rgba(232, 235, 242, 0.68);
-  --text-3: rgba(232, 235, 242, 0.54);
-  --fill-1: rgba(160, 166, 184, 0.14);
-  --fill-2: rgba(160, 166, 184, 0.24);
-  --fill-3: rgba(160, 166, 184, 0.34);
-  --danger: #ff5d55;
+  --text-1: #e9eceb;
+  --text-2: rgba(233, 236, 235, 0.70);
+  --text-3: rgba(233, 236, 235, 0.54);
+  --fill-1: rgba(233, 236, 235, 0.08);
+  --fill-2: rgba(233, 236, 235, 0.13);
+  --fill-3: rgba(233, 236, 235, 0.22);
+  --danger: #ff7a6b;
+  --on-status: #0b0505;
   --accent-text: var(--accent-on-ink);
 }

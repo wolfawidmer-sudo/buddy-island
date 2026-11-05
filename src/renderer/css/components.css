@@ -230,6 +230,7 @@ input.row-input:is(:hover, :focus) { background: transparent; border: 0; color: 
 }
 .switch input:active + span::after { width: 24px; }
 .switch input:checked + span { background: var(--accent-fill); }
+.switch input:checked + span::after { background: var(--knob-on, var(--on-accent)); }
 .switch input:checked + span::after { transform: translateX(16px); }
 .switch input:checked:active + span::after { transform: translateX(12px); }
 .switch input:focus-visible + span { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
@@ -299,35 +300,50 @@ input[type="range"]:focus-visible { outline: none; }
 input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 input[type="range"]:disabled { opacity: 0.4; }
 
-/* ---------- Segmente / Tabs (auch Bereichsleiste der Einstellungen) ---------- */
+/* ---------- Segmente / Tabs (auch Bereichsleiste der Einstellungen) ----------
+   Keine Spur, keine Pille: Die gewählte Option trägt ein geschlossenes Auge darunter,
+   dieselbe Kapsel wie Buddys Augen im Ruhezustand. */
 .segmented, .cat-nav {
   display: flex;
-  gap: var(--space-0);
-  padding: var(--space-0);
-  border-radius: var(--radius-md);
-  background: var(--fill-1);
+  gap: var(--space-1);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
 }
 .segmented button, .cat-nav button {
+  position: relative;
   flex: 1;
   min-width: 0;
-  min-height: var(--control-sm);
-  padding: 0 var(--space-2);
+  min-height: var(--control-md);
+  padding: 0 var(--space-2) var(--space-1);
   border: 0;
-  border-radius: calc(var(--radius-md) - var(--space-0));
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text-2);
+  color: var(--text-3);
   font: var(--type-label);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: background-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+  transition: color var(--dur-fast) var(--ease-standard), background-color var(--dur-fast) var(--ease-standard);
+}
+.segmented button::after, .cat-nav button::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 14px;
+  height: 3px;
+  margin-left: -7px;
+  border-radius: var(--radius-eye);
+  background: var(--accent-text);
+  opacity: 0;
+  transform: scaleX(0.4);
+  transition: opacity var(--dur-fast) var(--ease-standard), transform var(--dur-base) var(--ease-enter);
 }
 .segmented button:hover, .cat-nav button:hover { color: var(--text-1); }
-.segmented button.on, .cat-nav button.on, .segmented button[aria-checked="true"], .segmented button[aria-selected="true"] {
-  background: var(--surface-3);
-  color: var(--text-1);
-  box-shadow: var(--shadow-1);
-}
+.segmented button.on, .cat-nav button.on, .segmented button[aria-checked="true"], .segmented button[aria-selected="true"] { color: var(--text-1); }
+.segmented button.on::after, .cat-nav button.on::after, .segmented button[aria-checked="true"]::after, .segmented button[aria-selected="true"]::after { opacity: 1; transform: none; }
+.segmented button:focus-visible, .cat-nav button:focus-visible { outline-offset: -2px; }
 .segmented button:disabled { opacity: 0.4; }
 
 /* ---------- Badge / Tag ---------- */
@@ -367,25 +383,30 @@ input[type="range"]:disabled { opacity: 0.4; }
 .chip { transition: background-color var(--dur-fast) var(--ease-standard), transform var(--dur-press) var(--ease-standard); }
 .chip:hover { background: var(--fill-2); }
 .chip:active { transform: scale(var(--press-scale)); }
-.tool-chip { min-height: 24px; padding: 0 var(--space-2) 0 var(--space-2); color: var(--text-2); font: var(--type-caption); animation: enter var(--dur-base) var(--ease-enter); }
-.tool-chip::before { content: ""; width: 6px; height: 6px; border-radius: var(--radius-round); background: var(--success); }
+.tool-chip { min-height: 24px; padding: 0 var(--space-3) 0 var(--space-2); background: transparent; box-shadow: inset 0 0 0 1px var(--separator); color: var(--text-2); font: var(--type-caption); }
+.tool-chip::before { content: ""; width: 3px; height: 9px; border-radius: var(--radius-eye); background: var(--success); }
 .tool-chip.err::before { background: var(--danger); }
 
 /* ---------- Statuspunkt ---------- */
 .dot, .hist-dot, .tool-item i, .route .tier {
   flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-round);
+  width: 4px;
+  height: 10px;
+  border-radius: var(--radius-eye);
   background: var(--text-4);
 }
 
-/* ---------- Karte ---------- */
-.card, .group, .ucard, .local-card, .now, .inbox, .timer, .plan, .confirm, .codeblock {
-  border-radius: var(--radius-lg);
-  background: var(--surface-1);
-  box-shadow: var(--card-edge);
+/* ---------- Flächen ----------
+   Liste: steht direkt auf dem Island, oben und unten eine Linie, dazwischen Haarlinien.
+   Feld: gefüllte Graphit-Fläche, nur für Dinge, die man bearbeitet oder kopiert (Code).
+   Rahmen: nur für Entscheidungen (Freigabe-Dialog). */
+.group, .ucard, .local-card {
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
 }
+.card, .codeblock { border-radius: var(--radius-lg); background: var(--surface-1); }
 
 /* ---------- Liste in einer Karte: Zeilen mit Trennlinien ---------- */
 .group { overflow: hidden; }
@@ -404,7 +425,7 @@ input[type="range"]:disabled { opacity: 0.4; }
   content: "";
   position: absolute;
   top: 0;
-  left: var(--row-x);
+  left: 0;
   right: 0;
   border-top: 1px solid var(--separator);
   pointer-events: none;
@@ -419,7 +440,7 @@ input[type="range"]:disabled { opacity: 0.4; }
   content: "";
   position: absolute;
   top: 0;
-  left: var(--row-x);
+  left: 0;
   right: 0;
   border-top: 1px solid var(--separator);
 }
@@ -446,22 +467,24 @@ input[type="range"]:disabled { opacity: 0.4; }
   justify-content: center;
   transition: background-color var(--dur-fast) var(--ease-standard);
 }
-.row-button:hover { background: var(--fill-1); }
-.row-button:active { background: var(--fill-2); }
+.row-button:hover { color: var(--text-1); }
+.row-button.left:hover { color: color-mix(in srgb, var(--accent-text) 80%, var(--text-1)); }
+.row-button:active { opacity: 0.7; }
 .row-button.left { justify-content: flex-start; color: var(--accent-text); }
 .row-button.danger, .row-button.left.danger { color: var(--danger-text); }
 .row-button:disabled { opacity: 0.4; pointer-events: none; }
-.row-button:focus-visible, .row:focus-visible, .disclosure summary:focus-visible { outline-offset: -2px; border-radius: var(--radius-lg); }
+.row-button:focus-visible, .row:focus-visible, .disclosure summary:focus-visible { outline-offset: -2px; border-radius: var(--radius-md); }
 
 /* Abschnitt über einer Gruppe, Fussnote darunter, Bereichstitel */
 .section {
-  margin: var(--space-6) var(--row-x) var(--space-2);
+  margin: var(--space-7) 0 var(--space-1);
   font: var(--type-h3);
-  color: var(--text-2);
+  color: var(--text-1);
 }
 .section:first-child { margin-top: var(--space-1); }
 .footer {
-  margin: var(--space-2) var(--row-x) 0;
+  margin: var(--space-2) 0 0;
+  max-width: 62ch;
   font: var(--type-caption);
   color: var(--text-3);
 }
@@ -471,11 +494,11 @@ input[type="range"]:disabled { opacity: 0.4; }
 .footer.ok { color: var(--success-text); }
 .footer a { color: var(--text-2); text-decoration: underline; text-decoration-color: var(--text-4); text-underline-offset: 2px; }
 .category {
-  margin: var(--space-7) var(--space-1) var(--space-1);
+  margin: var(--space-8) 0 0;
   font: var(--type-h1);
   letter-spacing: var(--tracking-display);
 }
-.category + .section { margin-top: var(--space-3); }
+.category + .section { margin-top: var(--space-4); }
 
 /* ---------- Aufklappen ---------- */
 .disclosure { display: block; padding: 0; }
@@ -488,7 +511,7 @@ input[type="range"]:disabled { opacity: 0.4; }
   list-style: none;
   transition: background-color var(--dur-fast) var(--ease-standard);
 }
-.disclosure summary:hover { background: var(--fill-1); }
+.disclosure summary:hover::after { border-color: var(--text-1); }
 .disclosure summary::-webkit-details-marker { display: none; }
 .disclosure summary::after, .more summary::after {
   content: "";
@@ -529,24 +552,37 @@ input[type="range"]:disabled { opacity: 0.4; }
 .notice-more[open] summary::after, .health-more[open] summary::after { transform: rotate(45deg) translate(-1px, -1px); }
 .notice-detail, .health-more small { display: block; margin-top: var(--space-1); font: var(--type-meta); color: var(--text-3); overflow-wrap: anywhere; user-select: text; font-variant-numeric: tabular-nums; }
 
-/* ---------- Meldung (Fehler, Hinweis, Erfolg, Warnung) ---------- */
+/* ---------- Meldung (Fehler, Hinweis, Erfolg, Warnung) ----------
+   Keine Box: eine senkrechte Kapsel links markiert die Art, der Text trägt den Rest. */
 .notice {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1) var(--space-3);
-  padding: var(--space-3);
-  border-radius: var(--radius-lg);
-  background: var(--danger-soft);
+  padding: var(--space-0) 0 var(--space-0) var(--space-4);
+  background: transparent;
   color: var(--danger-text);
   font: var(--type-body-2);
   user-select: text;
-  animation: enter var(--dur-base) var(--ease-enter);
+}
+.notice::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  border-radius: var(--radius-eye);
+  background: var(--danger);
 }
 .notice > span { flex: 1; min-width: 0; }
-.notice.soft, .notice.info { background: var(--fill-1); color: var(--text-2); }
-.notice.success { background: var(--success-soft); color: var(--success-text); }
-.notice.warning { background: var(--warning-soft); color: var(--warning-text); }
+.notice.soft, .notice.info { color: var(--text-2); }
+.notice.soft::before, .notice.info::before { background: var(--text-4); }
+.notice.success { color: var(--success-text); }
+.notice.success::before { background: var(--success); }
+.notice.warning { color: var(--warning-text); }
+.notice.warning::before { background: var(--warning); }
 .notice .notice-more summary { color: inherit; opacity: 0.75; }
 .notice .notice-detail { color: inherit; opacity: 0.75; }
 
@@ -584,12 +620,10 @@ input[type="range"]:disabled { opacity: 0.4; }
   animation: spin 0.8s linear infinite;
 }
 
-/* Tippt gerade: drei ruhige Punkte */
-.typing { display: inline-flex; gap: var(--space-1); padding: var(--space-2) var(--space-0); }
-.typing i { width: 6px; height: 6px; border-radius: var(--radius-round); background: var(--text-3); animation: typing 1.2s var(--ease-standard) infinite; }
-.typing i:nth-child(2) { animation-delay: 0.15s; }
-.typing i:nth-child(3) { animation-delay: 0.3s; }
-@keyframes typing { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
+/* Tippt gerade: zwei kleine Augen, die hin und her schauen (das dritte <i> bleibt leer) */
+.typing { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 var(--space-0); }
+.typing i { width: 4px; height: 9px; border-radius: var(--radius-eye); background: var(--accent-text); animation: look 1.6s var(--ease-standard) infinite; }
+.typing i:nth-child(3) { display: none; }
 
 /* Schreibmarke beim Streamen */
 .cursor::after {
@@ -639,14 +673,17 @@ input[type="range"]:disabled { opacity: 0.4; }
 /* Dialog im Fluss (z. B. Freigabe vor einer Aktion) */
 .dialog, .confirm {
   padding: var(--space-4);
-  animation: enter var(--dur-base) var(--ease-enter);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  animation: fade-in var(--dur-base) var(--ease-enter);
 }
 .dialog-title, .confirm-title { margin: 0 0 var(--space-1); font: var(--type-h2); letter-spacing: var(--tracking-tight); }
 .dialog-text, .confirm-text { margin: 0 0 var(--space-3); color: var(--text-2); font: var(--type-body-2); }
 .dialog-actions, .confirm-actions { display: flex; gap: var(--space-2); }
 .dialog-actions .button, .confirm-actions .button { flex: 1; }
 .confirm .risk { margin: 0 0 var(--space-2); }
-.confirm.high { box-shadow: var(--card-edge), inset 0 0 0 1px color-mix(in srgb, var(--danger) 40%, transparent); }
+.confirm.high { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 55%, transparent); }
 .confirm.high .button.primary { background: var(--danger); color: var(--on-status); }
 .confirm-detail {
   margin: calc(-1 * var(--space-1)) 0 var(--space-3);
@@ -688,13 +725,13 @@ input[type="range"]:disabled { opacity: 0.4; }
   border: 0;
   border-radius: var(--radius-round);
   background: var(--c);
-  box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--surface-1), 0 0 0 3.5px transparent;
+  box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--bg), 0 0 0 3.5px transparent;
   transition: box-shadow var(--dur-fast) var(--ease-standard), transform var(--dur-press) var(--ease-standard);
 }
 .swatches button:active { transform: scale(0.9); }
-.swatches button.on { box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--surface-1), 0 0 0 3.5px var(--text-1); }
+.swatches button.on { box-shadow: inset 0 0 0 1px var(--border), 0 0 0 2px var(--bg), 0 0 0 3.5px var(--text-1); }
 .custom-color { background: conic-gradient(#ff5d55, #f2b544, #ffd84a, #3ccf86, #4cc9b8, #3d8bff, #b066f2, #ff5d8a, #ff5d55); }
-.custom-color.on { box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 3.5px var(--text-1); }
+.custom-color.on { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--text-1); }
 .custom-color input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; }
 
 /* ---------- Leerzustand ---------- */

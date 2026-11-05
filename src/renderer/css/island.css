@@ -84,7 +84,7 @@
   transform: translate(-50%, -50%);
   transition: left var(--dur-slow) var(--ease-island-close), opacity var(--dur-base) var(--ease-standard);
 }
-.island.open .face-btn { left: calc(50% - 220px); transition: left var(--dur-island) var(--ease-island-open); }
+.island.open .face-btn { left: calc(50% - 221px); transition: left var(--dur-island) var(--ease-island-open); } /* reitet auf der wachsenden Kante, bleibt immer sichtbar */
 .face {
   display: flex;
   align-items: center;
@@ -145,7 +145,7 @@
 .label {
   position: absolute;
   top: 50%;
-  left: calc(50% - 196px);
+  left: calc(50% - 194px);
   right: calc(50% - 80px);
   overflow: hidden;
   font: var(--type-h2);
@@ -159,7 +159,7 @@
   visibility: hidden;
   transition: opacity 60ms linear, visibility 0s linear 60ms;
 }
-.island.open .label { opacity: 1; visibility: visible; transition: opacity var(--dur-base) var(--ease-enter) 160ms, visibility 0s; }
+.island.open .label { opacity: 1; visibility: visible; transition: opacity var(--dur-base) var(--ease-enter) 280ms, visibility 0s; } /* erst, wenn die Augen fast angekommen sind */
 .island[data-state="error"] .label { color: var(--danger-text); }
 .island:is([data-state="timer"], [data-state="alarm"]) .label { color: var(--accent-text); }
 

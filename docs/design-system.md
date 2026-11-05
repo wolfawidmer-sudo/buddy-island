@@ -1,117 +1,151 @@
-# Buddy Island · Design-System «Lagune»
+# Buddy Island · Design-System «Nachtinsel»
 
-Ein Satz Regeln für die ganze Oberfläche. Die Werte stehen nur in `src/renderer/css/tokens.css`. Alle anderen Dateien benutzen Variablen. Eine lebende Übersicht aller Komponenten und Zustände zeigt `docs/styleguide.html` (im Browser öffnen, `?theme=light` für hell).
+Entstanden mit Anthropics offiziellem Skill **frontend-design** (unverändert installiert unter `.claude/skills/frontend-design/`, Quelle `anthropics/claude-plugins-official`, `plugins/frontend-design`, Version 1.1.1).
 
-## Grundidee
+Die Werte stehen nur in `src/renderer/css/tokens.css`. Alle anderen Dateien benutzen Variablen. Eine lebende Übersicht aller Komponenten zeigt `docs/styleguide.html` (im Browser öffnen, `?theme=light` für hell).
 
-- **Tinte statt Schwarz.** Offene Flächen sind tiefes, leicht kühles Graphit (`--bg #111215`). Nur das geschlossene Island ist reines Schwarz, wie ein Stück Hardware, auch im hellen Theme.
-- **Ein Signal.** Die Akzentfarbe gehört Buddys Augen, dem Fokus und dem, was gerade aktiv ist. Status hat eigene, ruhige Farben: Erfolg, Warnung, Gefahr.
-- **Konzentrische Radien.** Innen = aussen minus Abstand: Island 32 → Karte 16 → Bedienelement 10 → Inline 6.
-- **Tiefe über Flächentöne.** Im Dunkeln keine Schatten. Im Hellen nur feine Konturen und ein einziger weicher Schatten um das offene Island.
-- **Keine Deko.** Kein Glas, keine Unschärfe, keine Verläufe auf Flächen, keine Endlos-Animation im Leerlauf.
+## Gegenstand
 
-## Dateien und Reihenfolge
+Buddy ist ein kleiner Begleiter, der im oberen Bildschirmrand wohnt: eine schwarze Pille mit zwei Augen, die sich zu einer Arbeitsfläche öffnet. Er ist für Leute gebaut, die am Windows-PC schnell etwas erledigen wollen. Seine Aufgabe ist, schnell zu antworten oder zu handeln und dann wieder aus dem Weg zu gehen.
+
+## Richtung
+
+1. **Ein Objekt.** Das Island ist offen wie geschlossen echtes Schwarz (`#000`), kein eingefärbtes Fast-Schwarz. Es öffnet sich, statt ein Fenster zu zeigen. Inhalte stehen direkt darauf.
+2. **Listen statt Karten.** Gruppen haben eine Linie oben und unten und Haarlinien dazwischen, keine Box.
+   - **Gefüllt (Graphit):** nur was man bearbeitet oder kopiert, also Eingabe, Code, die eigene Nachricht, Chips und Knöpfe.
+   - **Gerahmt:** nur Entscheidungen (Freigabe-Dialog).
+3. **Das Auge ist das Motiv.** Die Kapselform von Buddys Augen markiert Zustände:
+
+   | Ort | Darstellung |
+   |---|---|
+   | Aktiver Tab, gewähltes Segment | geschlossenes Auge darunter |
+   | Planschritt offen | Auge zu (grau) |
+   | Planschritt jetzt dran | Auge offen (Lagune) |
+   | Planschritt fertig | Seegras |
+   | Planschritt fehlgeschlagen | Koralle |
+   | Tippen | zwei Augen, die schauen |
+   | Statuspunkte, Meldungen | senkrechte Kapsel |
+   | Schalter an (dunkles Theme) | dunkles «Auge» auf heller Lagune |
+
+4. **Ein Signal.** Lagune (`#8EE0D2`, entsättigt) gehört den Augen, dem Fokus und dem, was gerade aktiv ist. Alles andere bleibt Nebel auf Schwarz.
+5. **Bewegung antwortet.** Es gibt eine orchestrierte Folge beim Öffnen:
+   - Der Rahmen wächst, die Augen reiten auf der Kante nach links.
+   - Danach erscheint der Inhalt, zuletzt der Titel, wenn die Augen angekommen sind.
+   - Einblende-Animationen für jede Nachricht, Meldung oder jeden Chip gibt es nicht.
+
+**Abgeglichen mit den typischen KI-Mustern im Skill:**
+
+| Muster im Skill | Umgang hier |
+|---|---|
+| Karten-Baukasten | ersetzt durch Listen |
+| Fast-Schwarz `#111` | ersetzt durch echtes Schwarz |
+| Neon-Akzent | Lagune entsättigt und begrenzt auf Augen, Fokus, Aktives |
+| Mono für Datenlabels | Mono nur für Code und Protokolle |
+| Grossbuchstaben-Labels | keine |
+| Radius überall gleich | Radien nach Rang |
+
+## Farben
+
+| Name | Dunkel | Hell («Tag») | Rolle |
+|---|---|---|---|
+| Tinte | `#000000` | `#F7F8F7` (Papier) | Fläche des Islands |
+| Graphit | `#161618` | `#ECEEED` | Bedienflächen |
+| Nebel | `#E9ECEB` | `#121816` | Text |
+| Lagune | `#8EE0D2` | `#0B6F64` (abgeleitet) | Augen, Fokus, aktiv |
+| Koralle | `#FF7A6B` | `#CF3E30` | Fehler, Gefahr |
+| Bernstein | `#F2C14E` | `#B07208` | Warnung |
+| Seegras | `#5ED39A` | `#1D8A55` | Erfolg |
+
+Text-Abstufungen: `--text-1` bis `--text-4`. Gedämpfter Text (`--text-3`) hat auf allen Flächen mindestens 4.5:1.
+
+Die Akzentfarbe ist wählbar. `app.js` leitet daraus ab:
+- `--accent-text` mit mindestens 4.5:1
+- `--accent-fill`
+- `--on-accent`
+- `--accent-on-ink` für die Augen
+- `--knob-on` für den Schalter
+
+So bleibt jede Farbe in beiden Themes lesbar. Das geschlossene Island ist immer schwarz.
+
+## Schrift
+
+**Atkinson Hyperlegible Next** (variabel 200–800) für alles, **Atkinson Hyperlegible Mono** nur für Code und Protokolle. Beide stehen unter der OFL, liegen in `src/renderer/fonts/` und brauchen kein Netz.
+
+Die Schrift ist für Lesbarkeit kleiner Texte gebaut und unterscheidet I, l, 1 und 0, O deutlich (die Null ist durchgestrichen). Das passt zu einem Helfer, der vor allem kleine Texte zeigt.
+
+Skala nach Bringhurst:
+
+| Token | Grösse/Zeile | Gewicht | Wofür |
+|---|---|---|---|
+| `--type-display` | 26/30 | 760 | «Hoi, ich bin Buddy.» als die eine grosse Zeile |
+| `--type-h1` | 20/24 | 680 | Bereich |
+| `--type-h2` | 16/20 | 680 | Island-Titel, Dialog |
+| `--type-h3` | 13/16 | 600 | Abschnitt |
+| `--type-body` | 14/20 | 400 | Fliesstext (Antworten 21 px Zeile, max. 68 Zeichen) |
+| `--type-body-2` | 13/18 | 400 | Listen |
+| `--type-label` | 13/16 | 560 | Knöpfe, Tabs |
+| `--type-caption` | 12/16 | 400 | Fussnoten (max. 62 Zeichen) |
+| `--type-meta` | 11/14 | 400 | Metadaten |
+
+## Raster und Formen
+
+- **Abstände:** 4er-Raster (`--space-1` bis `--space-8`: 4 bis 40).
+- **Ränder:** 20 px im offenen Island (`--view-x`). Inhalt und Augen stehen auf derselben linken Kante. Listen haben keinen eigenen Innenrand.
+- **Höhen:** Listenzeilen mindestens 44 px, Bedienelemente 28 und 36 px, Icon-Knopf 32 px.
+- **Radien nach Rang:**
+
+  | Element | Radius |
+  |---|---|
+  | Island offen | 34 |
+  | Code, Dialog, eigene Nachricht | 14 |
+  | Eingabezeile | 20 |
+  | Knöpfe, Felder | 10 |
+  | Inline-Code | 6 |
+  | Augenkapsel | 3 |
+  | Chips, Badges, Schalter | Pille |
+
+- **Tiefe:** Im Dunkeln keine Schatten. Im Hellen eine feine Kante und ein weicher Schatten nur um das offene Island.
+
+## Dateien
 
 | Datei | Inhalt |
 |---|---|
-| `css/tokens.css` | Farben (dunkel/hell), Schrift, Abstände, Masse, Radien, Tiefe, Bewegung, Island-Masse |
-| `css/base.css` | Grundregeln: Schrift, Fokus, Auswahl, Icons, Scrollbalken, reduzierte Bewegung |
-| `css/components.css` | Jede Komponente genau einmal (ältere Klassennamen als Aliase) |
-| `css/island.css` | Das Island: Rahmen, Kopf, alle Zustände, Auf-/Zuklappen, Höhenregeln |
-| `css/views.css` | Anordnung der Ansichten: Chat, Karten, Einstellungen, Nutzung, lokale KI |
+| `css/tokens.css` | Schriften, Farben (dunkel/hell), Typo, Abstände, Masse, Radien, Tiefe, Bewegung, Island-Masse |
+| `css/base.css` | Grundregeln, Fokus, Icons, Scrollbalken, reduzierte Bewegung |
+| `css/components.css` | jede Komponente genau einmal mit allen Zuständen |
+| `css/island.css` | das Island: Zustände, Auf-/Zuklappen, Höhenregeln |
+| `css/views.css` | Anordnung der Ansichten |
 
-## Tokens (Auszug)
-
-**Farben:** `--bg`, `--surface-1/2/3`, `--fill-1/2/3`, `--separator`, `--border`, `--text-1` bis `--text-4`, `--success/warning/danger` (+ `-text`, `-soft`), `--focus-ring`.
-Kontrast (WCAG): `--text-1` ≥ 13:1, `--text-2` ≥ 6:1, `--text-3` ≥ 4.5:1 auf allen Flächen. `--text-4` nur für Platzhalter und Deaktiviertes.
-
-**Akzent:** Standard ist «Lagune» `#4CC9B8`, wählbar in den Einstellungen. `app.js` leitet daraus Varianten ab:
-- `--accent-text`: als Text auf der Fläche, mind. 4.5:1
-- `--accent-fill`: als Knopf oder Schalter
-- `--on-accent`: Schwarz oder Weiss, je nachdem, was besser lesbar ist
-- `--accent-on-ink`: Augen auf dem schwarzen Island, mind. 3:1
-
-So bleibt jede Farbe in beiden Themes lesbar.
-
-**Schrift:** Segoe UI Variable (Text/Display), Cascadia Mono für Code.
-
-| Token | Wert | Wofür |
-|---|---|---|
-| `--type-display` | 22/28 650 | Begrüssung |
-| `--type-h1` | 18/24 650 | Bereich in den Einstellungen |
-| `--type-h2` | 15/20 600 | Karten-, Dialog-, Island-Titel |
-| `--type-h3` | 12.5/16 600 | Abschnitt über einer Gruppe |
-| `--type-body` | 14/20 | Fliesstext |
-| `--type-body-2` | 13/18 | Listen, sekundär |
-| `--type-label` | 13/18 600 | Knöpfe, Tabs |
-| `--type-caption` | 12/16 | Fussnoten |
-| `--type-meta` | 11/14 | Zeit, Quelle |
-
-**Abstände:** 4er-Raster `--space-1` bis `--space-8` = 4, 8, 12, 16, 20, 24, 32, 40 (dazu `--space-0` = 2 für Feinheiten).
-**Masse:** Bedienelemente 28 / 36 / 44, Icon-Knopf 32, Icons 14 / 18 / 20 bei Strich 2 / 1.75.
-
-**Bewegung:**
-
-| Token | Dauer | Wofür |
-|---|---|---|
-| `--dur-press` | 90 ms | Druck |
-| `--dur-fast` | 150 ms | Hover |
-| `--dur-base` | 220 ms | Zustand, Einblenden |
-| `--dur-slow` | 340 ms | Zuklappen |
-| `--dur-island` | 460 ms | Island öffnen |
-
-Kurven: `--ease-standard`, `--ease-enter` (weich auslaufend), `--ease-exit`, `--ease-island-open` (ein Hauch Federung), `--ease-island-close`. Animiert werden nur transform und opacity sowie Breite und Höhe des Island-Rahmens. Bei «Bewegung reduzieren» wird alles zu einem kurzen Überblenden.
-
-## Komponenten und Zustände
-
-Knopf (primär, standard, leise, gefahr, klein), Textknopf, Icon-Knopf, Senden/Mikrofon/Stopp, Tooltip (`data-tip`), Textfeld/Suchfeld/Textbereich, Auswahl, Schalter, Checkbox, Radio, Schieberegler, Segmente/Tabs, Badge, Chip, Statuspunkt, Karte, Liste mit Zeilen, Abschnitt/Fussnote/Bereich, Aufklappen, Meldung (Fehler, Hinweis, Warnung, Erfolg), Fortschritt und Pegel, Spinner, Tippen, Popover/Menü, Dialog, Tastenkappe, Farbwahl, Leerzustand.
-
-Alle haben dieselben Zustände:
+## Zustände
 
 | Zustand | Darstellung |
 |---|---|
-| Hover | eine Stufe mehr Fläche |
+| Hover | Text oder Fläche eine Stufe heller |
 | Aktiv | leicht eingedrückt |
-| Fokus | Ring, nur per Tastatur |
+| Fokus | Lagune-Ring, nur per Tastatur |
 | Deaktiviert | 40 % |
-| Laden | `aria-busy="true"` |
-| Fehler | `aria-invalid="true"` bzw. Gefahr |
-| Gewählt | `.on`, `:checked`, `aria-pressed`, `aria-checked` |
+| Laden | `aria-busy="true"` mit Spinner |
+| Fehler | `aria-invalid="true"` bzw. Koralle |
+| Gewählt | Auge, `.on` oder `:checked` |
 
-## Island
+**Island:**
 
-Geschlossen ist das Island schwarz und ohne Text, die Augen stehen exakt in der Mitte. Zustände über `data-state`:
-
-| Zustand | Darstellung |
+| `data-state` | Darstellung |
 |---|---|
-| `idle` | Augen zu (zwei Striche), beim Darüberfahren wach |
-| `busy` / `control` | Augen schauen hin und her, bei `control` mit Stopp-Knopf |
-| `done` | ^ ^ mit kurzem Hüpfen |
-| `error` | flache Augen in Gefahrenfarbe |
-| `timer` / `alarm` | runde Augen mit Fortschrittslinie |
-| `listen` | Augen hoch, Aufnahmepunkt |
-| `music` | Cover und Pegel, der aus der Mitte wächst |
-| `peek` | Mitteilung mit Text, nur kurz |
-| `notch` | minimiert, bündig am Rand |
-
-Beim Öffnen wächst der Rahmen symmetrisch. Jeder Inhalt ist an der Mitte verankert und wird nur aufgedeckt, nichts fliesst neu um. Ein maximierter Zustand und eigene Ansichten für Automationen, Projekte und Plugins gibt es in der App noch nicht. Kommen sie dazu, nutzen sie dasselbe Raster.
-
-## Raster der Ansichten
-
-- **Island offen:** 500 px breit, Rand 16 (`--view-x`), Inhalt 468 px.
-- **Karten:** Radius 16, innen 12–16, Abstand 12.
-- **Listenzeilen:** mind. 44 hoch, links und rechts 16, Trennlinie eingerückt.
-- **Abschnitte:** 24 über einer Gruppe, Fussnote 8 darunter. Bereichstitel 32 Abstand.
-- **Höhe:** höchstens 75 % des Bildschirms. Die Eingabe liegt nie im scrollenden Bereich. Bei wenig Höhe werden zuerst die Abstände kleiner.
-
-## Erscheinungsbild
-
-Einstellung «Erscheinungsbild»: Dunkel (Standard), Hell oder System. `app.js` setzt `data-theme` auf `<html>`. Bei «System» folgt es der Windows-Einstellung. `main.js` setzt zusätzlich `nativeTheme.themeSource` für native Elemente (Dropdown-Listen, Scrollbalken).
+| `idle` | Augen zu |
+| `busy`, `control` | Augen schauen |
+| `done` | ^ ^ |
+| `error` | flache, korallenrote Augen |
+| `timer`, `alarm` | runde Augen mit Linie |
+| `listen` | hohe Augen und Aufnahmepunkt |
+| `music` | Cover und Pegel aus der Mitte |
+| `peek` | Mitteilung |
+| `notch` | minimiert |
 
 ## Regeln für neuen Code
 
-1. Keine Farbe, Grösse, Rundung oder Dauer als Zahl in Komponenten oder Ansichten. Fehlt ein Wert, gehört er in `tokens.css`.
-2. Erst eine bestehende Komponente nehmen. Eine neue Variante nur mit eigenem Zweck und in `components.css`.
-3. Kein Inline-Style in `app.js` ausser für Messwerte (Breite eines Balkens, Fortschritt). Farben über Klassen.
-4. Jede Interaktion braucht Hover, Fokus und Deaktiviert. Ziele mindestens 28 px, Listenzeilen 44 px.
-5. Neue Bewegung nur mit den Bewegungs-Tokens und nur mit transform oder opacity.
+1. Keine Farbe, Grösse, Rundung oder Dauer als Zahl ausserhalb von `tokens.css`.
+2. Keine neue Box: zuerst Liste, dann Feld. Ein Rahmen nur für eine Entscheidung.
+3. Lagune nur für Augen, Fokus und Aktives. Status über Koralle, Bernstein und Seegras.
+4. Bewegung nur als Antwort auf eine Handlung und nur mit transform oder opacity.
+5. Texte aus Sicht der Nutzerin, in Satzschreibung, Fehler sagen, was zu tun ist.

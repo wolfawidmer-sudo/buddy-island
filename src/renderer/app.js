@@ -502,7 +502,7 @@
   // ---------- Fenstergrösse (spart CPU: geschlossen = nur so gross wie das Island) ----------
 
   const measure = document.createElement('span');
-  measure.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:600 13px/1 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums';
+  measure.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:600 13px/1 "Atkinson Hyperlegible Next","Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums';
   document.body.appendChild(measure);
 
   function textWidth(text) {
@@ -1913,9 +1913,9 @@
   //   --accent-fill   als Fläche (Knopf, Schalter); bei fast unsichtbarer Farbe die Textfarbe
   //   --on-accent     Text auf dieser Fläche (Schwarz oder Weiss, was besser lesbar ist)
   //   --accent-on-ink auf dem schwarzen Island (Augen, mind. 3:1)
-  const BRAND_ACCENT = '#4CC9B8';
-  const INK_DARK = '#111215';
-  const INK_LIGHT = '#F3F4F6';
+  const BRAND_ACCENT = '#8EE0D2';
+  const INK_DARK = '#000000';
+  const INK_LIGHT = '#F7F8F7';
   const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   const rgbHex = (rgb) => '#' + rgb.map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
   const luminance = (rgb) => {
@@ -1957,8 +1957,8 @@
     root.setProperty('--accent-fill', rgbHex(fill));
     root.setProperty('--on-accent', onFill);
     root.setProperty('--accent-on-ink', rgbHex(reach(rgb, [0, 0, 0], 3)));
-    // Schalter-Knopf: weiss, ausser auf einer sehr hellen Fläche
-    root.setProperty('--knob', luminance(fill) > 0.7 ? '#0b0c0f' : '#ffffff');
+    // Schalter-Knopf auf der Akzentfläche: weiss, wenn er sich davon abhebt, sonst dunkel (ein «Auge» auf heller Lagune)
+    root.setProperty('--knob-on', contrast(fill, [255, 255, 255]) >= 1.8 ? '#ffffff' : onFill);
   }
   // Wechselt Windows das Theme (bei «System»), Theme und Kontraste neu setzen
   systemLight.addEventListener('change', applyTheme);
