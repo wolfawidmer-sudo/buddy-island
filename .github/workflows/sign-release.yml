@@ -18,6 +18,8 @@ permissions:
 jobs:
   sign:
     runs-on: ubuntu-latest
+    # Signierschlüssel liegt als Secret in der Umgebung «release»: nur freigegebene Läufe bekommen ihn
+    environment: release
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

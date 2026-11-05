@@ -6,7 +6,8 @@ name: Release
 # GitHub baut den Windows-Installer, signiert das Update (Ed25519) und hängt
 # alles ans Release. Installierte Buddys prüfen die Signatur vor dem Update.
 #
-# Signierschlüssel: Repository-Secret BUDDY_UPDATE_SIGNING_KEY (privater Schlüssel, PEM).
+# Signierschlüssel: Secret BUDDY_UPDATE_SIGNING_KEY (privater Schlüssel, PEM) in der Umgebung
+# «release» (Settings → Environments), mit Freigabe durch Wolf. Nicht als Repository-Secret.
 # Fehlt er, wird das Release ohne Signatur veröffentlicht. Buddys ab Version 0.3
 # installieren es dann nicht automatisch, bis eine Signatur angehängt ist
 # (Workflow "Release signieren").
@@ -22,6 +23,8 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    # Signierschlüssel liegt als Secret in der Umgebung «release»: nur freigegebene Läufe bekommen ihn
+    environment: release
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
