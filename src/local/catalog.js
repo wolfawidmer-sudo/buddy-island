@@ -385,23 +385,36 @@ function recommend(hw, catalog, opts = {}) {
 /**
  * Welche Laufzeit für ein Modell auf diesem PC passt, mit Begründung.
  * Grundsatz: Passt das Modell ganz in Grafik- oder Arbeitsspeicher, ist Ollama die richtige Wahl.
- * Colibrì nur, wenn es nicht passt und Colibrì selbst sagt, dass es hier läuft (Experten von
- * der SSD). Colibrì wird nie gewählt, nur weil es installiert ist.
+ * Colibrì, wenn es nicht passt und Colibrì selbst sagt, dass es hier läuft (Experten von
+ * der SSD), oder wenn ein grosses Modell bei Ollama nur auf dem Prozessor liefe (gemessen
+ * schneller). Colibrì wird nie gewählt, nur weil es installiert ist.
  * @param {{ plan: Plan|null, colibri: { fits: boolean, runs?: string, reason?: string, status?: string }|null,
- *   colibriInstalled: boolean, disk?: { media?: string|null }|null }} o
- * @returns {{ runtime: 'ollama'|'colibri'|null, reason: string, note?: string }}
+ *   colibriInstalled: boolean, disk?: { media?: string|null }|null, prefer?: 'colibri'|'auto' }} o
+ *   prefer 'colibri' (Standard): immer Colibrì, wo es läuft; 'auto': nur wenn nötig oder gemessen schneller
+ * @returns {{ runtime: 'ollama'|'colibri'|null, reason: string, note?: string, better?: 'colibri' }}
  */
-function chooseRuntime({ plan, colibri, colibriInstalled, disk }) {
+function chooseRuntime({ plan, colibri, colibriInstalled, disk, prefer = 'colibri' }) {
   const ollamaOk = Boolean(plan && plan.fits && plan.speed !== 'very_slow');
-  if (ollamaOk) return { runtime: 'ollama', reason: 'fits_memory' };
+  // Wunsch des Nutzers: immer Colibrì, wo es auf diesem PC läuft (Ollama nur als Ausweich)
+  if (prefer === 'colibri' && colibri && colibri.fits) {
+    if (colibriInstalled) return { runtime: 'colibri', reason: 'colibri_preferred', note: disk?.media === 'hdd' ? 'hdd_slow' : undefined };
+    return { runtime: ollamaOk ? 'ollama' : null, reason: 'colibri_not_installed', better: 'colibri', note: disk?.media === 'hdd' ? 'hdd_slow' : undefined };
+  }
+  // Gemessen (echter Windows-Test, 16 GB, ohne Grafikkarte, dieselbe Modelldatei qwen3.6:35b):
+  // Colibrì lud in 11 statt 91 s, erstes Wort nach 14 statt 24 s, 4.4 statt 2.8 Tokens/s.
+  // Läuft ein Mixture-of-Experts-Modell bei Ollama nicht ganz auf der Grafikkarte, ist Colibrì
+  // darum die bessere Wahl. Liegt es ganz im Grafikspeicher, bleibt Ollama (dort nicht gemessen).
+  // Nur grosse Modelle (dort ist gemessen) und nur, wenn höchstens die Hälfte auf der Grafikkarte liegt
+  const cpuBound = Boolean(plan && (plan.weightsGB || 0) >= 12 && (plan.device === 'cpu' || (plan.device === 'partial' && (plan.gpuShare || 0) < 0.5)));
+  if (ollamaOk && !(colibri && colibri.fits && cpuBound)) return { runtime: 'ollama', reason: 'fits_memory' };
   if (colibri && colibri.fits) {
     const streams = /ssd|disk|stream/i.test(colibri.runs || '');
-    return {
-      runtime: colibriInstalled ? 'colibri' : null,
-      reason: colibriInstalled ? (streams ? 'colibri_streams' : 'colibri_expert_cache') : 'colibri_not_installed',
-      note: disk?.media === 'hdd' ? 'hdd_slow' : undefined,
-    };
+    const reason = ollamaOk ? 'colibri_faster' : streams ? 'colibri_streams' : 'colibri_expert_cache';
+    if (colibriInstalled) return { runtime: 'colibri', reason, note: disk?.media === 'hdd' ? 'hdd_slow' : undefined };
+    // Noch nicht installiert: Ollama, falls es geht, aber Colibrì als bessere Wahl anbieten
+    return { runtime: ollamaOk ? 'ollama' : null, reason: 'colibri_not_installed', better: 'colibri', note: disk?.media === 'hdd' ? 'hdd_slow' : undefined };
   }
+  if (ollamaOk) return { runtime: 'ollama', reason: 'fits_memory' };
   if (colibri && !colibri.fits) return { runtime: null, reason: colibri.status === 'needs-disk' ? 'needs_disk' : 'needs_ram' };
   return { runtime: null, reason: plan?.fits ? 'too_slow' : 'not_enough_memory' };
 }

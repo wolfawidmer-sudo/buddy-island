@@ -566,6 +566,36 @@ function createColibri(opts = {}) {
     return readConfig();
   }
 
+  /**
+   * Ein Modell, das Ollama schon geladen hat, für Colibrì nutzen: kein zweiter Download.
+   * Die GGUF-Datei liegt bei Ollama als «Blob»; ein fester Link gibt ihr einen Namen, ohne
+   * Platz zu brauchen (geht nur auf demselben Laufwerk), und «coli import» erstellt daraus
+   * Colibrìs Modellordner. Gibt den Ordner zurück, oder null, wenn das hier nicht geht.
+   * @param {{ modelsDir: string, id: string, outRoot?: string }} o
+   */
+  async function importFromOllama({ modelsDir, id, outRoot }) {
+    const [name, tag = 'latest'] = String(id).split(':');
+    if (!/^[\w.-]+$/.test(name) || !/^[\w.-]+$/.test(tag)) return null;
+    let manifest;
+    try { manifest = JSON.parse(fs.readFileSync(path.join(modelsDir, 'manifests', 'registry.ollama.ai', 'library', name, tag), 'utf8')); } catch { return null; }
+    const layer = (manifest.layers || []).find((/** @type {any} */ l) => /image\.model$/.test(l.mediaType || ''));
+    if (!layer?.digest) return null;
+    const blob = path.join(modelsDir, 'blobs', String(layer.digest).replace(':', '-'));
+    if (!fs.existsSync(blob)) return null;
+    const gguf = path.join(modelsDir, 'blobs', `${name}-${tag}.gguf`);
+    try {
+      if (!fs.existsSync(gguf)) fs.linkSync(blob, gguf);
+    } catch (err) {
+      log(`Colibrì: Ollama-Datei lässt sich nicht verknüpfen (${/** @type {any} */ (err).code || err}), lade stattdessen herunter`);
+      return null;
+    }
+    const out = path.join(outRoot || path.join(home, 'colibri-models'), `${name}-${tag}-ollama`.replace(/[^\w.-]/g, '-'));
+    const r = await coli(['import', '--out', out, gguf], 30 * 60 * 1000);
+    if (r.code !== 0 || !fs.existsSync(out)) throw new LocalError(classifyColibri(r.out), 'Colibrì konnte die Ollama-Datei nicht übernehmen.', { raw: r.out.slice(-400) });
+    log(`Colibrì: ${id} von Ollama übernommen (${out})`);
+    return out;
+  }
+
   /** @param {import('child_process').ChildProcess} proc */
   function killTree(proc) {
     if (!proc.pid) return;
@@ -577,7 +607,7 @@ function createColibri(opts = {}) {
     id: 'colibri',
     name: 'Colibrì',
     detect, catalog, status, start, stop, chat, logs, capabilities, servedModel,
-    installPlan, install, setupModel, findPython, findLauncher,
+    installPlan, install, setupModel, importFromOllama, findPython, findLauncher,
     isManaged: () => startedByBuddy,
     cancelSetup: () => { if (setupProc) killTree(setupProc); },
     setupHome: home_,

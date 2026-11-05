@@ -518,6 +518,9 @@ function localConfig() {
     model: settings.localModel || null,
     modelsDir: settings.localModelsDir || null,
     colibriDir: settings.colibriDir || null,
+    colibriTwins: settings.colibriTwins || {},
+    autoRuntime: settings.localAutoRuntime !== false,
+    alwaysColibri: settings.alwaysColibri !== false,
     tools: settings.localTools !== false,
     unloadOnExit: settings.localUnloadOnExit !== false,
     advanced: cleanAdvanced(settings.localAdvanced),
@@ -528,6 +531,9 @@ function applyLocalConfig(patch = {}) {
   if ('model' in patch) settings.localModel = patch.model || null;
   if ('modelsDir' in patch) settings.localModelsDir = patch.modelsDir || null;
   if ('tools' in patch) settings.localTools = Boolean(patch.tools);
+  if ('colibriTwins' in patch) settings.colibriTwins = patch.colibriTwins && typeof patch.colibriTwins === 'object' ? patch.colibriTwins : {};
+  if ('autoRuntime' in patch) settings.localAutoRuntime = Boolean(patch.autoRuntime);
+  if ('alwaysColibri' in patch) settings.alwaysColibri = Boolean(patch.alwaysColibri);
   if ('unloadOnExit' in patch) settings.localUnloadOnExit = Boolean(patch.unloadOnExit);
   if ('advanced' in patch) settings.localAdvanced = cleanAdvanced({ ...settings.localAdvanced, ...patch.advanced });
   saveSettings();
@@ -2159,6 +2165,8 @@ function setupIpc() {
     const p = {};
     if ('tools' in patch) p.tools = Boolean(patch.tools);
     if ('unloadOnExit' in patch) p.unloadOnExit = Boolean(patch.unloadOnExit);
+    if ('autoRuntime' in patch) p.autoRuntime = Boolean(patch.autoRuntime);
+    if ('alwaysColibri' in patch) p.alwaysColibri = Boolean(patch.alwaysColibri);
     if (patch.advanced && typeof patch.advanced === 'object') p.advanced = patch.advanced;
     applyLocalConfig(p);
     if (patch.permissions && typeof patch.permissions === 'object') {
@@ -2200,6 +2208,13 @@ function setupIpc() {
     if (typeof id !== 'string' || !id) throw new Error('id');
     if (activate) useLocal();
     await local.colibriSetup(id, { select: true });
+    liveWin()?.webContents.send('settings:changed', publicSettings());
+  }));
+  // Ein Klick: Colibrì installieren, Modell übernehmen oder laden, einrichten und verwenden
+  ipcMain.handle('local:colibri-auto', localGuard(async ({ id }) => {
+    if (typeof id !== 'string' || !id) throw new Error('id');
+    useLocal();
+    await local.colibriAuto(id);
     liveWin()?.webContents.send('settings:changed', publicSettings());
   }));
   ipcMain.handle('local:colibri-cancel', localGuard(() => { local.cancelColibri(); local.cancelLoad(); }));

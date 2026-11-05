@@ -203,6 +203,12 @@
     olRestart: $('olRestart'),
     colBox: $('colBox'),
     colLine: $('colLine'),
+    colOffer: $('colOffer'),
+    colAutoRow: $('colAutoRow'),
+    colAutoToggle: $('colAutoToggle'),
+    colOfferLine: $('colOfferLine'),
+    colOfferSub: $('colOfferSub'),
+    colOfferBtn: $('colOfferBtn'),
     colSub: $('colSub'),
     colProgressRow: $('colProgressRow'),
     colProgressText: $('colProgressText'),
@@ -2579,6 +2585,8 @@
   const COL_REASON = () => ({
     fits_memory: t('Mit Ollama schneller: passt ganz in den Speicher'),
     colibri_streams: t('Teile kommen laufend von der SSD: langsam, aber es läuft'),
+    colibri_faster: t('Mit Colibrì schneller: Ollama liefe hier nur auf dem Prozessor'),
+    colibri_preferred: t('Läuft mit Colibrì (deine Wahl)'),
     colibri_expert_cache: t('Passt nicht ganz in den Speicher: Colibrì lädt Teile bei Bedarf nach'),
     colibri_not_installed: t('Läuft hier nur mit Colibrì'),
     needs_ram: t('Zu wenig Arbeitsspeicher'),
@@ -2590,16 +2598,53 @@
   function colibriWorthShowing(ls) {
     const c = ls?.colibri;
     if (!c) return false;
-    if (c.installed) return true;
+    if (c.installed || ls.colibriOffer || ls.colibriAuto) return true;
     const h = ls.hardware;
     // Nur anbieten, wo es sinnvoll laufen kann: genug Arbeitsspeicher und Platz für ein 19-GB-Modell
     return Boolean(h && h.ramGB >= 16 && (h.diskFreeGB === null || h.diskFreeGB >= 25));
+  }
+
+  // Angebot «automatisch schneller mit Colibrì» und der Fortschritt der Ein-Klick-Einrichtung
+  let colAutoConfirm = null;
+  function fillColibriOffer(ls) {
+    const o = ls.colibriOffer;
+    const a = ls.colibriAuto;
+    el.colOffer.hidden = !o && !a;
+    if (el.colOffer.hidden) return;
+    if (a) {
+      const steps = { install: t('Installiere Colibrì …'), import: t('Übernimmt die Datei von Ollama (kein neuer Download) …'), setup: t('Richtet Colibrì ein …'), download: t('Lädt das Modell für Colibrì …'), start: t('Startet Colibrì …') };
+      el.colOfferLine.textContent = t('{name} wird auf Colibrì umgestellt', { name: a.name });
+      el.colOfferSub.textContent = a.step === 'error' ? olError(a.error || {}) : steps[a.step] || '';
+      el.colOfferSub.classList.toggle('err', a.step === 'error');
+      el.colOfferBtn.hidden = a.step !== 'error';
+      el.colOfferBtn.textContent = t('Nochmals versuchen');
+      el.colOfferBtn.dataset.id = a.id;
+      return;
+    }
+    el.colOfferSub.classList.remove('err');
+    el.colOfferBtn.hidden = false;
+    el.colOfferBtn.dataset.id = o.id;
+    el.colOfferLine.textContent = t('{name} mit Colibrì', { name: o.name });
+    const program = ls.colibri?.installed ? '' : t('Colibrì-Programm (rund 18 MB)');
+    const model = o.fromOllama ? t('kein neuer Download, Buddy nimmt die Datei von Ollama') : t('{gb} GB Download', { gb: o.downloadGB });
+    el.colOfferSub.textContent = [
+      t('Buddy nutzt für lokale Modelle immer Colibrì, wo es geht. Im Test auf einem PC ohne passende Grafikkarte lud Colibrì dasselbe Modell in 11 statt 91 Sekunden und antwortete gut anderthalbmal so schnell.'),
+      o.note === 'hdd_slow' ? t('Achtung: Der Speicherort liegt auf einer Festplatte (HDD). Colibrì wird damit sehr langsam.') : '',
+      ls.colibri?.python === false || ls.colibri?.plan?.python === false ? t('Für Colibrì braucht es zuerst Python 3.10 oder neuer (python.org oder Microsoft Store).') : '',
+    ].filter(Boolean).join(' ');
+    const confirming = colAutoConfirm === o.id;
+    el.colOfferBtn.classList.toggle('primary', confirming);
+    el.colOfferBtn.textContent = confirming ? t('Ja, einrichten · {what}', { what: [program, model].filter(Boolean).join(' + ') }) : t('Automatisch einrichten …');
+    el.colOfferBtn.disabled = ['downloading', 'loading', 'installing_runtime'].includes(ls.phase);
   }
 
   function fillColibri(ls) {
     const c = ls?.colibri;
     el.colBox.hidden = !colibriWorthShowing(ls);
     if (el.colBox.hidden) return;
+    fillColibriOffer(ls);
+    el.colAutoRow.hidden = false;
+    el.colAutoToggle.checked = ls.config?.alwaysColibri !== false && ls.config?.autoRuntime !== false;
     const busy = c.busy === 'install' || ls.download?.runtime === 'colibri';
     el.colAction.hidden = true;
     el.colList.textContent = '';
@@ -2614,7 +2659,7 @@
     const disk = h.diskMedia === 'hdd' ? t('Achtung: Der Speicherort liegt auf einer Festplatte (HDD). Colibrì wird damit sehr langsam.') : h.diskBus === 'nvme' ? t('Speicherort auf einer NVMe-SSD: gut für Colibrì.') : '';
     if (!c.installed) {
       el.colLine.textContent = t('Für Modelle, die nicht in den Speicher passen');
-      el.colSub.textContent = [t('Colibrì liest Teile des Modells bei Bedarf von der SSD. Das ist langsamer als Ollama, dafür laufen auch Modelle ab 19 GB.'), disk].filter(Boolean).join(' ');
+      el.colSub.textContent = [t('Colibrì liest Teile des Modells bei Bedarf von der SSD. So laufen auch Modelle ab 19 GB, auf PCs ohne passende Grafikkarte sogar schneller als mit Ollama.'), disk].filter(Boolean).join(' ');
       el.colAction.hidden = busy;
       const plan = c.plan;
       if (colConfirm?.kind === 'install' && plan) {
@@ -2705,6 +2750,25 @@
     if (c.error) footer(el.colFoot, olError(c.error), 'err');
   }
 
+  el.colAutoToggle.addEventListener('change', async () => {
+    const r = await api.localConfig({ alwaysColibri: el.colAutoToggle.checked, autoRuntime: el.colAutoToggle.checked });
+    if (r?.state) state.localState = r.state;
+  });
+  el.colOfferBtn.addEventListener('click', async () => {
+    const id = el.colOfferBtn.dataset.id;
+    if (!id) return;
+    const a = state.localState?.colibriAuto;
+    if (colAutoConfirm !== id && !(a && a.step === 'error')) {
+      colAutoConfirm = id; // erster Klick: Grösse zeigen, zweiter Klick: los
+      fillOllama();
+      return;
+    }
+    colAutoConfirm = null;
+    el.colOfferBtn.disabled = true;
+    const r = await api.colibriAuto(id);
+    if (r?.state) state.localState = r.state;
+    fillOllama();
+  });
   el.colAction.addEventListener('click', async () => {
     const action = el.colAction.dataset.action;
     if (action === 'docs') { api.colibriOpenDocs(); return; }

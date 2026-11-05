@@ -277,6 +277,11 @@
               <div id="colBox" hidden>
                 <h3 class="section">Grosse Modelle (Colibrì)</h3>
                 <div class="group">
+                  <div class="row stacked" id="colOffer" hidden>
+                    <span class="row-label" id="colOfferLine"></span>
+                    <span class="specs-sub" id="colOfferSub"></span>
+                    <div class="ol-actions"><button type="button" class="button small" id="colOfferBtn"></button></div>
+                  </div>
                   <div class="row stacked">
                     <span class="row-label" id="colLine"></span>
                     <span class="specs-sub" id="colSub"></span>
@@ -287,8 +292,9 @@
                   </div>
                   <div id="colList"></div>
                   <button type="button" class="row row-button left" id="colAction" hidden></button>
+                  <label class="row" id="colAutoRow" hidden><span class="row-label two">Immer Colibrì<small>Lokale Modelle laufen mit Colibrì, wo immer es geht. Ollama nur für Modelle, die Colibrì nicht kann.</small></span><span class="switch"><input type="checkbox" id="colAutoToggle"><span></span></span></label>
                 </div>
-                <p class="footer" id="colFoot">Colibrì ist ein eigenständiges Open-Source-Programm für sehr grosse Modelle: Teile des Modells liegen auf der SSD und werden bei Bedarf gelesen. Das ist langsamer als Ollama, dafür laufen auch Modelle, die nicht in den Arbeitsspeicher passen.</p>
+                <p class="footer" id="colFoot">Colibrì ist ein eigenständiges Open-Source-Programm für sehr grosse Modelle: Teile des Modells liegen auf der SSD und werden bei Bedarf gelesen. So laufen auch Modelle, die nicht in den Arbeitsspeicher passen, und auf PCs ohne passende Grafikkarte war Colibrì im Test sogar schneller als Ollama.</p>
               </div>
 
               <h3 class="section">Erweitert</h3>

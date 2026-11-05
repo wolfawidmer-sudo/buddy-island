@@ -85,6 +85,7 @@ function fakeColi(srv, calls) {
     if (sub[0] === 'start') { srv.ctl.loading = true; setTimeout(() => { srv.ctl.up = true; srv.ctl.loading = false; }, 1200); return { code: 0, out: 'Starting colibri' }; }
     if (sub[0] === 'stop') { srv.ctl.up = false; return { code: 0, out: 'stopped' }; }
     if (sub[0] === 'logs') return { code: 0, out: 'serve log' };
+    if (sub[0] === 'import') { const out = sub[sub.indexOf('--out') + 1]; fs.mkdirSync(out, { recursive: true }); return { code: 0, out: `colibri model directory ready: ${out}` }; }
     if (cmd === 'powershell.exe' && /Expand-Archive/.test(args.join(' '))) {
       const dest = /-DestinationPath '([^']+)'/.exec(args.join(' '))[1];
       fs.mkdirSync(dest, { recursive: true });
@@ -117,13 +118,25 @@ function fakeColi(srv, calls) {
   assert.strictEqual(q36.colibri, 'qwen36-35b');
   const box = (ram, vram) => ({ ram: { totalGB: ram, freeGB: ram * 0.6 }, cpu: { threads: 12, avx2: true }, primary: vram ? { vramGB: vram, freeVramGB: null } : null, gpus: [] });
   const ce = { fits: true, runs: 'from RAM' };
-  assert.deepStrictEqual(catalog.chooseRuntime({ plan: catalog.planFor(q36, box(64, 24)), colibri: ce, colibriInstalled: true }), { runtime: 'ollama', reason: 'fits_memory' });
+  assert.deepStrictEqual(catalog.chooseRuntime({ plan: catalog.planFor(q36, box(64, 24)), colibri: ce, colibriInstalled: true, prefer: 'auto' }), { runtime: 'ollama', reason: 'fits_memory' });
+  // Standard «immer Colibrì»: auch mit grosser Grafikkarte, sobald Colibrì das Modell kann
+  assert.strictEqual(catalog.chooseRuntime({ plan: catalog.planFor(q36, box(64, 24)), colibri: ce, colibriInstalled: true }).reason, 'colibri_preferred');
+  assert.strictEqual(catalog.chooseRuntime({ plan: catalog.planFor(q36, box(64, 24)), colibri: { fits: false, status: 'needs-ram' }, colibriInstalled: true }).runtime, 'ollama', 'kann Colibrì es hier nicht: Ollama als Ausweich');
   assert.strictEqual(catalog.chooseRuntime({ plan: catalog.planFor(q36, box(16, 0)), colibri: ce, colibriInstalled: true }).runtime, 'colibri');
   assert.strictEqual(catalog.chooseRuntime({ plan: catalog.planFor(q36, box(16, 0)), colibri: ce, colibriInstalled: false }).reason, 'colibri_not_installed');
   assert.strictEqual(catalog.chooseRuntime({ plan: catalog.planFor(q36, box(16, 0)), colibri: { fits: false, status: 'needs-disk' }, colibriInstalled: true }).reason, 'needs_disk');
   assert.strictEqual(catalog.chooseRuntime({ plan: catalog.planFor(q36, box(16, 0)), colibri: ce, colibriInstalled: true, disk: { media: 'hdd' } }).note, 'hdd_slow');
-  // Kleines Modell, das passt: nie Colibrì
-  assert.strictEqual(catalog.chooseRuntime({ plan: catalog.planFor(cat.find((c) => c.id === 'qwen3.5:4b'), box(16, 0)), colibri: ce, colibriInstalled: true }).runtime, 'ollama');
+  // Grosses Modell läuft bei Ollama nur auf dem Prozessor (48 GB, keine Grafikkarte): Colibrì ist
+  // gemessen schneller und wird automatisch gewählt; ohne Colibrì bleibt Ollama, mit Angebot
+  const q36cpu = catalog.planFor(q36, box(48, 0));
+  assert.ok(q36cpu.fits && q36cpu.device === 'cpu', `Plan passt auf dem Prozessor (${JSON.stringify(q36cpu)})`);
+  assert.deepStrictEqual(catalog.chooseRuntime({ plan: q36cpu, colibri: ce, colibriInstalled: true, prefer: 'auto' }), { runtime: 'colibri', reason: 'colibri_faster', note: undefined });
+  const offer = catalog.chooseRuntime({ plan: q36cpu, colibri: ce, colibriInstalled: false, prefer: 'auto' });
+  assert.ok(offer.runtime === 'ollama' && offer.better === 'colibri', 'ohne Colibrì: Ollama, aber Colibrì angeboten');
+  // Ohne «immer Colibrì»: kleines Modell, das passt, nie Colibrì
+  assert.strictEqual(catalog.chooseRuntime({ plan: catalog.planFor(cat.find((c) => c.id === 'qwen3.5:4b'), box(16, 0)), colibri: ce, colibriInstalled: true, prefer: 'auto' }).runtime, 'ollama');
+  // Modell ohne Colibrì-Gegenstück (colibri: null): immer Ollama
+  assert.strictEqual(catalog.chooseRuntime({ plan: catalog.planFor(cat.find((c) => c.id === 'qwen3.5:4b'), box(16, 0)), colibri: null, colibriInstalled: true }).runtime, 'ollama');
   // Colibrì-Modelle tauchen nie in den drei Ollama-Empfehlungen auf
   const reg = Object.fromEntries(cat.map((m) => [m.id, { available: true, sizeBytes: m.sizeGB * 1024 ** 3 }]));
   const r16 = catalog.recommend(box(16, 0), cat, { registry: reg });
@@ -368,6 +381,58 @@ function fakeColi(srv, calls) {
   assert.strictEqual(srv.ctl.up, true);
   await mgr.shutdown();
   assert.strictEqual(srv.ctl.up, false);
+
+  // ---------------- Automatisch schneller: Ollama-Modell mit einem Klick auf Colibrì ----------------
+  {
+    // qwen3.6:35b liegt schon bei Ollama (Manifest und Datei auf der Platte, wie bei Ollama)
+    const om = await createMockOllama({ models: { 'qwen3.6:35b': { size: 23e9, caps: ['completion', 'tools'] } } });
+    const ort = createOllama({ host: om.host, platform: 'linux', home: tmp, env: {} });
+    const mdir = ort.getModelsDir();
+    fs.mkdirSync(path.join(mdir, 'manifests', 'registry.ollama.ai', 'library', 'qwen3.6'), { recursive: true });
+    fs.mkdirSync(path.join(mdir, 'blobs'), { recursive: true });
+    fs.writeFileSync(path.join(mdir, 'manifests', 'registry.ollama.ai', 'library', 'qwen3.6', '35b'), JSON.stringify({ layers: [{ mediaType: 'application/vnd.ollama.image.model', digest: 'sha256:abc123' }] }));
+    fs.writeFileSync(path.join(mdir, 'blobs', 'sha256-abc123'), 'GGUF');
+    // Colibrì ist installiert, aber noch ohne Modell
+    fs.writeFileSync(path.join(setupHome, 'setup.json'), JSON.stringify({ launcher: path.join(launcherDir, 'coli'), host: '127.0.0.1', port: srv.port }));
+    srv.ctl.up = false;
+    let setupArgs = null;
+    const acol = createColibri({ env, platform: 'linux', home: tmp, tmpDir: tmp, runImpl: fakeColi(srv, []), spawnImpl: (exe, args) => {
+      setupArgs = args;
+      const p = fakeProc();
+      setTimeout(() => {
+        fs.writeFileSync(path.join(setupHome, 'setup.json'), JSON.stringify({ status: 'ready', model: { id: 'qwen3.6-35b-ollama', name: 'qwen3.6-35b-ollama' }, launcher: path.join(launcherDir, 'coli'), host: '127.0.0.1', port: srv.port }));
+        fs.writeFileSync(path.join(setupHome, 'install-state.json'), JSON.stringify({ phase: 'ready' }));
+        p.emit('exit', 0);
+      }, 50);
+      return p;
+    } });
+    let acfg = { model: null, modelsDir: null, tools: true, unloadOnExit: true, advanced: {}, colibriTwins: {} };
+    const hw32 = { os: { platform: 'linux', name: 'Linux', arch: 'x64' }, cpu: { name: 'CPU', threads: 16, cores: 8, avx2: true }, ram: { totalGB: 32, freeGB: 24 }, gpus: [], primary: null, disk: { path: tmp, freeGB: 300, media: 'ssd', bus: 'nvme' }, backends: ['cpu'], errors: [] };
+    const amgr = createLocalManager({ runtime: ort, colibri: acol, cacheDir: tmp, getConfig: () => acfg, setConfig: (p) => { acfg = { ...acfg, ...p }; }, detectHardware: async () => JSON.parse(JSON.stringify(hw32)), freeRamGB: () => 24 });
+    let st = await amgr.init();
+    // Angebot: vorhandenes Ollama-Modell, kein neuer Download
+    assert.ok(st.colibriOffer || st.colibriAuto, 'Angebot erscheint');
+    assert.strictEqual((st.colibriOffer || st.colibriAuto).id, 'qwen3.6:35b');
+    if (st.colibriOffer) assert.strictEqual(st.colibriOffer.fromOllama, true);
+    // Colibrì ist da, das Modell liegt bei Ollama: Buddy stellt ohne Rückfrage selbst um (kein Download)
+    for (let i = 0; i < 100 && amgr.snapshot().loaded?.runtime !== 'colibri'; i += 1) await new Promise((r) => setTimeout(r, 100));
+    st = amgr.snapshot();
+    assert.ok(!st.colibriAuto, `fertig ohne Fehler (${JSON.stringify(st.colibriAuto)})`);
+    assert.ok(setupArgs.includes('--model-dir') && !setupArgs.includes('--model'), 'Colibrì nutzt die übernommene Datei, lädt nichts');
+    assert.ok(fs.existsSync(path.join(mdir, 'blobs', 'qwen3.6-35b.gguf')), 'fester Link auf die Ollama-Datei');
+    assert.strictEqual(acfg.colibriTwins['qwen3.6:35b'], '@colibri/qwen3.6-35b-ollama', 'Zuordnung gemerkt');
+    assert.strictEqual(st.loaded?.runtime, 'colibri');
+    assert.strictEqual(st.colibriOffer, null, 'kein Angebot mehr');
+    // Danach automatisch: wer das Ollama-Modell wählt, bekommt Colibrì
+    await amgr.selectModel('qwen3.6:35b');
+    assert.strictEqual(acfg.model, '@colibri/qwen3.6-35b-ollama');
+    // Abschaltbar: dann wieder Ollama
+    acfg.autoRuntime = false;
+    await amgr.selectModel('qwen3.6:35b').catch(() => {});
+    assert.strictEqual(acfg.model, 'qwen3.6:35b');
+    await amgr.shutdown();
+    await om.close();
+  }
 
   await srv.close();
   await ollamaMock.close();

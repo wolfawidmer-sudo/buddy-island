@@ -139,6 +139,8 @@ Buddy nutzt **[Ollama](https://ollama.com)** als Laufzeit für lokale Modelle. G
 
 **Ehrlichkeit**: Ob die Grafikkarte wirklich rechnet, liest Buddy nach dem Laden aus Ollama (`/api/ps`, Anteil im Grafikspeicher) und zeigt «Grafikkarte», «teils Grafikkarte» oder «Prozessor». Wird ein Gespräch zu lang, fasst das Modell den älteren Teil zusammen und Buddy sagt das im Chat.
 
+**Colibrì zuerst**: Grosse Modelle laufen mit **[Colibrì](https://github.com/JustVugg/colibri)**, wo immer es auf dem PC geht (Einstellung «Immer Colibrì», Standard an). Ollama bleibt für Modelle, die Colibrì nicht kennt, und als Ausweich. Gemessen auf einem Windows-PC mit 16 GB und ohne Grafikkarte, dieselbe Datei qwen3.6:35b: Colibrì lud in 10.7 statt 91.1 s, erstes Wort nach 14.0 statt 23.6 s, 4.4 statt 2.8 Tokens/s. Liegt ein Modell schon bei Ollama und ist Colibrì installiert, stellt Buddy ohne Rückfrage um und übernimmt die Datei per festem Link (kein Download, kein zusätzlicher Platz). Muss Colibrì installiert oder ein Modell geladen werden, fragt Buddy einmal und zeigt die Grösse; danach läuft alles von selbst (installieren, übernehmen oder laden, einrichten, starten).
+
 **Tests**: `test/local.test.js` (nachgebauter Ollama-Server, Hardware-Profile für NVIDIA, AMD, Intel, integriert, nur Prozessor, mehrere Grafikkarten, wenig Speicher). Der echte Durchlauf mit Ollama läuft auf Windows in GitHub Actions (`.github/workflows/local-ai.yml`, Ergebnisse als Artefakt) oder lokal mit `npm run test:ollama`.
 
 ## Wie es funktioniert

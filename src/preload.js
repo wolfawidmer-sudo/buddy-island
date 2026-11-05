@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('buddy', {
   colibriCatalog: (force) => ipcRenderer.invoke('local:colibri-catalog', { force: Boolean(force) }),
   colibriPlan: () => ipcRenderer.invoke('local:colibri-plan'),
   colibriInstall: () => ipcRenderer.invoke('local:colibri-install'),
+  colibriAuto: (id) => ipcRenderer.invoke('local:colibri-auto', { id: String(id || '') }),
   colibriSetup: (id, activate) => ipcRenderer.invoke('local:colibri-setup', { id: String(id || ''), activate: Boolean(activate) }),
   colibriCancel: () => ipcRenderer.invoke('local:colibri-cancel'),
   colibriPickDir: () => ipcRenderer.invoke('local:colibri-dir'),

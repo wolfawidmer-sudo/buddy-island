@@ -17,6 +17,7 @@ const { LocalError } = require('./ollama');
 /**
  * @typedef {{
  *   model: string|null, modelsDir: string|null, colibriDir?: string|null, tools: boolean, unloadOnExit: boolean,
+ *   colibriTwins?: Record<string, string>, autoRuntime?: boolean, alwaysColibri?: boolean,
  *   advanced: { ctx: number|null, temperature: number|null, topP: number|null, maxTokens: number|null, keepAlive: string, gpu: 'auto'|'cpu', threads: number|null, batch: number|null },
  * }} LocalConfig
  */
@@ -117,6 +118,10 @@ function createLocalManager(deps) {
     perf: /** @type {any} */ (null),
     error: /** @type {any} */ (null),
     installPlan: /** @type {any} */ (null),
+    /** Angebot: grosses Modell automatisch mit Colibrì (schneller) */
+    colibriOffer: /** @type {any} */ (null),
+    /** Laufende Ein-Klick-Einrichtung mit Colibrì: Schritt und Fehler */
+    colibriAuto: /** @type {any} */ (null),
     offline: false,
     // Colibrì: { installed, version, configured, model, backend, state, python, catalog, plan, error }
     colibri: /** @type {any} */ (null),
@@ -179,7 +184,125 @@ function createLocalManager(deps) {
     const c = state.colibri;
     if (c?.configured && c.model) list.push({ id: `${COLIBRI}${c.model.id}`, runtime: 'colibri', name: c.model.name, sizeBytes: null, catalog: c.model.name });
     state.installed = list;
+    computeColibriOffer();
     return state.installed;
+  }
+
+  /**
+   * Läuft ein grosses Modell mit Colibrì schneller als mit Ollama (gemessen: siehe chooseRuntime),
+   * bietet Buddy das an: zuerst ein schon bei Ollama vorhandenes Modell (kein neuer Download),
+   * sonst das beste, das hier mit Colibrì läuft. Nichts wird ohne Bestätigung geladen.
+   */
+  function computeColibriOffer() {
+    const h = hw;
+    if (!colibri || !h || state.colibri?.python === false) { state.colibriOffer = null; return; }
+    const have = new Set(state.installed.filter((m) => m.runtime === 'ollama').map((m) => m.id));
+    const twins = getConfig().colibriTwins || {};
+    const ramOk = (h.ram?.totalGB || 0) >= 16;
+    const freeGB = h.disk?.freeGB ?? null;
+    /** @type {any[]} */
+    const offers = [];
+    for (const c of candidates) {
+      if (!c.colibri || twins[c.id]) continue;
+      const plan = catalog.planFor(c, h);
+      const fromOllama = have.has(c.id);
+      // Colibrì hält ein Modell; ist schon eines eingerichtet, kein weiterer Download anbieten
+      if (!fromOllama && state.colibri?.configured) continue;
+      const needGB = fromOllama ? 0 : c.sizeGB || 0;
+      const fits = ramOk && (freeGB === null || freeGB >= needGB + 2);
+      const choice = catalog.chooseRuntime({ plan, colibri: { fits, runs: 'ssd' }, colibriInstalled: false, disk: h.disk || null, prefer: preferRuntime() });
+      if (choice.better !== 'colibri') continue;
+      offers.push({ id: c.id, name: c.name, fromOllama, downloadGB: needGB, quality: Number(c.quality?.chat ?? c.quality) || 0, ollamaRuns: choice.runtime === 'ollama', note: choice.note || null });
+    }
+    offers.sort((a, b) => Number(b.fromOllama) - Number(a.fromOllama) || b.quality - a.quality);
+    state.colibriOffer = offers[0] || null;
+  }
+
+  /**
+   * Immer Colibrì, ohne Rückfrage, wo nichts heruntergeladen oder installiert werden muss:
+   * Colibrì ist schon da und das Modell liegt bei Ollama. Läuft im Hintergrund, einmal pro Modell.
+   * Muss Colibrì erst installiert oder das Modell geladen werden, bleibt es beim Angebot mit Bestätigung.
+   */
+  /** @type {Set<string>} */
+  const autoTried = new Set();
+  function maybeAutoColibri() {
+    const o = state.colibriOffer;
+    if (!o || !o.fromOllama || preferRuntime() !== 'colibri' || getConfig().autoRuntime === false) return null;
+    if (!state.colibri?.installed || state.colibri.python === false || state.colibriAuto || colibriCtrl || autoTried.has(o.id)) return null;
+    if (['downloading', 'installing_runtime', 'loading'].includes(state.phase)) return null;
+    autoTried.add(o.id);
+    log(`Lokale KI: ${o.id} wird automatisch auf Colibrì umgestellt (Datei von Ollama, kein Download)`);
+    return colibriAuto(o.id);
+  }
+
+  /** Immer Colibrì (Standard, Wunsch des Nutzers) oder nur wenn nötig/schneller */
+  function preferRuntime() {
+    return getConfig().alwaysColibri === false ? 'auto' : 'colibri';
+  }
+
+  /** Für ein Ollama-Modell automatisch Colibrì nehmen? (nur wenn eingerichtet und gemessen schneller) @param {string} id */
+  function autoColibriFor(id) {
+    const cfg = getConfig();
+    if (cfg.autoRuntime === false || isColibri(id) || !colibri || !hw) return null;
+    const colId = cfg.colibriTwins?.[id];
+    if (!colId || !state.colibri?.configured || `${COLIBRI}${state.colibri.model?.id}` !== colId) return null;
+    const twin = candidates.find((c) => c.id === id && c.colibri);
+    if (!twin) return null;
+    const choice = catalog.chooseRuntime({ plan: catalog.planFor(twin, hw), colibri: { fits: true }, colibriInstalled: true, disk: hw.disk || null, prefer: preferRuntime() });
+    return choice.runtime === 'colibri' ? colId : null;
+  }
+
+  /**
+   * Ein Modell automatisch mit Colibrì betreiben. Die Oberfläche hat einmal gefragt und Grösse
+   * gezeigt; danach läuft alles von selbst: Colibrì installieren (falls nötig), die Datei von
+   * Ollama übernehmen (sonst herunterladen), einrichten, starten und verwenden.
+   * @param {string} ollamaId
+   */
+  async function colibriAuto(ollamaId) {
+    const twin = candidates.find((c) => c.id === ollamaId && c.colibri);
+    if (!colibri || !twin || colibriCtrl) return snapshot();
+    /** @param {string} step @param {any} [error] */
+    const mark = (step, error = null) => { state.colibriAuto = { id: ollamaId, name: twin.name, step, error }; emit(); };
+    try {
+      mark('install');
+      await refreshColibri();
+      if (!state.colibri?.installed) {
+        await colibriInstall();
+        if (!state.colibri?.installed) { mark('error', state.colibri?.error || { code: 'runtime_missing', message: 'Colibrì konnte nicht installiert werden.' }); return snapshot(); }
+      }
+      if (state.colibri?.python === false) { mark('error', { code: 'python_missing', message: 'Für Colibrì fehlt Python 3.10 oder neuer.' }); return snapshot(); }
+      // Schon bei Ollama: dieselbe Datei übernehmen (kein zweiter Download, kein zusätzlicher Platz)
+      let modelDir = null;
+      if (state.installed.some((m) => m.id === ollamaId && m.runtime === 'ollama')) {
+        mark('import');
+        if (loadedByBuddy) { await runtime.unload(loadedByBuddy).catch(() => {}); loadedByBuddy = null; state.loaded = null; }
+        modelDir = await colibri.importFromOllama({ modelsDir: runtime.getModelsDir(), id: ollamaId, outRoot: getConfig().colibriDir || undefined });
+      }
+      if (modelDir) {
+        mark('setup');
+        colibriCtrl = new AbortController();
+        try { await colibri.setupModel('', { modelDir, signal: colibriCtrl.signal }); } finally { colibriCtrl = null; }
+      } else {
+        mark('download');
+        await colibriSetup(String(twin.colibri), { select: false });
+        if (state.colibri?.error) { mark('error', state.colibri.error); return snapshot(); }
+      }
+      await refreshColibri();
+      await refreshInstalled();
+      const colId = state.colibri?.model?.id ? `${COLIBRI}${state.colibri.model.id}` : null;
+      if (!state.colibri?.configured || !colId) { mark('error', { code: 'error', message: 'Colibrì ist nicht eingerichtet.' }); return snapshot(); }
+      setConfig({ colibriTwins: { ...(getConfig().colibriTwins || {}), [ollamaId]: colId } });
+      log(`Lokale KI: ${ollamaId} läuft ab jetzt automatisch mit Colibrì (${colId})`);
+      mark('start');
+      await selectModel(colId);
+      state.colibriAuto = null;
+      computeColibriOffer();
+      emit();
+    } catch (err) {
+      if (/** @type {Error} */ (err).name === 'AbortError') { state.colibriAuto = null; emit(); }
+      else mark('error', errorInfo(err));
+    }
+    return snapshot();
   }
 
   // ---------------- Colibrì ----------------
@@ -211,7 +334,7 @@ function createLocalManager(deps) {
       const annotated = list.filter((m) => m.kind === 'text').map((m) => {
         const twin = candidates.find((c) => c.colibri === m.id) || null;
         const plan = twin && h ? catalog.planFor(twin, h) : null;
-        const choice = catalog.chooseRuntime({ plan, colibri: m, colibriInstalled: true, disk: h?.disk || null });
+        const choice = catalog.chooseRuntime({ plan, colibri: m, colibriInstalled: true, disk: h?.disk || null, prefer: preferRuntime() });
         return { ...m, id: `${COLIBRI}${m.id}`, colibriId: m.id, ollamaTwin: twin ? { id: twin.id, name: twin.name, fits: Boolean(plan?.fits && plan.speed !== 'very_slow'), speed: plan?.speed || null } : null, choice };
       });
       state.colibri = { ...state.colibri, catalog: annotated, error: null };
@@ -414,6 +537,7 @@ function createLocalManager(deps) {
     if (cat) { candidates = cat.models; catalogInfo = { source: cat.source, updated: cat.updated }; }
     computePicks();
     decidePhase();
+    maybeAutoColibri();
     refreshRegistry({ force }).then(() => { computePicks(); emit(); }).catch(() => {});
     if (deps.remoteFetch && !state.runtime?.installed) runtime.installPlan().then((p) => { state.installPlan = p; emit(); }).catch(() => {});
     return snapshot();
@@ -422,6 +546,9 @@ function createLocalManager(deps) {
   /** Phase aus dem aktuellen Wissen ableiten (ohne etwas zu tun) */
   function decidePhase() {
     if (state.phase === 'downloading' || state.phase === 'installing_runtime' || state.phase === 'loading') { emit(); return; }
+    // Immer Colibrì: gibt es das gewählte Ollama-Modell auch in Colibrì, gilt Colibrì
+    const routed = autoColibriFor(getConfig().model || '');
+    if (routed) setConfig({ model: routed });
     const cfg = getConfig();
     if (isColibri(cfg.model)) {
       const have = state.installed.some((m) => m.id === cfg.model);
@@ -587,6 +714,12 @@ function createLocalManager(deps) {
 
   /** Modell wählen und gleich laden @param {string} id */
   async function selectModel(id) {
+    // Gibt es dasselbe Modell in Colibrì und ist es dort gemessen schneller: automatisch Colibrì
+    const auto = autoColibriFor(id);
+    if (auto) {
+      log(`Lokale KI: ${id} → Colibrì (schneller auf diesem PC)`);
+      id = auto;
+    }
     const prev = state.loaded?.id;
     setConfig({ model: id });
     state.model = id;
@@ -898,7 +1031,7 @@ function createLocalManager(deps) {
     pull, cancelPull, removeModel, selectModel,
     ensureLoaded, optionsFor, keepAliveValue, capsOf, info, recordPerf, noteChatError,
     setModelsDir, diagnostics, shutdown, cancelLoad,
-    colibriCatalog, colibriPlan, colibriInstall, colibriSetup, cancelColibri, refreshColibri,
+    colibriCatalog, colibriPlan, colibriInstall, colibriSetup, colibriAuto, maybeAutoColibri, cancelColibri, refreshColibri,
     isColibri, colibri,
     candidates: () => candidates,
     hardware: () => hw,
