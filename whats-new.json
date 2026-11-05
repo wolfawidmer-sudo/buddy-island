@@ -2,6 +2,23 @@
   "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Für Kundinnen und Kunden geschrieben: Nutzen statt Technik, keine Fachbegriffe.",
   "versions": [
     {
+      "version": "0.12.0",
+      "highlights": [
+        {
+          "title": "Lokale KI läuft mit Colibrì",
+          "text": "Grosse Modelle laufen jetzt immer mit Colibrì, wo es dein PC kann. Im Test lud ein grosses Modell in 11 statt 91 Sekunden und antwortete gut anderthalbmal so schnell."
+        },
+        {
+          "title": "Ohne Umweg eingerichtet",
+          "text": "Liegt ein Modell schon auf deinem PC, stellt Buddy es selbst auf Colibrì um, ohne neuen Download. Sonst genügt ein Klick, den Rest macht Buddy."
+        },
+        {
+          "title": "Downloads laufen weiter",
+          "text": "Bleibt ein grosser Download stehen, setzt Buddy ihn selbst fort. Schon geladene Teile bleiben erhalten."
+        }
+      ]
+    },
+    {
       "version": "0.11.1",
       "highlights": [
         {
