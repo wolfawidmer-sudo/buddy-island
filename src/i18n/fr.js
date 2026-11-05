@@ -1079,4 +1079,6 @@ module.exports = {
   "Lagune": "Lagon",
   "Noch keine Anfragen.": "Aucune requête pour l’instant.",
   "Noch keine Aufgaben.": "Aucune tâche pour l’instant.",
+  "Der Download stockte, Buddy setzt ihn fort …": "Le téléchargement s'est bloqué, Buddy le reprend …",
+  "Versuch {n} von 3. Schon geladene Teile bleiben erhalten.": "Essai {n} sur 3. Les parties déjà téléchargées sont conservées.",
 };

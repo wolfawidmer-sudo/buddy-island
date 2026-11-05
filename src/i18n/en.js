@@ -1068,4 +1068,6 @@ module.exports = {
   "Lagune": "Lagoon",
   "Noch keine Anfragen.": "No requests yet.",
   "Noch keine Aufgaben.": "No tasks yet.",
+  "Der Download stockte, Buddy setzt ihn fort …": "The download stalled, Buddy is resuming it …",
+  "Versuch {n} von 3. Schon geladene Teile bleiben erhalten.": "Attempt {n} of 3. Parts already downloaded are kept.",
 };

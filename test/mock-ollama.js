@@ -13,6 +13,7 @@ function createMockOllama(opts = {}) {
     pullDelayMs: opts.pullDelayMs ?? 5,
     pullSteps: opts.pullSteps ?? 5,
     pullError: null, // z. B. 'pull model manifest: file does not exist'
+    pullStalls: 0, // so viele Downloads bleiben mittendrin hängen (Verbindung offen, keine Daten)
     chatError: null, // z. B. { status: 500, error: 'model requires more system memory (12.0 GiB) than is available (6.0 GiB)' }
     loadError: null,
     reply: opts.reply || 'Hallo! Wie kann ich helfen?',
@@ -62,9 +63,12 @@ function createMockOllama(opts = {}) {
           w({ status: 'pulling manifest' });
           if (ctl.pullError) { w({ error: ctl.pullError }); return res.end(); }
           const total = 1e9;
+          const stall = ctl.pullStalls > 0;
+          if (stall) ctl.pullStalls -= 1;
           for (let i = 1; i <= ctl.pullSteps; i += 1) {
             await sleep(ctl.pullDelayMs);
             if (closed) return;
+            if (stall && i > 1) { await new Promise((r) => res.on('close', r)); return; }
             w({ status: 'pulling abc', digest: 'sha256:abc', total, completed: Math.round((total * i) / ctl.pullSteps) });
           }
           w({ status: 'pulling def', digest: 'sha256:def', total: 1000, completed: 1000 });

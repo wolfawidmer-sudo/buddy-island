@@ -20,7 +20,7 @@ const DOWNLOAD_PAGE = 'https://ollama.com/download';
 const WINGET_ID = 'Ollama.Ollama';
 const LOG_LINES = 300;
 
-/** @typedef {{ status: string, completedBytes: number, totalBytes: number, percent: number|null }} PullProgress */
+/** @typedef {{ status: string, completedBytes: number, totalBytes: number, percent: number|null, attempt?: number }} PullProgress */
 /** @typedef {{ id: string, sizeBytes: number, digest: string, modifiedAt: string|null, family: string|null, params: string|null, quant: string|null }} InstalledModel */
 /** @typedef {{ id: string, sizeBytes: number, vramBytes: number, expiresAt: string|null, ctx: number|null }} LoadedModel */
 
@@ -157,6 +157,7 @@ function runCmd(cmd, args, timeout = 20000) {
  *   home?: string,
  *   tmpDir?: string,
  *   log?: (m: string) => void,
+ *   pullIdleMs?: number, pullResumes?: number, pullResumeDelayMs?: number,
  * }} [opts]
  */
 function createOllama(opts = {}) {
@@ -166,6 +167,9 @@ function createOllama(opts = {}) {
   const remoteFetch = opts.remoteFetch || globalThis.fetch;
   const spawnImpl = opts.spawnImpl || spawn;
   const exec = opts.runImpl || runCmd;
+  const pullIdleMs = opts.pullIdleMs ?? 5 * 60 * 1000;
+  const pullResumes = opts.pullResumes ?? 3;
+  const pullResumeDelayMs = opts.pullResumeDelayMs ?? 5000;
   const platform = opts.platform || process.platform;
   const env = opts.env || process.env;
   const home = opts.home || os.homedir();
@@ -405,6 +409,24 @@ function createOllama(opts = {}) {
    * @param {string} id @param {{ onProgress?: (p: PullProgress) => void, signal?: AbortSignal }} [o]
    */
   async function pull(id, { onProgress = () => {}, signal } = {}) {
+    // Stockt oder reisst ein grosser Download ab (häufig bei 20+ GB), setzt Buddy ihn selbst fort:
+    // Ollama behält die fertigen Teile, ein neuer Aufruf lädt nur den Rest. Echte Fehler
+    // (Modell unbekannt, kein Platz) und Abbruch durch dich werden nicht wiederholt.
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await pullOnce(id, { onProgress, signal });
+      } catch (err) {
+        const resumable = err instanceof LocalError && (err.code === 'timeout' || err.code === 'network');
+        if (!resumable || signal?.aborted || attempt >= pullResumes) throw err;
+        log(`Download von ${id} stockte (${err.code}), setze fort (${attempt + 1}/${pullResumes})`);
+        onProgress({ status: 'resuming', completedBytes: 0, totalBytes: 0, percent: null, attempt: attempt + 1 });
+        await new Promise((r) => setTimeout(r, pullResumeDelayMs * (attempt + 1)));
+      }
+    }
+  }
+
+  /** @param {string} id @param {{ onProgress: (p: PullProgress) => void, signal?: AbortSignal }} o */
+  async function pullOnce(id, { onProgress, signal }) {
     const res = await request('/api/pull', { method: 'POST', body: { model: id, stream: true }, timeoutMs: 0, signal });
     /** @type {Map<string, {total: number, completed: number}>} */
     const parts = new Map();
@@ -420,7 +442,7 @@ function createOllama(opts = {}) {
         let done = 0;
         for (const p of parts.values()) { total += p.total; done += Math.min(p.total, p.completed); }
         onProgress({ status: lastStatus, completedBytes: done, totalBytes: total, percent: total ? Math.min(100, (done / total) * 100) : null });
-      }, { idleMs: 5 * 60 * 1000 });
+      }, { idleMs: pullIdleMs });
     } catch (err) {
       if (signal?.aborted) throw Object.assign(new Error('abgebrochen'), { name: 'AbortError' });
       throw err;

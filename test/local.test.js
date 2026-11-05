@@ -293,6 +293,20 @@ assert.strictEqual(hardware.memAvailableLinux('MemTotal: 16000000 kB\nMemAvailab
   assert.ok(!(await rt.list()).some((m) => m.id === 'qwen3.5:9b'));
   mock.ctl.pullDelayMs = 2;
   mock.ctl.pullSteps = 3;
+  // Download stockt zweimal (Verbindung offen, keine Daten): Buddy setzt selbst fort und meldet es
+  {
+    const rt2 = createOllama({ host: mock.host, platform: 'linux', home: tmp, env: {}, pullIdleMs: 80, pullResumeDelayMs: 1 });
+    mock.ctl.pullStalls = 2;
+    const before = mock.ctl.pulls;
+    const seen = [];
+    await rt2.pull('qwen3.5:4b', { onProgress: (p) => seen.push(p.status) });
+    assert.strictEqual(mock.ctl.pulls - before, 3, 'zweimal fortgesetzt, dann fertig');
+    assert.strictEqual(seen.filter((x) => x === 'resuming').length, 2, 'Fortsetzen wird angezeigt');
+    assert.strictEqual(seen[seen.length - 1], 'success');
+    mock.ctl.pullStalls = 5;
+    await assert.rejects(rt2.pull('qwen3.5:4b'), (e) => e.code === 'timeout', 'nach drei Versuchen ehrliche Meldung');
+    mock.ctl.pullStalls = 0;
+  }
   // Fehler im Download-Stream
   mock.ctl.pullError = 'pull model manifest: file does not exist';
   await assert.rejects(rt.pull('nope:1b'), (e) => e.code === 'not_found');

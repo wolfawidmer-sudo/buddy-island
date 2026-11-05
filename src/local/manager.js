@@ -516,6 +516,13 @@ function createLocalManager(deps) {
       await runtime.pull(id, {
         signal: pullCtrl.signal,
         onProgress: (p) => {
+          // Download stockte, Buddy setzt ihn fort: bisherigen Stand behalten, Tempo neu messen
+          if (p.status === 'resuming') {
+            samples.length = 0;
+            state.download = { ...(state.download || { id, completedBytes: 0, totalBytes: bytes, percent: 0 }), status: 'resuming', attempt: p.attempt, speedBps: null, etaSec: null };
+            emit();
+            return;
+          }
           const t = now();
           samples.push({ t, b: p.completedBytes });
           while (samples.length > 2 && t - samples[0].t > 8000) samples.shift();

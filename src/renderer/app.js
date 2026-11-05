@@ -2225,6 +2225,7 @@
       const d = ls.download;
       const sub = d.totalBytes ? [`${fmtBytes(d.completedBytes)} / ${fmtBytes(d.totalBytes)}`, d.speedBps ? `${fmtBytes(d.speedBps)}/s` : '', fmtEta(d.etaSec)].filter(Boolean).join(' · ') : t('Verbinde …');
       const verifying = /verifying|writing|success|^ready$|^build$/i.test(d.status || '');
+      if (d.status === 'resuming') return { step: t('Der Download stockte, Buddy setzt ihn fort …'), percent: d.percent, sub: t('Versuch {n} von 3. Schon geladene Teile bleiben erhalten.', { n: d.attempt || 1 }), cancel: true };
       return { step: verifying ? t('Prüfe {name} …', { name: modelName(d.id) }) : t('Lade {name} herunter …', { name: modelName(d.id) }), percent: verifying ? null : d.percent, sub: verifying ? '' : sub, cancel: !verifying };
     }
     if (ls.phase === 'loading' && String(ls.install?.phase || '').startsWith('colibri_')) {
