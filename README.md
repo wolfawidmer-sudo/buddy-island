@@ -53,7 +53,8 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 2. **Installieren**: Doppelklick auf die Datei. Falls Windows «Der Computer wurde durch Windows geschützt» anzeigt: «Weitere Informationen» → «Trotzdem ausführen». Das erscheint, weil die App (noch) nicht mit einem kostenpflichtigen Zertifikat signiert ist. Buddy installiert sich nur für deinen Benutzer, ohne Administratorrechte, und legt Verknüpfungen im Startmenü und auf dem Desktop an.
 3. **KI einrichten**:
    - Ohne Key: Klicke oben auf das Island → «Einrichten». Buddy zeigt das empfohlene Modell und die Grösse, fragt nach und richtet Ollama und das Modell selbst ein (je nach PC etwa 2 bis 10 GB).
-   - Mit Key (optional, klügere Antworten, PC-Steuerung nur mit Claude): Einstellungen → «Provider & API-Keys» → Anbieter wählen → Key einfügen → «Verbinden». Keys gibt es in der [Claude Console](https://platform.claude.com/settings/keys), bei [OpenAI](https://platform.openai.com/api-keys), in der [xAI Console](https://console.x.ai) oder im [Google AI Studio](https://aistudio.google.com/apikey).
+   - Mit Key (optional, klügere Antworten, PC-Steuerung nur mit Claude): Einstellungen → «Provider & API-Keys» → Anbieter wählen → Key einfügen → «Verbinden». Keys gibt es in der [Claude Console](https://platform.claude.com/settings/keys), bei [OpenAI](https://platform.openai.com/api-keys), in der [xAI Console](https://console.x.ai) oder im [Google AI Studio](https://aistudio.google.com/apikey). Ein Abo (Claude Pro/Max, ChatGPT Plus/Pro, Grok, Google One) enthält keinen API-Zugang. Buddy prüft einen Key beim Anbieter (kostenlose Modellliste), nicht an seinem Präfix.
+   - **Gemini**: Buddy nutzt die Gemini API aus Google AI Studio, nicht Vertex AI. Google nimmt ältere Standard-Keys (meist «AIza…») seit September 2026 nicht mehr an; neue Keys aus AI Studio sind Auth Keys (meist «AQ.…»). Ein gespeicherter alter Key bleibt erhalten, Buddy zeigt aber einen Hinweis und bittet um einen neuen.
 4. **Fertig**: Mit <kbd>Strg</kbd> + <kbd>Umschalt</kbd> + <kbd>Leertaste</kbd> öffnest du Buddy von überall.
 5. **Selbsttest**: Einstellungen → «Über Buddy» → «Selbsttest starten» zeigt dir, ob alles funktioniert.
 
@@ -116,7 +117,7 @@ Unter **Eigene Kurzbefehle** verbindest du ein Kürzel mit einem festen Auftrag,
 
 Ausführlich in [PRIVACY.md](PRIVACY.md). Kurz:
 
-- **Dein API-Key** wird mit der Windows-Verschlüsselung (DPAPI, über Electrons `safeStorage`) nur auf deinem PC gespeichert und ausschliesslich an `api.anthropic.com` geschickt. Er steht nie im Code oder in diesem Repository.
+- **Dein API-Key** wird mit der Windows-Verschlüsselung (DPAPI, über Electrons `safeStorage`) nur auf deinem PC gespeichert und ausschliesslich an die API des jeweiligen Anbieters geschickt (`api.anthropic.com`, `api.openai.com`, `api.x.ai`, `generativelanguage.googleapis.com`), immer im Header, nie in der Adresse. Er steht nie im Code oder in diesem Repository.
 - **Keine Telemetrie**: Buddy schickt nichts an andere Server.
 - **PC-Steuerung** fragt vor jeder Aufgabe um Erlaubnis (abschaltbar). Buddy ist angewiesen, keine Passwörter oder Zahlungsdaten einzugeben, nichts zu kaufen und vor dem Verschicken von Nachrichten nachzufragen. Bildschirmfotos gehen dabei an Claude. Lass Buddy deshalb nicht steuern, während sensible Dinge offen sind.
 - **Mitteilungen** bleiben auf deinem PC. Claude sieht sie nur, wenn du Buddy fragst, was du verpasst hast.
@@ -144,7 +145,7 @@ Buddy nutzt **[Ollama](https://ollama.com)** als Laufzeit für lokale Modelle. G
 | Datei | Aufgabe |
 | --- | --- |
 | `src/main.js` | Fenster, Tastenkürzel, Updates, Verbindung der Teile |
-| `src/llm/` | Anbieter-Schnittstelle (`types.d.ts`), Adapter mit dem jeweils eigenen Protokoll: OpenAI/xAI (Chat Completions), Gemini (nativ `generateContent` mit `thoughtSignature`), lokal (Transformers); gemeinsame Fehlerklassen mit Backoff (`errors.js`), Ausweichmodelle (`fallback.js`) und Verbindungstest (`health.js`) |
+| `src/llm/` | Anbieter-Schnittstelle (`types.d.ts`), Adapter mit dem jeweils eigenen Protokoll: Claude (Messages API, Version 2026-10-21, `Authorization: Bearer`), OpenAI (Responses API mit verschlüsselten Denk-Items), xAI (Chat Completions), Gemini (nativ `generateContent` mit `thoughtSignature`, Key im Header `x-goog-api-key`), lokal (Ollama, Colibrì, Transformers); Anmeldung pro Anbieter (`auth.js`: Anleitung, Formatprüfung ohne Präfix-Zwang, Fehlerdeutung); gemeinsame Fehlerklassen mit Backoff (`errors.js`), Ausweichmodelle (`fallback.js`) und Verbindungstest (`health.js`) |
 | `src/claude.js` | Claude Messages API (Streaming, Prompt-Caching, Wiederholungen, Zeitlimits) |
 | `src/discovery.js` | Erkennt installierte KI-Tools und Laufzeiten |
 | `src/local/` | Lokale KI: Hardware-Erkennung (`hardware.js`), Modellkatalog, Speicherabschätzung und Empfehlung (`catalog.js`, `models.json`), Ollama-Anbindung (`ollama.js`), Laufzeit-Schnittstelle (`runtime.js`), Ablauf und Zustand (`manager.js`) |

@@ -1488,3 +1488,4 @@ body { padding-top: var(--gap); }
 .island ::-webkit-scrollbar-thumb:hover { background: var(--label-3); }
 .island ::-webkit-scrollbar-button,
 .island ::-webkit-scrollbar-corner { display: none; background: transparent; }
+.key-notice { color: var(--orange, #ff9f0a); font-weight: 600; }

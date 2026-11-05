@@ -3,11 +3,11 @@
 // Claude-Denk-Blöcke, OpenAI-Streaming-Sperre. Antworten kommen aus einem kleinen «Gehirn».
 
 const enc = new TextEncoder();
-const GOOD_KEY = { anthropic: 'sk-ant-good', openai: 'sk-good', xai: 'xai-good', gemini: 'AIza-good' }; // pragma: allowlist secret
+const GOOD_KEY = { anthropic: 'sk-ant-good', openai: 'sk-good', xai: 'xai-good', gemini: 'AQ.good' }; // pragma: allowlist secret
 const MODELS = {
   anthropic: ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'],
-  openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-5', 'text-embedding-3-small'],
-  xai: ['grok-4.3', 'grok-4.6'],
+  openai: ['gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.1-sol', 'gpt-4o', 'text-embedding-3-small'],
+  xai: ['grok-4.3', 'grok-4.6', 'grok-4.7'],
   gemini: ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-flash'],
 };
 
@@ -143,6 +143,9 @@ function createMock(provider, opts = {}) {
   function openaiLike(u, headers, body) {
     if (headers.authorization !== `Bearer ${GOOD_KEY[provider]}`) return json({ error: { message: 'Incorrect API key provided: sk-…', type: 'invalid_request_error', code: 'invalid_api_key' } }, 401);
     if (u.pathname.endsWith('/models')) return json({ object: 'list', data: list.map((id) => ({ id, object: 'model' })) });
+    if (u.pathname.endsWith('/responses')) return responses(body);
+    // GPT-6: Werkzeuge mit Denken gehen über Chat Completions nicht mehr
+    if (provider === 'openai' && /^gpt-6/.test(body.model) && body.tools?.length && body.reasoning_effort !== 'none') return json({ error: { message: `Function tools with reasoning_effort are not supported for ${body.model} in /v1/chat/completions. Please use /v1/responses instead.`, type: 'invalid_request_error', param: 'tools' } }, 400);
     if (!isModel(body.model)) return json({ error: { message: `The model \`${body.model}\` does not exist or you do not have access to it.`, type: 'invalid_request_error', code: 'model_not_found' } }, 404);
     if (opts.verifyStream && body.stream) return json({ error: { message: 'Your organization must be verified to stream this model. Please go to: https://platform.openai.com/settings/organization/general', type: 'invalid_request_error', param: 'stream', code: 'unsupported_value' } }, 400);
     if (provider === 'openai' && 'max_tokens' in body && /gpt-5/.test(body.model)) return json({ error: { message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.", type: 'invalid_request_error', param: 'max_tokens' } }, 400);
@@ -182,6 +185,82 @@ function createMock(provider, opts = {}) {
     if (body.stream_options?.include_usage) chunks.push({ choices: [], usage });
     chunks.push('[DONE]');
     return sseData(chunks);
+  }
+
+
+  // ---------- OpenAI Responses API ----------
+  function responses(body) {
+    const err = (message, param, status = 400) => json({ error: { message, type: 'invalid_request_error', param, code: null } }, status);
+    if (!isModel(body.model)) return json({ error: { message: `The model \`${body.model}\` does not exist or you do not have access to it.`, type: 'invalid_request_error', code: 'model_not_found' } }, 404);
+    // Felder aus Chat Completions gibt es hier nicht
+    for (const k of ['messages', 'max_tokens', 'max_completion_tokens', 'reasoning_effort', 'response_format', 'stream_options']) if (k in body) return err(`Unsupported parameter: '${k}'.`, k);
+    if (opts.verifyStream && body.stream) return err('Your organization must be verified to stream this model.', 'stream');
+    const effort = body.reasoning?.effort;
+    if (effort === 'none' && /^gpt-6\.1-sol|^gpt-6-astra/.test(body.model)) return err("Unsupported value: 'reasoning.effort' does not support 'none' with this model. Supported values are: 'low', 'medium', 'high', 'xhigh', and 'max'.", 'reasoning.effort');
+    if (body.reasoning && /^gpt-4/.test(body.model)) return err("Unsupported parameter: 'reasoning.effort' is not supported with this model.", 'reasoning.effort');
+    const input = typeof body.input === 'string' ? [{ role: 'user', content: body.input }] : body.input || [];
+    const conv = [];
+    for (let i = 0; i < input.length; i += 1) {
+      const it = input[i];
+      if (it.type === 'reasoning') {
+        if (!state.issued.has(it.encrypted_content)) return err(`Encrypted content for item ${it.id || i} could not be verified.`, `input[${i}]`);
+        continue;
+      }
+      if (it.type === 'function_call') {
+        // Mit Denken: der Aufruf braucht sein Denk-Item davor (wie die echte API bei store: false)
+        if (state.callNeedsReasoning?.has(it.call_id) && input[i - 1]?.type !== 'reasoning' && input[i - 1]?.type !== 'function_call') return err(`Item of type 'function_call' was provided without its required 'reasoning' item.`, `input[${i}]`);
+        const out = input.slice(i + 1).find((x) => x.type === 'function_call_output' && x.call_id === it.call_id);
+        if (!out) return err(`No tool output found for function call ${it.call_id}.`, 'input');
+        const prev = conv[conv.length - 1];
+        if (prev?.role === 'assistant') prev.calls.push(it); else conv.push({ role: 'assistant', text: '', calls: [it], results: [] });
+        continue;
+      }
+      if (it.type === 'function_call_output') {
+        const prev = conv[conv.length - 1];
+        if (prev?.role === 'tool') prev.results.push({ text: it.output }); else conv.push({ role: 'tool', text: '', calls: [], results: [{ text: it.output }] });
+        continue;
+      }
+      if (!['user', 'assistant', 'system', 'developer'].includes(it.role)) return err(`Invalid value: '${it.role}'.`, `input[${i}].role`);
+      const parts = typeof it.content === 'string' ? [{ type: 'input_text', text: it.content }] : it.content || [];
+      for (const p of parts) {
+        const okType = it.role === 'assistant' ? ['output_text', 'refusal'] : ['input_text', 'input_image', 'input_file'];
+        if (!okType.includes(p.type)) return err(`Invalid value: '${p.type}'. Supported values are: ${okType.map((x) => `'${x}'`).join(', ')}.`, `input[${i}].content[0].type`);
+      }
+      conv.push({ role: it.role, text: parts.filter((p) => p.text).map((p) => p.text).join(' '), calls: [], results: [] });
+    }
+    if (body.tools?.some((t) => t.type === 'function' && (t.function || !t.name))) return err("Missing required parameter: 'tools[0].name'.", 'tools[0].name');
+    const format = body.text?.format?.schema;
+    const out = brain(conv, { tools: Boolean(body.tools?.length), format });
+    const output = [];
+    const thinking = effort && effort !== 'none';
+    if (thinking && body.include?.includes('reasoning.encrypted_content')) {
+      const enc = `enc_${++seq}`;
+      state.issued.set(enc, true);
+      output.push({ type: 'reasoning', id: `rs_${seq}`, summary: [], encrypted_content: enc });
+    }
+    if (out.text) output.push({ type: 'message', id: `msg_${++seq}`, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: out.text, annotations: [] }] });
+    for (const c of out.calls || []) {
+      const callId = `call_${++seq}`;
+      if (thinking) (state.callNeedsReasoning = state.callNeedsReasoning || new Set()).add(callId);
+      output.push({ type: 'function_call', id: `fc_${seq}`, call_id: callId, name: c.name, arguments: JSON.stringify(c.args), status: 'completed' });
+    }
+    const usage = { input_tokens: 30, input_tokens_details: { cached_tokens: 10 }, output_tokens: 8, output_tokens_details: { reasoning_tokens: thinking ? 2 : 0 } };
+    const response = { id: `resp_${++seq}`, object: 'response', status: 'completed', model: body.model, output, usage, incomplete_details: null };
+    if (!body.stream) return json(response);
+    const ev = [['response.created', { type: 'response.created', response: { ...response, status: 'in_progress', output: [] } }]];
+    output.forEach((item, index) => {
+      ev.push(['response.output_item.added', { type: 'response.output_item.added', output_index: index, item: { ...item, ...(item.type === 'message' ? { content: [] } : {}) } }]);
+      if (item.type === 'message') for (const piece of item.content[0].text.match(/.{1,4}/g)) ev.push(['response.output_text.delta', { type: 'response.output_text.delta', output_index: index, content_index: 0, delta: piece }]);
+      if (item.type === 'function_call') ev.push(['response.function_call_arguments.delta', { type: 'response.function_call_arguments.delta', output_index: index, delta: item.arguments }]);
+      ev.push(['response.output_item.done', { type: 'response.output_item.done', output_index: index, item }]);
+    });
+    // opts.truncate: Verbindung reisst vor «response.completed» ab
+    if (opts.truncate && state.failOnce.truncate !== 0) {
+      if (state.failOnce.truncate > 0) state.failOnce.truncate -= 1;
+      return sseEvents(ev.slice(0, 2));
+    }
+    ev.push(['response.completed', { type: 'response.completed', response }]);
+    return sseEvents(ev);
   }
 
   // ---------- Gemini generateContent ----------

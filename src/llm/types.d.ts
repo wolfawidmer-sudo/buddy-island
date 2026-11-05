@@ -7,7 +7,7 @@
 // Agent, Router und Verlauf vom Anbieter unabhängig.
 
 export type ProviderId = 'anthropic' | 'openai' | 'xai' | 'gemini' | 'huggingface' | 'local';
-export type ProviderKind = 'anthropic' | 'openai' | 'gemini' | 'huggingface' | 'local';
+export type ProviderKind = 'anthropic' | 'openai' | 'openai-responses' | 'gemini' | 'huggingface' | 'local';
 export type Tier = 'haiku' | 'sonnet' | 'opus';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -72,6 +72,8 @@ export interface ModelInfo {
   longContext?: { above: number; price: Price };
   efforts: string[];
   effortParam?: 'reasoning_effort';
+  /** Kennt reasoning effort «none» (schnellste Stufe ohne Denken) */
+  reasoningNone?: boolean;
   caps: Capabilities;
   local?: boolean;
   estimated?: boolean;
@@ -81,8 +83,6 @@ export interface ProviderInfo {
   id: ProviderId;
   kind: ProviderKind;
   name: string;
-  keyPrefix: string;
-  keyHint: string;
   consoleUrl: string;
   host: string;
   baseUrl: string;
@@ -102,7 +102,7 @@ export interface TextBlock { type: 'text'; text: string; meta?: ProviderMeta }
 export interface ImageBlock { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
 export interface ThinkingBlock { type: 'thinking'; thinking: string; signature?: string }
 /** Anbieter-eigene Fortsetzungsdaten (z. B. Gemini thoughtSignature), nur für denselben Anbieter */
-export interface ProviderMeta { provider?: string; thoughtSignature?: string; callId?: string }
+export interface ProviderMeta { provider?: string; thoughtSignature?: string; callId?: string; /** OpenAI Responses: verschlüsselte Denk-Items, unverändert zurückzuschicken */ reasoning?: any[] }
 export interface ToolUseBlock { type: 'tool_use'; id: string; name: string; input: Record<string, unknown>; toolset_name?: string; meta?: ProviderMeta }
 export interface ToolResultBlock {
   type: 'tool_result';

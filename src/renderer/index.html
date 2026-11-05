@@ -149,11 +149,11 @@
             <div class="group">
               <div id="adminAnthRows">
               <div class="row">
-                <span class="row-label two">Anthropic-Admin-Key<small>Nutzung und Kosten aller Claude-API-Keys deiner Organisation</small></span>
+                <span class="row-label two">Anthropic-Admin-Zugang<small>Nutzung und Kosten aller Claude-API-Keys deiner Organisation (Key mit Admin-Rechten, ohne Workspace-Beschränkung)</small></span>
                 <span class="row-value" id="adminAnthStatus">–</span>
               </div>
               <div class="row field-row">
-                <input id="adminAnthInput" type="password" placeholder="sk-ant-admin…" spellcheck="false" autocomplete="off" aria-label="Anthropic-Admin-Key">
+                <input id="adminAnthInput" type="password" placeholder="Key mit Admin-Rechten einfügen" spellcheck="false" autocomplete="off" aria-label="Anthropic-Admin-Key">
                 <button type="button" class="button small" id="adminAnthSave">Speichern</button>
               </div>
               </div>
@@ -163,7 +163,7 @@
                 <span class="row-value" id="adminOaiStatus">–</span>
               </div>
               <div class="row field-row">
-                <input id="adminOaiInput" type="password" placeholder="sk-admin-…" spellcheck="false" autocomplete="off" aria-label="OpenAI-Admin-Key">
+                <input id="adminOaiInput" type="password" placeholder="OpenAI-Admin-Key einfügen" spellcheck="false" autocomplete="off" aria-label="OpenAI-Admin-Key">
                 <button type="button" class="button small" id="adminOaiSave">Speichern</button>
               </div>
               </div>
@@ -202,7 +202,7 @@
                   <button type="button" class="link danger" id="keyRemove" hidden>Entfernen</button>
                 </div>
                 <div class="row field-row">
-                  <input id="keyInput" type="password" placeholder="sk-ant-…" spellcheck="false" autocomplete="off" aria-label="API-Key">
+                  <input id="keyInput" type="password" placeholder="API-Key einfügen" spellcheck="false" autocomplete="off" aria-label="API-Key">
                   <button type="button" class="button primary small" id="keySave">Verbinden</button>
                 </div>
                 <details class="row disclosure" id="workspaceRow">
@@ -222,7 +222,7 @@
                 </div>
                 <details class="row disclosure">
                   <summary><span class="row-label">Hugging-Face-Token</span><span class="row-value">nur für geschützte Modelle</span></summary>
-                  <input id="hfTokenInput" type="password" placeholder="hf_…" spellcheck="false" autocomplete="off" aria-label="Hugging-Face-Token">
+                  <input id="hfTokenInput" type="password" placeholder="Hugging-Face-Token (optional)" spellcheck="false" autocomplete="off" aria-label="Hugging-Face-Token">
                 </details>
                 <button type="button" class="row row-button left" id="hfTest">Modell testen</button>
               </div>
@@ -371,6 +371,7 @@
                 <span class="row-label" id="modelLabel">Modell</span>
                 <select id="modelSelect" class="row-select"></select>
               </label>
+              <p class="footer err" id="modelNotice" hidden></p>
               <div class="row stacked">
                 <span class="row-label">Denktiefe</span>
                 <div class="segmented" id="effortSeg" role="radiogroup" aria-label="Denktiefe">

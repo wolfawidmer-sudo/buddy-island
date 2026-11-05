@@ -1915,13 +1915,6 @@
     document.documentElement.style.setProperty('--on-accent', lum > 0.6 ? '#000' : '#fff');
   }
 
-  const PROVIDER_FOOT = {
-    anthropic: 'Den Key erstellst du in der <a href="https://platform.claude.com/settings/keys">Claude Console</a>.',
-    openai: 'Den Key erstellst du auf <a href="https://platform.openai.com/api-keys">platform.openai.com</a>.',
-    xai: 'Den Key erstellst du in der <a href="https://console.x.ai">xAI Console</a>.',
-    gemini: 'Den Key erstellst du im <a href="https://aistudio.google.com/apikey">Google AI Studio</a>.',
-  };
-
   function fillProvider() {
     const s = state.settings;
     const pid = s.provider || 'anthropic';
@@ -1957,14 +1950,30 @@
       el.keyRemove.hidden = !p.hasKey;
       el.keyRevoke.hidden = !p.hasKey;
       el.keySave.textContent = p.hasKey ? t('Ersetzen') : t('Verbinden');
-      el.keyInput.placeholder = `${p.keyPrefix || ''}…`;
-      el.keyFoot.innerHTML = `${t(PROVIDER_FOOT[pid] || '')} ${t('Buddy speichert ihn mit der Windows-Verschlüsselung (DPAPI), schreibt ihn nie ins Protokoll und schickt ihn nur an diesen Anbieter. «Widerrufen» löscht ihn hier und öffnet die Console, wo du ihn endgültig sperrst.')}`;
+      // Anleitung pro Anbieter kommt aus src/llm/auth.js (ein Ort für alle Anbieter)
+      const a = p.auth || {};
+      el.keyInput.placeholder = a.placeholder || t('API-Key einfügen');
+      el.keyFoot.textContent = '';
+      const help = document.createElement('span');
+      help.textContent = `${a.help || ''} `;
+      const where = document.createElement('a');
+      where.href = a.url || p.consoleUrl;
+      where.textContent = a.where || p.consoleUrl;
+      const rest = document.createElement('span');
+      rest.textContent = ` ${a.notIncluded || ''} ${t('Buddy speichert ihn mit der Windows-Verschlüsselung (DPAPI), schreibt ihn nie ins Protokoll und schickt ihn nur an diesen Anbieter. «Widerrufen» löscht ihn hier und öffnet die Console, wo du ihn endgültig sperrst.')}`;
+      el.keyFoot.append(help, where, rest);
+      if (p.keyNotice) {
+        const n = document.createElement('strong');
+        n.className = 'key-notice';
+        n.textContent = ` ${p.keyNotice}`;
+        el.keyFoot.prepend(n, document.createElement('br'));
+      }
       el.setupBox.hidden = true;
       el.specsBox.hidden = true;
     } else {
       el.keyFoot.textContent = t('Lokale Modelle laufen über Hugging Face Transformers direkt auf deinem PC: ohne API-Key, ohne Kosten, ohne Internet (ausser beim ersten Herunterladen). Bildschirmfotos und Werkzeuge gibt es damit nicht, nur Chat.');
       if (document.activeElement !== el.hfModelInput) el.hfModelInput.value = s.hfModel || '';
-      el.hfTokenInput.placeholder = s.hasHfToken ? t('Token gespeichert (zum Ersetzen neu eingeben)') : t('hf_…');
+      el.hfTokenInput.placeholder = s.hasHfToken ? t('Token gespeichert (zum Ersetzen neu eingeben)') : t('Hugging-Face-Token (optional)');
       const hasRuntime = Boolean(s.discovery?.python);
       const st = state.local || s.hfStatus || {};
       el.hfStatus.textContent = !hasRuntime ? t('Nicht eingerichtet')
@@ -2943,6 +2952,11 @@
       el.modelSelect.appendChild(opt);
     }
     el.modelSelect.value = current;
+    const notice = document.getElementById('modelNotice');
+    if (notice) {
+      notice.hidden = !state.settings?.modelNotice;
+      notice.textContent = state.settings?.modelNotice || '';
+    }
   }
 
   // ---------- KI-Nutzung (Dashboard) ----------
@@ -3251,7 +3265,7 @@
     el.keyInput.value = '';
     state.settings = result.settings;
     if (result.models?.length) state.models = result.models;
-    footer(el.keyMsg, t('Verbunden. Buddy nutzt jetzt {name}.', { name: (state.settings.providers || []).find((x) => x.id === state.settings.provider)?.name || '' }), 'ok');
+    footer(el.keyMsg, `${t('Verbunden. Buddy nutzt jetzt {name}.', { name: (state.settings.providers || []).find((x) => x.id === state.settings.provider)?.name || '' })}${result.notice ? ` ${result.notice}` : ''}`, 'ok');
     fillSettings();
     loadModels();
     renderEmpty();

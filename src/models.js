@@ -33,31 +33,43 @@ const CATALOG = [
     efforts: ['low', 'medium', 'high', 'xhigh', 'max'], caps: { vision: true, tools: true, computerUse: true, structured: true },
   },
   // ---- OpenAI ----
+  // Aktuelle Modelle laut developers.openai.com/api/docs/models (November 2026). GPT-4o, GPT-4o mini
+  // und GPT-5 sind abgekündigt (Abschaltung 11.12.2026 bzw. 14.1.2027). Gecachte Eingabe: Schätzung.
   {
-    id: 'gpt-4o-mini', provider: 'openai', tier: 'haiku', name: 'GPT-4o mini', short: 'GPT-4o mini',
-    price: { in: 0.15, out: 0.60, cacheWrite: 0.15, cacheRead: 0.075 }, priceEstimated: true,
-    efforts: [], caps: { vision: true, tools: true, computerUse: false, structured: true },
+    id: 'gpt-6-luna', provider: 'openai', tier: 'haiku', name: 'GPT-6 Luna', short: 'GPT-6 Luna',
+    price: { in: 0.10, out: 0.50, cacheWrite: 0.10, cacheRead: 0.01 }, priceEstimated: true,
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'], effortParam: 'reasoning_effort', reasoningNone: true,
+    caps: { vision: true, tools: true, computerUse: false, structured: true },
   },
   {
-    id: 'gpt-4o', provider: 'openai', tier: 'sonnet', name: 'GPT-4o', short: 'GPT-4o',
-    price: { in: 2.5, out: 10, cacheWrite: 2.5, cacheRead: 1.25 }, priceEstimated: true,
-    efforts: [], caps: { vision: true, tools: true, computerUse: false, structured: true },
+    id: 'gpt-6.1-terra', provider: 'openai', tier: 'sonnet', name: 'GPT-6.1 Terra', short: 'GPT-6.1 Terra',
+    price: { in: 1, out: 5, cacheWrite: 1, cacheRead: 0.1 }, priceEstimated: true,
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'], effortParam: 'reasoning_effort', reasoningNone: true,
+    caps: { vision: true, tools: true, computerUse: false, structured: true },
   },
   {
-    id: 'gpt-5', provider: 'openai', tier: 'opus', name: 'GPT-5', short: 'GPT-5',
-    price: { in: 1.25, out: 10, cacheWrite: 1.25, cacheRead: 0.125 }, priceEstimated: true,
-    efforts: ['low', 'medium', 'high'], effortParam: 'reasoning_effort', caps: { vision: true, tools: true, computerUse: false, structured: true },
+    id: 'gpt-6.1-sol', provider: 'openai', tier: 'opus', name: 'GPT-6.1 Sol', short: 'GPT-6.1 Sol',
+    price: { in: 2, out: 10, cacheWrite: 2, cacheRead: 0.2 }, priceEstimated: true,
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'], effortParam: 'reasoning_effort',
+    caps: { vision: true, tools: true, computerUse: false, structured: true },
   },
   // ---- xAI ----
+  // docs.x.ai (Release Notes, Migration 15.5.2026): grok-4.3 ist das aktuelle Standardmodell
+  // (1.25 / 2.50 USD), grok-4.6 und grok-4.7 die grösseren. Preise von 4.6/4.7: Schätzung.
   {
     id: 'grok-4.3', provider: 'xai', tier: 'haiku', name: 'Grok 4.3', short: 'Grok 4.3',
-    price: { in: 1.25, out: 2.5, cacheWrite: 1.25, cacheRead: 0.2 }, priceEstimated: true,
-    efforts: [], caps: { vision: true, tools: true, computerUse: false, structured: true },
+    price: { in: 1.25, out: 2.5, cacheWrite: 1.25, cacheRead: 0.2 },
+    efforts: ['low', 'medium', 'high'], effortParam: 'reasoning_effort', caps: { vision: true, tools: true, computerUse: false, structured: true },
   },
   {
     id: 'grok-4.6', provider: 'xai', tier: 'sonnet', name: 'Grok 4.6', short: 'Grok 4.6',
     price: { in: 2, out: 6, cacheWrite: 2, cacheRead: 0.5 }, priceEstimated: true,
-    efforts: [], caps: { vision: true, tools: true, computerUse: false, structured: true },
+    efforts: ['low', 'medium', 'high'], effortParam: 'reasoning_effort', caps: { vision: true, tools: true, computerUse: false, structured: true },
+  },
+  {
+    id: 'grok-4.7', provider: 'xai', tier: 'opus', name: 'Grok 4.7', short: 'Grok 4.7',
+    price: { in: 2, out: 6, cacheWrite: 2, cacheRead: 0.5 }, priceEstimated: true,
+    efforts: ['low', 'medium', 'high', 'xhigh'], effortParam: 'reasoning_effort', caps: { vision: true, tools: true, computerUse: false, structured: true },
   },
   // ---- Google ----
   // Google zieht ältere Versionen für neue Konten zurück (404 «no longer available to new users»).
@@ -80,6 +92,23 @@ const CATALOG = [
   },
 ];
 
+// Abgekündigte Modelle mit Abschaltdatum laut Anbieter (developers.openai.com/api/docs/deprecations).
+// Buddy ersetzt ein manuell gewähltes Modell nie selbst, zeigt aber einen Hinweis.
+/** @type {Record<string, { until: string, replacement: string }>} */
+const DEPRECATED = {
+  'gpt-5': { until: '2026-12-11', replacement: 'gpt-6.1-sol' },
+  'gpt-5-mini': { until: '2026-12-11', replacement: 'gpt-6.1-terra' },
+  'gpt-5-nano': { until: '2026-12-11', replacement: 'gpt-6-luna' },
+  o3: { until: '2026-12-11', replacement: 'gpt-6.1-sol' },
+  'o3-pro': { until: '2026-12-11', replacement: 'gpt-6.1-sol' },
+  'gpt-4o': { until: '2027-01-14', replacement: 'gpt-6-luna' },
+  'gpt-4o-mini': { until: '2027-01-14', replacement: 'gpt-6-luna' },
+  'gpt-4.1': { until: '2027-01-14', replacement: 'gpt-6-luna' },
+  'gpt-4.1-mini': { until: '2027-01-14', replacement: 'gpt-6-luna' },
+};
+/** Früher eingebaute Standardmodelle (nicht vom Nutzer gewählt, dürfen ersetzt werden) */
+const OLD_DEFAULTS = new Set(['gpt-4o-mini', 'gpt-4o', 'gpt-5']);
+
 // Reihenfolge von günstig/einfach nach teuer/stark (Namen historisch von Claude)
 /** @type {Tier[]} */
 const TIERS = ['haiku', 'sonnet', 'opus'];
@@ -96,34 +125,30 @@ const ZERO_PRICE = { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
 
 /** @type {Record<ProviderId, ProviderInfo>} */
 const PROVIDERS = {
+  // Wie man sich anmeldet (Key-Hilfe, Prüfung, Fehlerdeutung) steht pro Anbieter in src/llm/auth.js
   anthropic: {
-    id: 'anthropic', kind: 'anthropic', name: 'Anthropic Claude', keyPrefix: 'sk-ant-',
-    keyHint: 'Ein Claude-API-Key beginnt mit «sk-ant-».', consoleUrl: 'https://platform.claude.com/settings/keys',
+    id: 'anthropic', kind: 'anthropic', name: 'Anthropic Claude', consoleUrl: 'https://platform.claude.com/settings/keys',
     host: 'api.anthropic.com', baseUrl: 'https://api.anthropic.com/v1', needsKey: true,
   },
+  // OpenAI über die Responses API: nur dort gehen Werkzeuge zusammen mit Denken bei GPT-6
   openai: {
-    id: 'openai', kind: 'openai', name: 'OpenAI', keyPrefix: 'sk-',
-    keyHint: 'Ein OpenAI-API-Key beginnt mit «sk-».', consoleUrl: 'https://platform.openai.com/api-keys',
+    id: 'openai', kind: 'openai-responses', name: 'OpenAI', consoleUrl: 'https://platform.openai.com/api-keys',
     host: 'api.openai.com', baseUrl: 'https://api.openai.com/v1', needsKey: true, family: /^(gpt-|o\d|chatgpt-)/i,
   },
   xai: {
-    id: 'xai', kind: 'openai', name: 'xAI Grok', keyPrefix: 'xai-',
-    keyHint: 'Ein xAI-API-Key beginnt mit «xai-».', consoleUrl: 'https://console.x.ai',
+    id: 'xai', kind: 'openai', name: 'xAI Grok', consoleUrl: 'https://console.x.ai',
     host: 'api.x.ai', baseUrl: 'https://api.x.ai/v1', needsKey: true, family: /^grok/i,
   },
   gemini: {
-    id: 'gemini', kind: 'gemini', name: 'Google Gemini', keyPrefix: 'AIza',
-    keyHint: 'Ein Gemini-API-Key beginnt mit «AIza».', consoleUrl: 'https://aistudio.google.com/apikey',
+    id: 'gemini', kind: 'gemini', name: 'Google Gemini', consoleUrl: 'https://aistudio.google.com/apikey',
     host: 'generativelanguage.googleapis.com', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', needsKey: true, family: /^(models\/)?gemini/i,
   },
   local: {
-    id: 'local', kind: 'local', name: 'Lokal auf diesem PC', keyPrefix: '',
-    keyHint: '', consoleUrl: 'https://ollama.com',
+    id: 'local', kind: 'local', name: 'Lokal auf diesem PC', consoleUrl: 'https://ollama.com',
     host: '127.0.0.1', baseUrl: 'http://127.0.0.1:11434', needsKey: false, local: true,
   },
   huggingface: {
-    id: 'huggingface', kind: 'huggingface', name: 'Hugging Face (lokal)', keyPrefix: 'hf_',
-    keyHint: 'Ein Hugging-Face-Token beginnt mit «hf_» (nur für geschützte Modelle nötig).', consoleUrl: 'https://huggingface.co/settings/tokens',
+    id: 'huggingface', kind: 'huggingface', name: 'Hugging Face (lokal)', consoleUrl: 'https://huggingface.co/settings/tokens',
     host: 'huggingface.co', baseUrl: '', needsKey: false, local: true,
   },
 };
@@ -172,7 +197,7 @@ function tierOf(modelId) {
 function isReasoningModel(provider, id) {
   if (/non-reasoning|chat-latest|-chat\b/i.test(id)) return false;
   if (provider === 'openai') return /^(gpt-[5-9]|o[1-9])/i.test(id);
-  if (provider === 'xai') return /^grok-3-mini/i.test(id);
+  if (provider === 'xai') return /^grok-(3-mini|4\.[3-9]|4\.\d{2}|[5-9])/i.test(id);
   return false;
 }
 
@@ -405,6 +430,8 @@ function maxTokensFor(effort, minimum = 4096) {
 
 module.exports = {
   CATALOG,
+  DEPRECATED,
+  OLD_DEFAULTS,
   TIERS,
   TIER_LABEL,
   PROVIDERS,

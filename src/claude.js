@@ -10,7 +10,9 @@ function apiBase() {
   return DEFAULT_BASE;
 }
 const API_BASE = apiBase();
-const API_VERSION = '2023-06-01';
+// Aktuelle API-Version (platform.claude.com/docs/en/api/migration-2026-10-21). Buddy schickt
+// weder temperature/top_p/top_k noch Dokumente in Assistent-Nachrichten, ist also nicht betroffen.
+const API_VERSION = '2026-10-21';
 
 const learned = require('./llm/learned');
 const { ProviderError, friendlyMessage, RETRY_STATUS } = require('./llm/errors');
@@ -30,7 +32,7 @@ const FALLBACK_MODELS = [
 // Gemeinsamer Fehlertyp aller Anbieter (Name bleibt für ältere Stellen erhalten)
 class ClaudeError extends ProviderError {
   constructor(status, raw, type, ctx = {}) {
-    super(status, raw, type, 'Claude', { providerId: 'anthropic', endpoint: 'https://api.anthropic.com/v1/messages', apiVersion: '2023-06-01', ...ctx });
+    super(status, raw, type, 'Claude', { providerId: 'anthropic', endpoint: 'https://api.anthropic.com/v1/messages', apiVersion: API_VERSION, ...ctx });
   }
 }
 

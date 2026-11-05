@@ -5,6 +5,7 @@ const { createMock, GOOD_KEY } = require('./mock-providers');
 const { createLlm } = require('../src/llm');
 const { runHealth, healthReport } = require('../src/llm/health');
 const { createGeminiClient, toContents } = require('../src/llm/gemini');
+const { createOpenAiResponsesClient } = require('../src/llm/openai-responses');
 const { createOpenAiCompatClient } = require('../src/llm/openai-compat');
 const { publicError } = require('../src/llm/errors');
 const models = require('../src/models');
@@ -177,11 +178,12 @@ const errorOf = (events) => events.find((e) => e.c === 'chat:error')?.p;
   {
     const { client, mock } = registry('openai', { verifyStream: true });
     let streamed = '';
-    const r = await client.streamMessage({ apiKey: GOOD_KEY.openai, model: 'gpt-5', messages: [{ role: 'user', content: 'Reply with OK.' }], maxTokens: 50, onText: (x) => { streamed += x; } });
+    const r = await client.streamMessage({ apiKey: GOOD_KEY.openai, model: 'gpt-6.1-terra', messages: [{ role: 'user', content: 'Reply with OK.' }], maxTokens: 50, onText: (x) => { streamed += x; } });
     assert.strictEqual(r.content[0].text, 'OK');
     assert.strictEqual(streamed, 'OK', 'Text kommt trotzdem in der Oberfläche an');
     assert.deepStrictEqual(mock.state.requests.filter((q) => q.body).map((q) => q.body.stream), [true, false]);
-    assert.ok(mock.state.requests.every((q) => !q.body || !('max_tokens' in q.body)), 'gpt-5 bekommt max_completion_tokens');
+    assert.ok(mock.state.requests.every((q) => !q.body || q.path.endsWith('/responses')), 'OpenAI läuft über die Responses API');
+    assert.ok(mock.state.requests.every((q) => !q.body || ('max_output_tokens' in q.body && q.body.store === false)), 'max_output_tokens, nichts gespeichert');
   }
 
   // Zeitüberschreitung: richtig eingeordnet, mit Anbieter und Stufe
@@ -193,9 +195,9 @@ const errorOf = (events) => events.find((e) => e.c === 'chat:error')?.p;
     assert.strictEqual(err.category, 'timeout');
     assert.strictEqual(err.stage, 'connect');
     assert.match(err.message, /Gemini/);
-    const o = createOpenAiCompatClient({ provider: models.PROVIDERS.openai, fetchImpl: createMock('openai', { hang: true }).fetchImpl, connectTimeoutMs: 30 });
+    const o = createOpenAiResponsesClient({ provider: models.PROVIDERS.openai, fetchImpl: createMock('openai', { hang: true }).fetchImpl, connectTimeoutMs: 30 });
     fast();
-    const err2 = await o.streamMessage({ apiKey: GOOD_KEY.openai, model: 'gpt-4o', messages: [{ role: 'user', content: 'x' }], maxTokens: 10 }).catch((x) => x);
+    const err2 = await o.streamMessage({ apiKey: GOOD_KEY.openai, model: 'gpt-6-luna', messages: [{ role: 'user', content: 'x' }], maxTokens: 10 }).catch((x) => x);
     slow();
     assert.strictEqual(err2.category, 'timeout');
     assert.match(err2.message, /OpenAI/, 'eine OpenAI-Störung heisst nie «Gemini»');
@@ -208,7 +210,7 @@ const errorOf = (events) => events.find((e) => e.c === 'chat:error')?.p;
     const bad = await gem.client.streamMessage({ apiKey: 'AIza-falsch', model: 'gemini-2.5-flash', messages: [{ role: 'user', content: 'hi' }], maxTokens: 20 }).catch((x) => x); // pragma: allowlist secret
     assert.strictEqual(bad.category, 'auth');
     assert.strictEqual(bad.provider, 'Gemini');
-    const ok = await oa.client.streamMessage({ apiKey: GOOD_KEY.openai, model: 'gpt-4o', messages: [{ role: 'user', content: 'Reply with OK.' }], maxTokens: 20 });
+    const ok = await oa.client.streamMessage({ apiKey: GOOD_KEY.openai, model: 'gpt-6-luna', messages: [{ role: 'user', content: 'Reply with OK.' }], maxTokens: 20 });
     assert.strictEqual(ok.content[0].text, 'OK');
     assert.ok(gem.logs.some((l) => /provider=gemini .*category=auth/.test(l)), 'Diagnose im Protokoll');
     assert.ok(!gem.logs.join('').includes('AIza-falsch'), 'kein Key im Protokoll');
@@ -271,7 +273,7 @@ const errorOf = (events) => events.find((e) => e.c === 'chat:error')?.p;
   // ---------- Modellverfügbarkeit ----------
   // Abgeschaltetes Modell (in der Liste, aber 404): Automatik nimmt einmal ein Ersatzmodell und sagt es
   {
-    const { client, mock } = registry('openai', { retired: ['gpt-4o-mini'] });
+    const { client, mock } = registry('openai', { retired: ['gpt-6-luna'] });
     const a = agentFor('openai', client);
     await a.run('hi');
     assert.ok(!errorOf(a.events), `Ersatzmodell statt Fehler: ${errorOf(a.events)?.message}`);
@@ -279,7 +281,7 @@ const errorOf = (events) => events.find((e) => e.c === 'chat:error')?.p;
     const notice = a.events.find((e) => e.c === 'chat:notice' && /nicht verfügbar/.test(e.p.text));
     assert.ok(notice, 'Wechsel wird offen gesagt');
     const used = mock.state.requests.filter((q) => q.body?.model).map((q) => q.body.model);
-    assert.ok(used.includes('gpt-4o-mini') && used[used.length - 1] !== 'gpt-4o-mini', `danach anderes Modell (${used})`);
+    assert.ok(used.includes('gpt-6-luna') && used[used.length - 1] !== 'gpt-6-luna', `danach anderes Modell (${used})`);
   }
   // Gemini «high demand» (503) auf dem Hauptmodell: Test zeigt «Eingeschränkt» (Hauptmodell temporär nicht
   // verfügbar) und testet mit dem anderen Modell weiter; im Chat weicht Buddy nach einem kurzen Versuch aus und sagt es offen

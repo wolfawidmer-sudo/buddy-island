@@ -319,7 +319,7 @@ const reset = () => { fallback.reset(); learned.clear(); };
     assert.ok(firstPro >= 0 && after.slice(firstPro).every((m) => m === 'gemini-pro-latest'), `nach dem Wechsel bleibt die Aufgabe beim Ausweichmodell (${after})`);
 
     // Andere Anbieter (Claude 529, OpenAI 503): gleiches Verhalten, keine Regression
-    for (const [pid, busyModel, alt] of [['anthropic', 'claude-sonnet-5-5', 'Haiku'], ['openai', 'gpt-4o', 'GPT-4o mini']]) {
+    for (const [pid, busyModel, alt] of [['anthropic', 'claude-sonnet-5-5', 'Haiku'], ['openai', 'gpt-6.1-terra', 'GPT-6 Luna']]) {
       reset();
       const mock = createMock(pid, { busy: [busyModel] });
       const llm = createLlm({ fetchImpl: mock.fetchImpl, scriptDir: '/tmp', getPythonRuntime: async () => null, log: () => {} });
@@ -433,7 +433,7 @@ const reset = () => { fallback.reset(); learned.clear(); };
     assert.ok(c.chat && c.streaming && c.history && c.tools && c.parallelTools && c.structured && c.json && c.vision && c.reasoning && c.computerUse);
     const g4 = models.capabilities('gpt-4o');
     assert.ok(g4.tools && !g4.reasoning && !g4.computerUse, 'GPT-4o denkt nicht');
-    assert.ok(models.capabilities('gpt-5').reasoning);
+    assert.ok(models.capabilities('gpt-6.1-sol').reasoning && models.capabilities('grok-4.3').reasoning, 'GPT-6 und Grok 4.3 denken');
     const hf = models.capabilities('hf:Qwen/Qwen2.5-1.5B-Instruct');
     assert.ok(hf.chat && hf.streaming && hf.history && !hf.tools && !hf.parallelTools && !hf.vision && !hf.structured);
     models.rememberMeta('gemini', 'gemini-9-nothink', { thinking: false });

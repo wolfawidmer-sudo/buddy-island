@@ -19,7 +19,7 @@ const SECRET = [
   /\b(passwor[dt]|kennwort|pin\b|passcode|mot de passe)\b/i,
   /\b(?:\d[ -]?){13,19}\b/, // Karten- und Kontonummern
   /\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){3,7}\b/, // IBAN
-  /sk-[A-Za-z0-9_-]{8,}|AIza[0-9A-Za-z_-]{10,}|xai-[A-Za-z0-9]{8,}|hf_[A-Za-z0-9]{8,}|ghp_[A-Za-z0-9]{10,}/,
+  /sk-[A-Za-z0-9_-]{8,}|AIza[0-9A-Za-z_-]{10,}|AQ\.[A-Za-z0-9_.-]{16,}|xai-[A-Za-z0-9]{8,}|hf_[A-Za-z0-9]{8,}|ghp_[A-Za-z0-9]{10,}/,
 ];
 
 const STOP = new Set('aber alle alles als also auch auf aus bei bin bis bist das dass dein deine dem den der des die dir doch dort du ein eine einem einen einer es für hab habe hat ich ihm ihn ihr im in ist ja kann mal man mein meine mich mir mit nach nicht noch nur oder schon sein sich sie sind so über um und uns von vor war was wenn wer wie wir wird zu zum zur the and you your for with that this what have are was were from about mon ma mes le la les des une un est pour avec que qui'.split(' '));

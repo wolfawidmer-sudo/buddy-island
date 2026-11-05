@@ -327,11 +327,11 @@ function claudeApiProvider({ getSecret, fetchJson, now }) {
     async collect() {
       const key = getSecret('anthropicAdmin');
       if (!key) {
-        return { status: 'setup', note: t('Für die Nutzung aller Keys deiner Organisation braucht Buddy einen Admin-Key (beginnt mit sk-ant-admin). Ohne ihn siehst du oben nur Buddys eigene Nutzung.') };
+        return { status: 'setup', note: t('Für die Nutzung aller Keys deiner Organisation braucht Buddy einen Key mit Admin-Rechten, der nicht auf einen Workspace beschränkt ist. Ohne ihn siehst du oben nur Buddys eigene Nutzung.') };
       }
       const nowTs = now();
       const from = new Date(startOfDay(nowTs) - 6 * DAY).toISOString().replace(/\.\d{3}Z$/, 'Z');
-      const headers = { 'x-api-key': key, 'anthropic-version': '2023-06-01' };
+      const headers = { authorization: `Bearer ${key}`, 'anthropic-version': '2026-10-21' };
       const base = 'https://api.anthropic.com/v1/organizations';
       const usage = await fetchJson(`${base}/usage_report/messages?starting_at=${encodeURIComponent(from)}&bucket_width=1d&limit=7`, headers);
       let todayTok = { in: 0, out: 0 };

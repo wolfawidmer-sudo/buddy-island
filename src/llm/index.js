@@ -1,16 +1,18 @@
 // @ts-check
 // Registry der KI-Anbieter (Strategy-Muster). Agent und Router fragen hier nach dem
 // Client des aktiven Anbieters und sehen nur die gemeinsame Schnittstelle LlmClient.
-// Jeder Anbieter spricht sein eigenes Protokoll (Claude Messages, OpenAI/xAI Chat
+// Jeder Anbieter spricht sein eigenes Protokoll (Claude Messages, OpenAI Responses, xAI Chat
 // Completions, Gemini generateContent, lokales Transformers). Diese Schicht ergänzt nur,
 // was für alle gleich sein muss: Fehler mit Anbieter, Modell, Endpunkt und Stufe.
 
 const { createClient: createAnthropicClient } = require('../claude');
 const { createOpenAiCompatClient } = require('./openai-compat');
+const { createOpenAiResponsesClient } = require('./openai-responses');
 const { createGeminiClient } = require('./gemini');
 const { createHuggingFaceClient } = require('./huggingface');
 const { createLocalClient } = require('./local');
 const learned = require('./learned');
+const auth = require('./auth');
 const fallback = require('./fallback');
 const { ProviderError, diagnosticLine, isTransient } = require('./errors');
 const models = require('../models');
@@ -25,6 +27,7 @@ function endpointFor(provider, model) {
     case 'gemini': return `${provider.baseUrl}/models/${model || '{model}'}:streamGenerateContent`;
     case 'huggingface': return 'local://transformers';
     case 'local': return 'http://127.0.0.1:11434/api/chat';
+    case 'openai-responses': return `${provider.baseUrl}/responses`;
     default: return `${provider.baseUrl}/chat/completions`;
   }
 }
@@ -82,18 +85,24 @@ function createLlm({ fetchImpl = globalThis.fetch, scriptDir, getPythonRuntime, 
 
   /** @param {import('./types').ProviderInfo} provider @param {LlmClient} raw @returns {LlmClient} */
   function wrap(provider, raw) {
-    /** @param {any} err @param {string} [model] @param {string} [stage] */
-    const fail = (err, model, stage) => {
+    /** @param {any} err @param {string} [model] @param {string} [stage] @param {string} [apiKey] */
+    const fail = (err, model, stage, apiKey) => {
       const e = annotate(err, provider, model, stage);
+      // Abgeschaltetes Key-Format (z. B. alter Gemini-Standard-Key): klar sagen, dass ein neuer Key nötig ist
+      if (e?.name !== 'AbortError' && apiKey) {
+        const why = auth.explain(provider.id, apiKey, e);
+        if (why.code === 'retired_key') e.message = why.message;
+        e.reauth = why.reauth;
+      }
       if (e?.name !== 'AbortError') log(diagnosticLine(e));
       return e;
     };
     return {
       ...raw,
       provider: raw.provider,
-      listModels: (apiKey, ...rest) => raw.listModels(apiKey, ...rest).catch((err) => { throw fail(err, '', 'models'); }),
-      streamMessage: (req) => raw.streamMessage(req).catch((err) => { throw fail(err, req.model); }),
-      json: (req) => raw.json(req).catch((err) => { throw fail(err, req.model); }),
+      listModels: (apiKey, ...rest) => raw.listModels(apiKey, ...rest).catch((err) => { throw fail(err, '', 'models', apiKey); }),
+      streamMessage: (req) => raw.streamMessage(req).catch((err) => { throw fail(err, req.model, undefined, req.apiKey); }),
+      json: (req) => raw.json(req).catch((err) => { throw fail(err, req.model, undefined, req.apiKey); }),
     };
   }
 
@@ -111,6 +120,7 @@ function createLlm({ fetchImpl = globalThis.fetch, scriptDir, getPythonRuntime, 
       c = createLocalClient({ manager: localManager, getAdvanced: getLocalAdvanced, allowTools: allowLocalTools, log });
     }
     else if (provider.kind === 'gemini') c = createGeminiClient({ provider, fetchImpl });
+    else if (provider.kind === 'openai-responses') c = createOpenAiResponsesClient({ provider, fetchImpl });
     else c = createOpenAiCompatClient({ provider, fetchImpl });
     const wrapped = provider.kind === 'huggingface' ? { ...wrap(provider, c), stop: hf.stop, status: hf.status, preload: hf.preload } : wrap(provider, c);
     clients[provider.id] = wrapped;

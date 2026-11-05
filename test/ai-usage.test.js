@@ -102,7 +102,8 @@ const { createAiUsage, matchPrograms, windowLabel } = require('../src/ai-usage')
   assert.strictEqual(api.status, 'ok');
   assert.match(api.metrics[0].value, /2\.6k ein · 300 aus/, 'heute = neuster Tages-Eimer');
   assert.strictEqual(api.metrics.find((m) => m.label === 'Kosten 7 Tage').value, '$12.35', 'Beträge kommen in Cent');
-  assert.strictEqual(requested[0].headers['x-api-key'], 'sk-ant-admin-test');
+  assert.strictEqual(requested[0].headers.authorization, 'Bearer sk-ant-admin-test', 'aktuelle Form: Authorization Bearer');
+  assert.strictEqual(requested[0].headers['anthropic-version'], '2026-10-21');
   assert.ok(requested.every((q) => q.url.startsWith('https://api.anthropic.com/')), 'Key nur an Anthropic');
 
   // Fehler eines Anbieters reisst die anderen nicht mit

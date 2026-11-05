@@ -37,6 +37,8 @@ class ProviderError extends Error {
     this.retryAfterMs = undefined;
     /** Wie oft Buddy diese Anfrage schon automatisch wiederholt hat */
     this.retries = 0;
+    /** Key muss neu eingegeben werden (ungültig oder abgeschaltetes Format) */
+    this.reauth = false;
   }
 
   /** Vorübergehend (Überlastung, Rate-Limit, Serverfehler, Netz): später oder mit anderem Modell kann es klappen */
@@ -187,9 +189,10 @@ function wait(ms, signal) {
 // ---------- Sichere Diagnose ----------
 
 // Alles, was wie ein Schlüssel aussieht, wird ersetzt (auch in Fehlermeldungen der Anbieter)
+// Formate aller Anbieter (alt und neu) stehen in auth.js
 const SECRET_PATTERNS = [
-  /sk-ant-[A-Za-z0-9_-]{8,}/g, /sk-(proj-|admin-)?[A-Za-z0-9_-]{16,}/g, /xai-[A-Za-z0-9_-]{16,}/g,
-  /AIza[0-9A-Za-z_-]{20,}/g, /hf_[A-Za-z0-9]{16,}/g, /(key|token|api_key|apikey)=([^&\s"']+)/gi, /Bearer\s+[A-Za-z0-9._-]{12,}/g,
+  ...require('./auth').SECRET_PATTERNS,
+  /(key|token|api_key|apikey)=([^&\s"']+)/gi, /Bearer\s+[A-Za-z0-9._-]{12,}/g, /x-goog-api-key[\s:=]+[^\s,;]+/gi,
 ];
 
 /** @param {string} text */

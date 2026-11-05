@@ -1,6 +1,6 @@
 // @ts-check
-// Adapter für Anbieter mit OpenAI-kompatibler Chat-Completions-API:
-// OpenAI und xAI Grok (Chat Completions). Gemini hat einen eigenen, nativen Adapter (gemini.js).
+// Adapter für Anbieter mit OpenAI-kompatibler Chat-Completions-API: xAI Grok.
+// OpenAI selbst läuft über die Responses API (openai-responses.js). Gemini hat einen eigenen, nativen Adapter (gemini.js).
 // Übersetzt Buddys Content-Block-Format (wie Claude) in Chat Completions und zurück,
 // inklusive Streaming, Function Calling, Bildern und strukturierten Antworten.
 

@@ -2,6 +2,23 @@
   "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Für Kundinnen und Kunden geschrieben: Nutzen statt Technik, keine Fachbegriffe.",
   "versions": [
     {
+      "version": "0.10.0",
+      "highlights": [
+        {
+          "title": "Neue Gemini-Keys funktionieren",
+          "text": "Buddy nimmt die neuen Keys aus Google AI Studio an. Bei einem alten Key sagt er dir klar, dass Google ihn nicht mehr annimmt und wo es einen neuen gibt."
+        },
+        {
+          "title": "Aktuelle Modelle",
+          "text": "Mit OpenAI nutzt Buddy jetzt GPT-6, mit Grok auch Grok 4.7. Ein selbst gewähltes Modell ändert Buddy nie ohne dich, er zeigt nur einen Hinweis, wenn es ausläuft."
+        },
+        {
+          "title": "Klarere Hilfe beim Verbinden",
+          "text": "Bei jedem Anbieter steht, wo du den Key bekommst. Klappt etwas nicht, sagt Buddy, ob der Key ungültig ist, Rechte fehlen, das Netz streikt oder das Guthaben leer ist."
+        }
+      ]
+    },
+    {
       "version": "0.9.0",
       "highlights": [
         {

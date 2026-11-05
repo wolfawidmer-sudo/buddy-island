@@ -32,6 +32,7 @@ const { createCalendar } = require('./calendar');
 const { createVoice } = require('./voice');
 const { createPerception } = require('./perception');
 const prompt = require('./prompt');
+const authSpecs = require('./llm/auth');
 
 // ---------- Sparsam im Leerlauf ----------
 // Medientasten nicht abfangen (Buddy drückt sie selbst), keine
@@ -48,7 +49,7 @@ const TOP_GAP = 6; // wie die Dynamic Island: knapp unter dem oberen Rand (im Fe
 const OPEN_H = 660 + TOP_GAP;
 const CLOSED_H = 36 + TOP_GAP;
 const NOTCH_H = 12 + TOP_GAP;
-const SETTINGS_VERSION = 5;
+const SETTINGS_VERSION = 6;
 const MODELS_CACHE_MS = 6 * 3600 * 1000;
 
 const DEFAULTS = {
@@ -255,6 +256,11 @@ function loadSettings() {
     if (savedVersion < 5 && !saved.promptPrefs) {
       settings.promptPrefs = { ...DEFAULTS.promptPrefs, notes: prompt.migratePersona(saved.systemPrompt, DEFAULTS.systemPrompt) };
     }
+    // 0.10: Keys bleiben unverändert gespeichert. Nur ein früher eingebautes, nicht selbst gewähltes
+    // OpenAI-Standardmodell wird auf das aktuelle umgestellt; ein manuell gewähltes bleibt (Hinweis in der Oberfläche).
+    if (savedVersion < 6 && settings.autoModel !== false && models.OLD_DEFAULTS.has(settings.model)) {
+      settings.model = models.resolveTiers([], 'openai').sonnet || settings.model;
+    }
     settings.settingsVersion = SETTINGS_VERSION;
     migrateKey();
     saveSettings();
@@ -279,6 +285,8 @@ function redact(message) {
   return String(message)
     .replace(/sk-ant-[\w-]+/g, 'sk-ant-…')
     .replace(/\bsk-[A-Za-z0-9_-]{16,}/g, 'sk-…')
+    .replace(/\bAIza[0-9A-Za-z_-]{20,}|\bAQ\.[A-Za-z0-9_.-]{20,}|\bxai-[A-Za-z0-9_-]{16,}|\bhf_[A-Za-z0-9]{16,}/g, '[Key]')
+    .replace(/(x-goog-api-key)[\s:=]+[^\s,;]+/gi, '$1 …')
     .replace(/(bearer|x-api-key|authorization)[\s:=]+[^\s,;]+/gi, '$1 …')
     .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[privater Schlüssel entfernt]');
 }
@@ -334,10 +342,13 @@ function providerList() {
     .filter((p) => p.id !== 'huggingface' || settings.provider === 'huggingface' || Boolean(getSecret('hfModel')))
     .map((p) => {
       if (p.id === 'local') {
-        return { id: 'local', name: t('Lokal auf diesem PC'), consoleUrl: p.consoleUrl, keyPrefix: '', local: true, hasKey: localHasModel(), hint: null, status: null, ready: true };
+        return { id: 'local', name: t('Lokal auf diesem PC'), consoleUrl: p.consoleUrl, local: true, hasKey: localHasModel(), hint: null, status: null, ready: true, auth: null, keyNotice: null };
       }
       const k = providerKeyInfo(p.id);
-      return { id: p.id, name: p.id === 'huggingface' ? t('Lokal (Hugging Face)') : p.name, consoleUrl: p.consoleUrl, keyPrefix: p.keyPrefix, local: Boolean(p.local), hasKey: k.has, hint: k.hint, status: settings.keyStatus?.[p.id] || null, ready: p.id !== 'huggingface' || Boolean(found?.python) };
+      // Gespeicherter Key in einem Format, das der Anbieter abgeschaltet hat (nur ein Hinweis, nichts wird gelöscht)
+      const saved = k.has && !p.local ? getApiKey(p.id) : '';
+      const legacy = saved && authSpecs.SPECS[p.id]?.legacy?.test.test(saved) ? t(authSpecs.SPECS[p.id].legacy.retired) : null;
+      return { id: p.id, name: p.id === 'huggingface' ? t('Lokal (Hugging Face)') : p.name, consoleUrl: p.consoleUrl, local: Boolean(p.local), hasKey: k.has, hint: k.hint, status: settings.keyStatus?.[p.id] || null, ready: p.id !== 'huggingface' || Boolean(found?.python), auth: authSpecs.publicSpec(p.id), keyNotice: legacy };
     });
 }
 
@@ -358,6 +369,10 @@ function publicSettings() {
   return {
     ...rest,
     providers: providerList(),
+    // Manuell gewähltes Modell, das der Anbieter abschaltet: nur Hinweis, kein stiller Wechsel
+    modelNotice: settings.autoModel === false && models.DEPRECATED[settings.model]
+      ? t('{provider} schaltet {model} am {date} ab. Wähle ein neueres Modell, zum Beispiel {next}.', { provider: models.PROVIDERS[models.providerOf(settings.model)]?.name || '', model: settings.model, date: models.DEPRECATED[settings.model].until.split('-').reverse().join('.'), next: models.info(models.DEPRECATED[settings.model].replacement).name })
+      : null,
     keyProtected: providerKeyInfo(currentProvider()).protected,
     keyHint: providerKeyInfo(currentProvider()).hint,
     keyStatusCurrent: settings.keyStatus?.[currentProvider()] || null,
@@ -1993,17 +2008,18 @@ function setupIpc() {
   });
 
   ipcMain.handle('key:set', async (_e, { key, workspaceId, provider: pid } = {}) => {
-    const clean = (key || '').trim();
     const provider = models.PROVIDERS[pid] || models.PROVIDERS[currentProvider()];
     if (provider.id === 'huggingface' || provider.id === 'local') return { ok: false, error: t('Lokale Modelle brauchen keinen API-Key.') };
-    if (!clean) return { ok: false, error: t('Bitte einen Key einfügen.') };
-    if (!clean.startsWith(provider.keyPrefix)) return { ok: false, error: t(provider.keyHint) };
-    if (/\s/.test(clean) || clean.length > 300) return { ok: false, error: t('Der Key enthält Leerzeichen oder ist zu lang. Kopiere ihn nochmals aus der Console.') };
+    // Nur offensichtlich Falsches ablehnen; ob der Key gilt, entscheidet der Anbieter (siehe src/llm/auth.js)
+    const format = authSpecs.checkFormat(provider.id, key);
+    if (!format.ok) return { ok: false, error: format.error, code: format.code };
+    const clean = format.key;
     try {
-      // Der Key geht nur an die API dieses Anbieters, um ihn zu prüfen
+      // Der Key geht nur an die API dieses Anbieters: Modellliste abrufen (kostenlos, nichts wird erzeugt)
       const list = await llm.client(provider.id).listModels(clean, provider.id === 'anthropic' ? workspaceId : undefined);
       if (provider.id === 'anthropic') settings.workspaceId = (workspaceId || '').trim();
       setApiKey(clean, provider.id);
+      if (settings.keyStatus) delete settings.keyStatus[provider.id];
       // Wer einen API-Key hinzufügt, will ihn auch nutzen
       settings.provider = provider.id;
       settings.providerChosen = true;
@@ -2011,9 +2027,11 @@ function setupIpc() {
       llm.stopAll();
       saveSettings();
       modelCache.set(provider.id, { at: Date.now(), list });
-      return { ok: true, models: list, settings: publicSettings() };
+      return { ok: true, models: list, settings: publicSettings(), notice: format.notice || null };
     } catch (err) {
-      return { ok: false, error: err.message };
+      // Ungültig, keine Rechte, Netz, Rate-Limit oder Guthaben unterscheiden; der Key steht nie in der Meldung
+      const why = authSpecs.explain(provider.id, clean, err);
+      return { ok: false, error: why.message, code: why.code };
     }
   });
 
@@ -2042,7 +2060,7 @@ function setupIpc() {
       setSecret('hfModel', clean);
       if (token !== undefined) {
         const tok = String(token || '').trim();
-        if (tok && !/^hf_[\w]+$/.test(tok)) return { ok: false, error: t('Ein Hugging-Face-Token beginnt mit «hf_».') };
+        if (tok && /\s/.test(tok)) return { ok: false, error: t('Der Key enthält Leerzeichen oder Zeilenumbrüche. Kopiere ihn nochmals aus der Console.') };
         setSecret('hfToken', tok);
       }
     } catch (err) {
@@ -2219,17 +2237,15 @@ function setupIpc() {
     return aiUsage.collect({ force: Boolean(force) });
   });
   ipcMain.handle('aiusage:key', async (_e, { provider, key } = {}) => {
-    const spec = {
-      anthropicAdmin: { prefix: 'sk-ant-admin', hint: t('Ein Anthropic-Admin-Key beginnt mit «sk-ant-admin».') },
-      openaiAdmin: { prefix: 'sk-admin-', hint: t('Ein OpenAI-Admin-Key beginnt mit «sk-admin-».') },
-    }[provider];
-    if (!spec) return { ok: false, error: t('Unbekannter Anbieter.') };
-    const clean = String(key || '').trim();
-    if (!clean) {
+    if (!['anthropicAdmin', 'openaiAdmin'].includes(provider)) return { ok: false, error: t('Unbekannter Anbieter.') };
+    if (!String(key || '').trim()) {
       setSecret(provider, '');
       return { ok: true, settings: publicSettings() };
     }
-    if (!clean.startsWith(spec.prefix) || /\s/.test(clean)) return { ok: false, error: spec.hint };
+    // Ob der Key Admin-Rechte hat, sagt erst der Anbieter (Abruf unten); hier nur Offensichtliches
+    const format = authSpecs.checkFormat(provider, key);
+    if (!format.ok) return { ok: false, error: format.error };
+    const clean = format.key;
     if (!safeStorage.isEncryptionAvailable() && process.platform === 'win32') return { ok: false, error: t('Die Windows-Verschlüsselung ist nicht verfügbar.') };
     setSecret(provider, clean);
     const report = await aiUsage.collect({ force: true });
