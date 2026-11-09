@@ -62,7 +62,6 @@ const check = (ok, text) => { console.log(`${ok ? 'ok  ' : 'FEHLER'} [${scale}x]
     add('agendaList', 5, 'Termin');
     const t = document.getElementById('timers');
     for (let i = 0; i < 3; i += 1) { const d = document.createElement('div'); d.className = 'timer'; d.innerHTML = `<span>Timer ${i}</span><span>09:59</span>`; t.appendChild(d); }
-    document.getElementById('localBtn').hidden = false;
     document.getElementById('connectBtn').hidden = false;
   });
   await verify('Leer + alle Karten');

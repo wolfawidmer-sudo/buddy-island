@@ -23,6 +23,9 @@ jobs:
         run: for f in src/*.js src/renderer/*.js src/glow/*.js scripts/*.js; do node --check "$f"; done
       - name: Syntax prüfen (Cloud)
         run: for f in src/cloud/*.js; do node --check "$f"; done
+      # Oberfläche im Browser mit nachgebauter Brücke: Einführung, Reiter, Google-Knopf
+      - name: Einführung und Oberfläche
+        run: CHROME="$(command -v google-chrome || command -v chromium)" node test/e2e/onboarding.e2e.js
 
   # Buddy-Cloud-Backend: ohne Fremdpakete, Datenbank-Tests gegen echtes PostgreSQL
   backend:
