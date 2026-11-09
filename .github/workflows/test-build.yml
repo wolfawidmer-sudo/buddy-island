@@ -1,0 +1,42 @@
+name: Testversion
+
+# Baut einen Windows-Installer nur zum Testen. Kein Release, kein Auto-Update für andere.
+# Start: Tag test-<irgendwas> pushen, z. B. git tag test-cloud-1 && git push origin test-cloud-1
+# Der Installer liegt danach im Lauf unter «Artifacts» (nur mit GitHub-Login herunterladbar).
+#
+# Die Version bekommt den Zusatz -test.<Laufnummer> (z. B. 0.12.1-test.3). Sie ist neuer als das
+# letzte Release, darum lädt der Testrechner kein älteres Update. Sobald ein echtes, höheres
+# Release erscheint (z. B. 0.13.0), aktualisiert sich der Testrechner normal darauf.
+
+on:
+  push:
+    tags: ['test-*']
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Testversion setzen
+        shell: bash
+        run: |
+          BASE=$(node -p "const [a,b,c]=require('./package.json').version.split('.').map(Number); a+'.'+b+'.'+(c+1)")
+          npm version "$BASE-test.$GITHUB_RUN_NUMBER" --no-git-tag-version
+          node -p "'Version ' + require('./package.json').version + ', Cloud: ' + (require('./package.json').buddyCloud.apiUrl || '(aus)')"
+      - name: Installer bauen (ohne Veröffentlichen)
+        run: npx electron-builder --win nsis --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BuddyIsland-Testversion
+          path: dist/BuddyIsland-Setup-*.exe
+          retention-days: 14
+          if-no-files-found: error

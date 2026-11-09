@@ -93,6 +93,6 @@
     ]
   },
   "buddyCloud": {
-    "apiUrl": ""
+    "apiUrl": "https://api.buddy-island.top"
   }
 }

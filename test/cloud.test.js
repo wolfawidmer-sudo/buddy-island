@@ -247,9 +247,14 @@ async function testProvider() {
     client.streamMessage({ apiKey: 'access-token', model: 'cloud:gpt-6-luna', messages: [{ role: 'user', content: 'arm' }], maxTokens: 100, stream: false }),
     (e) => /Buddy Credits/.test(e.message) && e.category === 'quota',
   );
-  delete process.env.BUDDY_CLOUD_URL;
-  // Ohne Adresse: Modell-Liste meldet «nicht eingerichtet», statt irgendwohin zu senden
+  // Ausgeschaltet: Modell-Liste meldet «nicht eingerichtet», statt irgendwohin zu senden
+  process.env.BUDDY_CLOUD_URL = 'off';
   await assert.rejects(client.listModels('x'), (e) => e.category !== 'auth');
+  delete process.env.BUDDY_CLOUD_URL;
+  // Ohne Überschreibung gilt die Adresse aus package.json (nur https oder leer)
+  const fixed = require('../package.json').buddyCloud.apiUrl;
+  assert.ok(fixed === '' || /^https:\/\//.test(fixed));
+  assert.equal(require('../src/cloud/config').apiUrl(), fixed.replace(/\/+$/, ''));
 
   // Lokale KI bleibt unberührt
   assert.equal(models.providerOf('local:qwen3.5:4b'), 'local');

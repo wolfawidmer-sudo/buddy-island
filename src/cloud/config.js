@@ -2,7 +2,7 @@
 // Adresse des Buddy-Cloud-Backends.
 // Fest in package.json («buddyCloud.apiUrl»), für Entwicklung per BUDDY_CLOUD_URL überschreibbar.
 // Erlaubt sind nur https:// (Produktiv) und http://127.0.0.1 / localhost (Entwicklung).
-// Ist keine Adresse gesetzt, bleibt Buddy Cloud aus – lokale KI und eigene Keys laufen normal.
+// BUDDY_CLOUD_URL=off schaltet sie aus. Ist keine Adresse gesetzt, bleibt Buddy Cloud aus – lokale KI und eigene Keys laufen normal.
 
 const pkg = require('../../package.json');
 
@@ -16,6 +16,8 @@ function clean(raw) {
 }
 
 function apiUrl() {
+  // BUDDY_CLOUD_URL=off schaltet Buddy Cloud ab (z. B. für Tests oder einen Rechner ohne Cloud)
+  if (String(process.env.BUDDY_CLOUD_URL || '').trim().toLowerCase() === 'off') return '';
   return clean(process.env.BUDDY_CLOUD_URL) || clean(/** @type {any} */ (pkg).buddyCloud?.apiUrl);
 }
 
