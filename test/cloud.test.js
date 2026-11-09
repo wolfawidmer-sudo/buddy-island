@@ -247,6 +247,10 @@ async function testProvider() {
     client.streamMessage({ apiKey: 'access-token', model: 'cloud:gpt-6-luna', messages: [{ role: 'user', content: 'arm' }], maxTokens: 100, stream: false }),
     (e) => /Buddy Credits/.test(e.message) && e.category === 'quota',
   );
+  // Leeres OpenAI-Guthaben (unser Problem): keine «zu wenig Buddy Credits»-Meldung
+  const { friendlyMessage } = require('../src/llm/errors');
+  assert.match(friendlyMessage(200, 'insufficient_quota You exceeded your current quota', '', 'Buddy Cloud'), /nicht verfügbar/);
+  assert.match(friendlyMessage(402, 'insufficient_credits', '', 'Buddy Cloud'), /Buddy Credits/);
   // Ausgeschaltet: Modell-Liste meldet «nicht eingerichtet», statt irgendwohin zu senden
   process.env.BUDDY_CLOUD_URL = 'off';
   await assert.rejects(client.listModels('x'), (e) => e.category !== 'auth');

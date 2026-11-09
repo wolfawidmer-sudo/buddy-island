@@ -43,6 +43,7 @@ function upstreamError(status, body) {
   const e = body?.error || {};
   const message = typeof e.message === 'string' ? e.message.slice(0, 500) : 'Fehler beim KI-Anbieter';
   if (status === 401 || status === 403) return new AppError(502, 'upstream_auth', 'Buddy Cloud ist gerade nicht verfügbar.');
+  if (status === 429 && /quota|billing/.test(String(e.code || e.type || ''))) return new AppError(503, 'upstream_unavailable', 'Buddy Cloud ist gerade nicht verfügbar.', { retryAfter: 60 });
   if (status === 429) return new AppError(503, 'upstream_busy', 'Buddy Cloud ist gerade ausgelastet. Bitte gleich nochmals.', { retryAfter: 5 });
   if (status === 400 || status === 404 || status === 422) return new AppError(400, String(e.code || e.type || 'invalid_request'), message);
   return new AppError(502, 'upstream_error', 'Fehler beim KI-Anbieter.');
@@ -132,7 +133,7 @@ function createOpenAiGateway({ config, billing, logger, fetchImpl = globalThis.f
       clearTimeout(timer);
       const errBody = await upstream.json().catch(() => ({}));
       await billing.release(requestId, 'failed', `OpenAI ${upstream.status}`);
-      logger.warn('openai_error', { requestId, status: upstream.status, openaiCode: errBody?.error?.code || errBody?.error?.type });
+      logger[upstream.status === 429 && /quota|billing/.test(String(errBody?.error?.code || errBody?.error?.type)) ? 'error' : 'warn']('openai_error', { requestId, status: upstream.status, openaiCode: errBody?.error?.code || errBody?.error?.type });
       throw upstreamError(upstream.status, errBody);
     }
 
@@ -176,9 +177,12 @@ function createOpenAiGateway({ config, billing, logger, fetchImpl = globalThis.f
     /** @type {any} */
     let finalResponse = null;
     let streamedChars = 0;
+    let streamError = '';
     const read = createSseReader((ev) => {
       if ((ev?.type === 'response.completed' || ev?.type === 'response.incomplete' || ev?.type === 'response.failed') && ev.response) finalResponse = ev.response;
       if (typeof ev?.delta === 'string') streamedChars += ev.delta.length;
+      const err = ev?.type === 'error' ? (ev.error || ev) : ev?.type === 'response.failed' ? ev.response?.error : null;
+      if (err) streamError = String(err.code || err.type || 'unknown');
     });
     try {
       const reader = upstream.body.getReader();
@@ -195,6 +199,8 @@ function createOpenAiGateway({ config, billing, logger, fetchImpl = globalThis.f
       clearTimeout(timer);
     }
 
+    // Fehler mitten im Stream (z. B. OpenAI-Guthaben leer) laut loggen: der Nutzer kann nichts dafür
+    if (streamError) logger[/quota|billing/.test(streamError) ? 'error' : 'warn']('openai_stream_error', { requestId, openaiCode: streamError });
     let settled = null;
     const usage = usageOf(finalResponse);
     try {
