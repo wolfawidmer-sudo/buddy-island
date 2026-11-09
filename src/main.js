@@ -33,6 +33,7 @@ const { createComputer, supportsCaptureExclusion } = require('./computer');
 const { createSystemWatcher } = require('./notifications');
 const { createCalendar } = require('./calendar');
 const { createVoice } = require('./voice');
+const wakeword = require('./wakeword');
 const { createPerception } = require('./perception');
 const prompt = require('./prompt');
 const authSpecs = require('./llm/auth');
@@ -92,6 +93,8 @@ const DEFAULTS = {
   calendarEncrypted: null,
   calendarPlain: null,
   voiceWake: false,
+  wakeWord: 'Hey Buddy',
+  eyesAlive: true,
   speak: true,
   displayId: null,
   // Präferenzen für Antworten (Länge, Tonfall, eigene Hinweise). Wer Buddy ist, steht fest in src/prompt.js.
@@ -1915,7 +1918,7 @@ async function runDiagnostics() {
   const v = voice.info();
   if (process.platform !== 'win32') add(t('Sprache'), null, t('Nur unter Windows'));
   else if (!v.ready) add(t('Sprache'), null, t('Startet beim ersten Sprechen'));
-  else add(t('Sprache'), v.offline || v.online, [v.online ? t('Online-Diktat') : null, v.offline ? `Offline (${v.language})` : null, v.wake ? t('«Hey Buddy» aktiv') : null].filter(Boolean).join(', ') || t('Keine Spracherkennung installiert'));
+  else add(t('Sprache'), v.offline || v.online, [v.online ? t('Online-Diktat') : null, v.offline ? `Offline (${v.language})` : null, v.wake ? t('«{word}» aktiv', { word: wakeword.wakeWordOf(settings) }) : null].filter(Boolean).join(', ') || t('Keine Spracherkennung installiert'));
 
   add(t('Updates'), updater ? updateState.state !== 'error' : null, updater
     ? ({ idle: t('Noch nicht geprüft'), checking: t('Prüfe …'), latest: t('Aktuell'), verifying: t('Prüfe Signatur …'), downloading: t('Lädt Update …'), ready: `Version ${updateState.version} bereit und verifiziert`, skipped: updateState.error, rollback: t('Stellt ältere Version wieder her …'), error: updateState.error }[updateState.state] || '')
@@ -2066,6 +2069,7 @@ function setupIpc() {
     if ('historyEnabled' in patch) settings.historyEnabled = Boolean(patch.historyEnabled);
     if ('memoryEnabled' in patch) settings.memoryEnabled = Boolean(patch.memoryEnabled);
     if ('visualizer' in patch) settings.visualizer = Boolean(patch.visualizer);
+    if ('eyesAlive' in patch) settings.eyesAlive = Boolean(patch.eyesAlive);
     if ('glowMusic' in patch) settings.glowMusic = Boolean(patch.glowMusic);
     if ('provider' in patch && models.PROVIDERS[patch.provider] && patch.provider !== settings.provider && (!CLOUD_ONLY || patch.provider === 'buddy')) {
       settings.provider = patch.provider;
@@ -2122,13 +2126,21 @@ function setupIpc() {
     if ('visualizer' in patch || 'glowMusic' in patch || 'glow' in patch || 'media' in patch) syncAudio();
     if ('notifications' in patch || 'media' in patch || 'gameMode' in patch) startWatcher();
     if ('calendarLead' in patch) calendar?.setLead(settings.calendarLead);
+    let wakeWordError = null;
+    if ('wakeWord' in patch) {
+      const res = wakeword.cleanWakeWord(patch.wakeWord);
+      if (res.ok) {
+        settings.wakeWord = res.value;
+        voice?.setWakeWord(res.value);
+      } else wakeWordError = t(res.error);
+    }
     if ('voiceWake' in patch) voice?.setWake(settings.voiceWake && !game.active);
     if ('displayId' in patch) {
       placeWindow();
       fitGlow();
     }
     saveSettings();
-    return { ok: !shortcutError, settings: publicSettings(), error: shortcutError };
+    return { ok: !shortcutError && !wakeWordError, settings: publicSettings(), error: shortcutError || wakeWordError };
   });
 
   ipcMain.handle('key:set', async (_e, { key, workspaceId, provider: pid } = {}) => {
@@ -2733,6 +2745,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     watcher = createSystemWatcher({
       scriptDir: app.getPath('userData'),
       log,
+      wakeWord: wakeword.wakeWordOf(settings),
       onNotification: (item) => liveWin()?.webContents.send('notify', item),
       onStatus: (status, error) => {
         notifyStatus = status;
@@ -2773,6 +2786,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     voice = createVoice({
       scriptDir: app.getPath('userData'),
       log,
+      wakeWord: wakeword.wakeWordOf(settings),
       onEvent: (msg) => {
         liveWin()?.webContents.send('voice', msg);
       },

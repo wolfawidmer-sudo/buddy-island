@@ -254,6 +254,10 @@
                   <select id="langSelect" class="row-select"></select>
                 </label>
                 <label class="row">
+                  <span class="row-label two">Lebendige Augen<small>Buddy wird müde und schläft, wenn du ihn nicht brauchst</small></span>
+                  <span class="switch"><input type="checkbox" id="eyesToggle"><span></span></span>
+                </label>
+                <label class="row">
                   <span class="row-label">Ton, wenn etwas fertig ist</span>
                   <span class="switch"><input type="checkbox" id="soundToggle"><span></span></span>
                 </label>
@@ -335,9 +339,13 @@
               <h3 class="section">Stimme</h3>
               <div class="group">
                 <label class="row">
-                  <span class="row-label">Auf «Hey Buddy» hören</span>
+                  <span class="row-label" id="wakeLabel">Auf «Hey Buddy» hören</span>
                   <span class="switch"><input type="checkbox" id="wakeToggle"><span></span></span>
                 </label>
+                <div class="row field-row">
+                  <input id="wakeWordInput" type="text" maxlength="32" placeholder="Hey Buddy" spellcheck="false" autocomplete="off" aria-label="Wakeword">
+                  <button type="button" class="button small" id="wakeWordSave">Speichern</button>
+                </div>
                 <label class="row">
                   <span class="row-label">Antworten vorlesen</span>
                   <span class="switch"><input type="checkbox" id="speakToggle"><span></span></span>
@@ -347,6 +355,8 @@
                   <span class="row-value" id="voiceStatus">–</span>
                 </div>
               </div>
+
+              <p class="footer" id="wakeWordMsg">Eigenes Wakeword, z. B. «Hey Kiwi» oder «Jarvis». Zwei Wörter klappen zuverlässiger als eins.</p>
 
               <h3 class="section">Gedächtnis</h3>
               <div class="group">
@@ -586,6 +596,7 @@
   </main>
 
   <script src="markdown.js"></script>
+  <script src="eyes.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

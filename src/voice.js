@@ -1,5 +1,6 @@
 // Sprachsteuerung über die eingebaute Windows-Spracherkennung (kein extra Konto).
-//  - «Hey Buddy»: kleines Wake-Word mit fester Grammatik, läuft nur wenn eingeschaltet
+//  - Wakeword («Hey Buddy» oder ein eigenes, siehe src/wakeword.js): feste Wortliste,
+//    läuft nur wenn eingeschaltet
 //  - Diktat: zuerst die bessere Online-Erkennung von Windows (wie Win+H),
 //    sonst die Offline-Erkennung (System.Speech)
 // Der Helfer startet nur bei Bedarf und beendet sich ohne Wake-Word nach 2 Minuten.
@@ -8,10 +9,12 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const { DEFAULT_WAKE_WORD, wakePhrases, minConfidence, encodePhrases } = require('./wakeword');
+
 const IDLE_MS = 2 * 60 * 1000;
 
 const SCRIPT = String.raw`
-param([int]$wake = 0)
+param([int]$wake = 0, [string]$words = '', [double]$minconf = 0.6)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 function Emit($obj) {
@@ -46,7 +49,11 @@ if ($info) {
     $rec = New-Object System.Speech.Recognition.SpeechRecognitionEngine($info)
     $rec.SetInputToDefaultAudioDevice()
     $choices = New-Object System.Speech.Recognition.Choices
-    foreach ($p in @('hey buddy', 'hallo buddy', 'hi buddy', 'he buddy', 'okay buddy')) { $choices.Add($p) }
+    $list = @('hey buddy', 'hallo buddy', 'hi buddy', 'he buddy', 'okay buddy')
+    if ($words) {
+      try { $list = @([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($words)) | ConvertFrom-Json) } catch { }
+    }
+    foreach ($p in $list) { if ($p -is [string] -and $p.Length -gt 0 -and $p.Length -le 48) { $choices.Add($p) } }
     $gb = New-Object System.Speech.Recognition.GrammarBuilder
     $gb.Culture = $info.Culture
     $gb.Append($choices)
@@ -119,7 +126,7 @@ while ($true) {
       $dictGrammar.Enabled = $false
       $rec.BabbleTimeout = [TimeSpan]::FromSeconds(2)
       $r = $rec.Recognize([TimeSpan]::FromSeconds(1))
-      if ($r -ne $null -and $r.Grammar.Name -eq 'wake' -and $r.Confidence -ge 0.6) {
+      if ($r -ne $null -and $r.Grammar.Name -eq 'wake' -and $r.Confidence -ge $minconf) {
         Emit @{ kind = 'wake' }
         Listen
       }
@@ -130,10 +137,11 @@ while ($true) {
 }
 `;
 
-function createVoice({ scriptDir, onEvent, log }) {
+function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD }) {
   let proc = null;
   let buffer = '';
   let wake = false;
+  let word = wakeWord;
   let idleTimer = null;
   let pendingListen = false;
   let info = { offline: false, online: false, language: '', wake: false, ready: false };
@@ -145,6 +153,7 @@ function createVoice({ scriptDir, onEvent, log }) {
     fs.writeFileSync(file, '﻿' + SCRIPT, 'utf8');
     const p = spawn('powershell.exe', [
       '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file, '-wake', wake ? '1' : '0',
+      '-words', encodePhrases(wakePhrases(word)), '-minconf', String(minConfidence(word)),
     ], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     proc = p;
     info = { ...info, ready: false };
@@ -210,6 +219,13 @@ function createVoice({ scriptDir, onEvent, log }) {
     if (wake) start();
   }
 
+  // Neues Wakeword: Helfer mit der neuen Wortliste neu starten (nur wenn er auf das Wort hört)
+  function setWakeWord(next) {
+    if (!next || next === word) return;
+    word = next;
+    if (wake) { stop(); start(); }
+  }
+
   // Laufendes Zuhören abbrechen und das Mikrofon sofort freigeben
   function cancel() {
     pendingListen = false;
@@ -231,7 +247,7 @@ function createVoice({ scriptDir, onEvent, log }) {
     setTimeout(() => { try { p.kill(); } catch { /* weg */ } }, 1500);
   }
 
-  return { listen, cancel, setWake, stop, info: () => ({ ...info, running: Boolean(proc) }) };
+  return { listen, cancel, setWake, setWakeWord, stop, wakeWord: () => word, info: () => ({ ...info, running: Boolean(proc) }) };
 }
 
 module.exports = { createVoice, SCRIPT };

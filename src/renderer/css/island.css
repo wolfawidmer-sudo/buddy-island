@@ -113,6 +113,25 @@
 .island:not(.open):is([data-state="idle"], [data-state="music"], [data-state="notch"]) .eye { width: 9px; height: 2.5px; border-radius: 2px; }
 .island:not(.open)[data-state="idle"]:hover .eye { width: var(--eye-w); height: var(--eye-h); border-radius: 3px; }
 
+/* Lebendige Augen (eyes.js setzt data-eyes, nur geschlossen und in Ruhe):
+   wach → müde → schläft. Ohne data-eyes gilt die Ruhe oben (zu, beim Darüberfahren wach). */
+.island:not(.open)[data-state="idle"][data-eyes="awake"] .eye { width: var(--eye-w); height: var(--eye-h); border-radius: var(--radius-eye); }
+.island:not(.open)[data-state="idle"][data-eyes="drowsy"] .eye {
+  width: 6px;
+  height: 4px;
+  border-radius: 2px;
+  transform: translateY(1.5px);       /* Lider sinken */
+  transition-duration: 900ms;         /* langsam müde werden */
+}
+.island:not(.open)[data-state="idle"][data-eyes="asleep"] .eye { width: 9px; height: 2.5px; border-radius: 2px; transition-duration: 1200ms; }
+/* Atmen im Schlaf: nur die Breite, sehr langsam, ein Wechsel pro Takt */
+.island:not(.open)[data-state="idle"][data-eyes="asleep"].breath .eye { width: 10.5px; transition: width 2600ms var(--ease-standard); }
+.island:not(.open)[data-state="idle"][data-eyes]:hover .eye { width: var(--eye-w); height: var(--eye-h); border-radius: var(--radius-eye); transform: none; transition-duration: var(--dur-base); }
+/* Kurz zur Seite schauen (nur wach) */
+.island:not(.open)[data-state="idle"][data-eyes="awake"] .face { transition: transform 320ms var(--ease-standard); }
+.island:not(.open)[data-state="idle"][data-eyes="awake"].glance-l .face { transform: translateX(-2px); }
+.island:not(.open)[data-state="idle"][data-eyes="awake"].glance-r .face { transform: translateX(2px); }
+
 /* Denkt / steuert: Augen schauen ruhig hin und her */
 .island:is([data-state="busy"], [data-state="control"]) .eye { animation: look 1.8s var(--ease-standard) infinite; }
 @keyframes look { 0%, 100% { transform: translateX(-1.5px); } 50% { transform: translateX(1.5px); } }

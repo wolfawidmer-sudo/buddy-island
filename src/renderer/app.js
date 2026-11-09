@@ -90,6 +90,11 @@
     agendaList: $('agendaList'),
     micBtn: $('micBtn'),
     wakeToggle: $('wakeToggle'),
+    wakeLabel: $('wakeLabel'),
+    wakeWordInput: $('wakeWordInput'),
+    wakeWordSave: $('wakeWordSave'),
+    wakeWordMsg: $('wakeWordMsg'),
+    eyesToggle: $('eyesToggle'),
     speakToggle: $('speakToggle'),
     voiceStatus: $('voiceStatus'),
     mediaToggle: $('mediaToggle'),
@@ -177,6 +182,7 @@
     onboardingStep: 0,
     notch: (() => { try { return localStorage.getItem(NOTCH_KEY) === '1'; } catch { return false; } })(),
   };
+  let eyes = null; // Lebendige Augen, wird weiter unten erzeugt
 
   // ---------- Hilfsfunktionen ----------
 
@@ -303,6 +309,9 @@
   function render() {
     const shown = visibleState();
     if (el.island.dataset.state !== shown) el.island.dataset.state = shown;
+    // Aktivität oder offenes Island weckt Buddy; in Ruhe laufen die Augen selbst weiter
+    if (shown !== 'idle' || state.open) eyes?.wake();
+    eyes?.sync();
     el.island.classList.toggle('paused', Boolean(state.media && !state.media.playing));
     el.island.classList.toggle('listening', Boolean(state.listening));
     // Sichtbarer Text nur im offenen Island; geschlossen nur für Screenreader
@@ -532,7 +541,7 @@
     captured = on;
     api.setMouseCapture(on);
   }
-  el.island.addEventListener('mouseenter', () => setCapture(true));
+  el.island.addEventListener('mouseenter', () => { setCapture(true); eyes?.wake(); });
   el.island.addEventListener('mouseleave', () => { if (!drag.active) setCapture(false); });
 
   // ---------- Blinzeln (nur ein kurzer Timer, keine Dauer-Animation) ----------
@@ -540,7 +549,8 @@
   (function blinkLoop() {
     setTimeout(() => {
       const shown = visibleState();
-      if (!document.hidden && (shown === 'idle' || shown === 'timer' || shown === 'peek')) {
+      const sleepy = shown === 'idle' && el.island.dataset.eyes === 'asleep';
+      if (!document.hidden && !sleepy && (shown === 'idle' || shown === 'timer' || shown === 'peek')) {
         for (const eye of el.island.querySelectorAll('.eye')) {
           eye.classList.add('blink');
           eye.addEventListener('animationend', () => eye.classList.remove('blink'), { once: true });
@@ -549,6 +559,14 @@
       blinkLoop();
     }, 3500 + Math.random() * 4500);
   })();
+
+  // ---------- Lebendige Augen: Schlafzyklus (src/renderer/eyes.js) ----------
+  eyes = window.BuddyEyes?.createEyes({
+    island: el.island,
+    active: () => state.settings?.eyesAlive !== false && !state.open && !state.game.active && !document.hidden && visibleState() === 'idle',
+    calm: () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  }) || null;
+  eyes?.start();
 
   function pop() {
     el.island.classList.remove('pop');
@@ -1724,6 +1742,11 @@
     fillShortcuts();
     el.wakeToggle.checked = Boolean(s.voiceWake);
     el.wakeToggle.disabled = !s.canControl;
+    const word = s.wakeWord || 'Hey Buddy';
+    el.wakeLabel.textContent = t('Auf «{word}» hören', { word });
+    if (document.activeElement !== el.wakeWordInput) el.wakeWordInput.value = word;
+    el.wakeWordInput.disabled = el.wakeWordSave.disabled = !s.canControl;
+    el.eyesToggle.checked = s.eyesAlive !== false;
     el.speakToggle.checked = s.speak !== false;
     const v = s.voiceInfo;
     el.voiceStatus.textContent = !s.canControl ? t('Nur unter Windows')
@@ -2316,6 +2339,14 @@
     else api.openNotificationSettings();
   });
   el.wakeToggle.addEventListener('change', () => save({ voiceWake: el.wakeToggle.checked }));
+  async function saveWakeWord() {
+    const result = await save({ wakeWord: el.wakeWordInput.value });
+    if (result.ok) footer(el.wakeWordMsg, t('Gespeichert. Buddy hört jetzt auf «{word}».', { word: result.settings.wakeWord }), 'ok');
+    else footer(el.wakeWordMsg, result.error, 'err');
+  }
+  el.wakeWordSave.addEventListener('click', saveWakeWord);
+  el.wakeWordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveWakeWord(); } });
+  el.eyesToggle.addEventListener('change', () => save({ eyesAlive: el.eyesToggle.checked }));
   el.speakToggle.addEventListener('change', () => save({ speak: el.speakToggle.checked }));
   el.mediaToggle.addEventListener('change', async () => { await save({ media: el.mediaToggle.checked }); renderNowPlaying(); });
   el.gameToggle.addEventListener('change', () => save({ gameMode: el.gameToggle.checked }));
@@ -2705,6 +2736,8 @@
     keys.textContent = '';
     for (const k of prettyHotkey(s.hotkey || '').split(' + ').filter(Boolean)) keys.appendChild(node('kbd', '', k));
     const wake = $('obWake');
+    const obLabel = wake.closest('label')?.querySelector('.row-label');
+    if (obLabel?.firstChild) obLabel.firstChild.textContent = t('Auf «{word}» hören', { word: s.wakeWord || 'Hey Buddy' });
     wake.checked = Boolean(s.voiceWake);
     wake.disabled = s.canControl === false;
   }
