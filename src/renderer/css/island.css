@@ -129,12 +129,14 @@
   width: 10px;
   height: 4px;
   border-radius: 0;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 4'%3E%3Cpath d='M1.25 1.25Q5 3.7 8.75 1.25' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 4'%3E%3Cpath d='M1.25 1.25Q5 3.7 8.75 1.25' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 4'%3E%3Cpath d='M1.25 1.25Q5 3.7 8.75 1.25' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 4'%3E%3Cpath d='M1.25 1.25Q5 3.7 8.75 1.25' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
   transition-duration: 1200ms;
 }
-/* Atmen im Schlaf: nur die Breite, sehr langsam, ein Wechsel pro Takt */
-.island:not(.open)[data-state="idle"][data-eyes="asleep"].breath .eye { width: 11px; transition: width 2600ms var(--ease-standard); }
+/* Atmen im Schlaf: die Lider heben und senken sich minimal. Nur verschieben, nie
+   strecken, damit die Linie überall gleich dick bleibt. */
+.island:not(.open)[data-state="idle"][data-eyes="asleep"] .face { transition: transform 2600ms var(--ease-standard); }
+.island:not(.open)[data-state="idle"][data-eyes="asleep"].breath .face { transform: translateY(0.75px); }
 .island:not(.open)[data-state="idle"][data-eyes]:hover .eye { width: var(--eye-w); height: var(--eye-h); border-radius: var(--radius-eye); -webkit-mask: none; mask: none; transform: none; transition-duration: var(--dur-base); }
 /* Kurz zur Seite schauen (nur wach) */
 .island:not(.open)[data-state="idle"][data-eyes="awake"] .face { transition: transform 320ms var(--ease-standard); }
