@@ -523,15 +523,27 @@
                 <button type="button" class="link danger" id="cloudLogout">Abmelden</button>
               </div>
               <div class="row">
-                <span class="row-label">Guthaben</span>
+                <span class="row-label two">Guthaben<small id="cloudBalanceSub"></small></span>
                 <span class="row-value" id="cloudBalance">–</span>
               </div>
             </div>
             <p class="footer" id="cloudMsg"></p>
 
+            <div id="cloudPlanBox" hidden>
+              <h3 class="section">Abo</h3>
+              <div class="group" id="cloudPlans"></div>
+              <p class="footer" id="cloudPlanFoot">Jeden Monat neues Guthaben. Was am Monatsende übrig ist, verfällt. Gekaufte Credits bleiben.</p>
+            </div>
+
             <div id="cloudBuyBox" hidden>
-              <h3 class="section">Buddy Credits kaufen</h3>
-              <div class="group" id="cloudPackages"></div>
+              <h3 class="section">Guthaben aufladen</h3>
+              <div class="group">
+                <div id="cloudPackages"></div>
+                <div class="row field-row">
+                  <input id="cloudAmount" type="text" inputmode="decimal" placeholder="Eigener Betrag in USD" spellcheck="false" autocomplete="off" aria-label="Eigener Betrag in USD">
+                  <button type="button" class="button primary small" id="cloudAmountBuy">Bezahlen</button>
+                </div>
+              </div>
               <p class="footer" id="cloudBuyFoot">Bezahlt wird im Browser über Stripe. Das Guthaben erscheint, sobald Stripe die Zahlung bestätigt hat.</p>
             </div>
 

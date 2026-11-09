@@ -82,7 +82,11 @@ const sessionFor = (n, expiresAt) => ({ accessToken: `access-${n}`, refreshToken
 
 async function testAccount() {
   const nowSec = () => Math.floor(Date.now() / 1000);
-  const me = [200, { profile: { displayName: 'Anna' }, wallet: { available: '12.500000', reserved: '0.000000', lifetimeConsumed: '1.000000' } }];
+  const me = [200, {
+    profile: { displayName: 'Anna' },
+    wallet: { available: '12.500000', purchased: '2.500000', subscription: { credits: '10.000000', expiresAt: '2026-12-09T00:00:00Z' }, reserved: '0.000000', lifetimeConsumed: '1.000000' },
+    subscription: { status: 'active', active: true, currentPeriodEnd: '2026-12-09T00:00:00Z', cancelAtPeriodEnd: false, plan: { name: 'Buddy Plus', monthlyCredits: '1000.000000', price: '10.00' } },
+  }];
 
   // Anmelden: Sitzung verschlüsselt gespeichert (über storage), Oberfläche sieht keine Tokens
   let stored = null;
@@ -96,6 +100,9 @@ async function testAccount() {
   const st = await acc.login({ email: 'a@example.com', password: 'x' });
   assert.equal(st.signedIn, true);
   assert.equal(st.wallet.available, '12.500000');
+  assert.equal(st.wallet.subscriptionCredits, '10.000000');
+  assert.equal(st.subscription.active, true);
+  assert.equal(st.subscription.plan.name, 'Buddy Plus');
   assert.equal(stored.refreshToken, 'refresh-1');
   assert.equal(acc.accessToken(), 'access-1');
   for (const s of [st, ...states]) assert.ok(!JSON.stringify(s).includes('access-1') && !JSON.stringify(s).includes('refresh-1'));
@@ -158,19 +165,36 @@ async function testAccount() {
   // Kauf: nur Stripe-Checkout wird geöffnet; Abmelden klappt auch offline
   let openedUrl = '';
   const b6 = fakeBackend({
-    'POST /v1/purchases/checkout': () => [201, { checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1', amountChf: '10.00', credits: '1000.000000' }],
+    'POST /v1/purchases/checkout': (c) => [201, { checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1', amount: c.body.amount || '10.00', currency: 'usd', credits: '1000.000000' }],
+    'POST /v1/subscription/checkout': (c) => [201, { checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_sub', plan: { id: c.body.planId } }],
+    'POST /v1/subscription/portal': () => [201, { portalUrl: 'https://billing.stripe.com/p/session/abc' }],
     'POST /v1/auth/logout': 'offline',
   });
   const acc7 = createCloudAccount({ apiUrl: () => 'https://api.test', fetchImpl: b6.fetchImpl, storage, openExternal: (u) => { openedUrl = u; } });
   stored = sessionFor(8, nowSec() + 3600);
   await acc7.restore().catch(() => {});
-  const bought = await acc7.buy('44444444-4444-4444-8444-444444444444');
+  const bought = await acc7.buy({ packageId: '44444444-4444-4444-8444-444444444444' });
   assert.equal(openedUrl, 'https://checkout.stripe.com/c/pay/cs_1');
   assert.equal(bought.credits, '1000.000000');
+  assert.deepEqual(b6.calls.at(-1).body, { packageId: '44444444-4444-4444-8444-444444444444' });
+  // eigener Betrag in USD
+  const custom = await acc7.buy({ amount: '12.50' });
+  assert.deepEqual(b6.calls.at(-1).body, { amount: '12.50' });
+  assert.equal(custom.amount, '12.50');
+  assert.equal(custom.currency, 'usd');
+  // Abo und Kundenportal: nur echte Stripe-Seiten werden geöffnet
+  await acc7.subscribe('55555555-5555-4555-8555-555555555555');
+  assert.equal(openedUrl, 'https://checkout.stripe.com/c/pay/cs_sub');
+  await acc7.portal();
+  assert.equal(openedUrl, 'https://billing.stripe.com/p/session/abc');
   const b7 = fakeBackend({ 'POST /v1/purchases/checkout': () => [201, { checkoutUrl: 'https://evil.example/pay' }] });
   const acc8 = createCloudAccount({ apiUrl: () => 'https://api.test', fetchImpl: b7.fetchImpl, storage, openExternal: () => { throw new Error('darf nicht öffnen'); } });
   await acc8.restore().catch(() => {});
-  await assert.rejects(acc8.buy('x'), (e) => e.code === 'bad_checkout');
+  await assert.rejects(acc8.buy({ packageId: 'x' }), (e) => e.code === 'bad_checkout');
+  const b8 = fakeBackend({ 'POST /v1/subscription/portal': () => [201, { portalUrl: 'https://evil.example/portal' }] });
+  const acc8b = createCloudAccount({ apiUrl: () => 'https://api.test', fetchImpl: b8.fetchImpl, storage, openExternal: () => { throw new Error('darf nicht öffnen'); } });
+  await acc8b.restore().catch(() => {});
+  await assert.rejects(acc8b.portal(), (e) => e.code === 'bad_checkout');
   await acc7.logout();
   assert.equal(acc7.publicState().signedIn, false);
   assert.equal(stored, null);

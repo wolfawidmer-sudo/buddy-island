@@ -1963,7 +1963,16 @@ function setupCloudIpc() {
   ipcMain.handle('cloud:profile', wrap((i) => cloud.updateProfile({ displayName: str(i.displayName, 80) })));
   ipcMain.handle('cloud:history', wrap(async () => ({ history: await cloud.history() })));
   ipcMain.handle('cloud:packages', wrap(async () => ({ packages: await cloud.packages() })));
-  ipcMain.handle('cloud:buy', wrap(async (i) => ({ checkout: await cloud.buy(str(i.packageId, 64)) })));
+  ipcMain.handle('cloud:offer', wrap(async () => {
+    const [packages, plans, config] = await Promise.all([cloud.packages(), cloud.plans(), cloud.billingConfig()]);
+    return { packages, plans, config };
+  }));
+  ipcMain.handle('cloud:buy', wrap(async (i) => {
+    const amount = str(i.amount, 12).replace(',', '.');
+    return { checkout: await cloud.buy(str(i.packageId, 64) ? { packageId: str(i.packageId, 64) } : { amount }) };
+  }));
+  ipcMain.handle('cloud:subscribe', wrap(async (i) => ({ subscription: await cloud.subscribe(str(i.planId, 64)) })));
+  ipcMain.handle('cloud:portal', wrap(() => cloud.portal()));
 }
 
 // ---------- IPC ----------

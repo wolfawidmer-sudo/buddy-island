@@ -3473,10 +3473,12 @@
     google: $('cloudGoogle'), email: $('cloudEmail'), name: $('cloudName'), nameRow: $('cloudNameRow'),
     code: $('cloudCode'), codeRow: $('cloudCodeRow'), password: $('cloudPassword'), passwordRow: $('cloudPasswordRow'),
     submit: $('cloudSubmit'), switchBtn: $('cloudSwitch'), forgot: $('cloudForgot'),
-    who: $('cloudWho'), whoSub: $('cloudWhoSub'), logout: $('cloudLogout'), balance: $('cloudBalance'),
+    who: $('cloudWho'), whoSub: $('cloudWhoSub'), logout: $('cloudLogout'), balance: $('cloudBalance'), balanceSub: $('cloudBalanceSub'),
     buyBox: $('cloudBuyBox'), packages: $('cloudPackages'), historyBox: $('cloudHistoryBox'), usage: $('cloudUsage'), purchases: $('cloudPurchases'),
+    planBox: $('cloudPlanBox'), plans: $('cloudPlans'), amount: $('cloudAmount'), amountBuy: $('cloudAmountBuy'), buyFoot: $('cloudBuyFoot'),
   };
-  const cloud = { state: null, mode: 'login', busy: false, loadedFor: null };
+  const cloud = { state: null, mode: 'login', busy: false, loadedFor: null, config: null, plans: [] };
+  const BUY_FOOT = cloudEl.buyFoot.textContent;
 
   // Anzeige von Buddy Credits (nur Anzeige; gerechnet wird ausschliesslich auf dem Server)
   function fmtBc(v) {
@@ -3486,7 +3488,8 @@
     const digits = abs > 0 && abs < 1 ? 4 : 2;
     return `${n.toLocaleString(I18N.locale, { minimumFractionDigits: Math.min(2, digits), maximumFractionDigits: digits })} BC`;
   }
-  const fmtChf = (v) => `CHF ${Number(v).toLocaleString(I18N.locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtUsd = (v) => `$${Number(v).toLocaleString(I18N.locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(I18N.locale, { day: 'numeric', month: 'long' }) : '');
   const fmtDay = (iso) => (iso ? new Date(iso).toLocaleString(I18N.locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 
   function cloudMode(mode) {
@@ -3517,6 +3520,7 @@
     cloudEl.out.hidden = !s.configured || s.signedIn;
     cloudEl.in.hidden = !s.signedIn;
     cloudEl.buyBox.hidden = !s.signedIn;
+    cloudEl.planBox.hidden = !s.signedIn || !cloud.plans.length;
     cloudEl.historyBox.hidden = !s.signedIn;
     cloudEl.google.disabled = cloud.busy;
     cloudEl.google.textContent = s.googleRunning ? t('Anmeldung im Browser läuft … (abbrechen)') : t('Mit Google fortfahren');
@@ -3526,6 +3530,11 @@
       cloudEl.whoSub.textContent = s.displayName ? s.email || '' : s.provider === 'google' ? 'Google' : '';
       cloudEl.balance.textContent = s.wallet ? fmtBc(s.wallet.available) : s.status === 'offline' ? t('Offline') : '–';
       cloudEl.balance.classList.toggle('bad', Boolean(s.wallet) && Number(s.wallet.available) <= 0);
+      const subBc = Number(s.wallet?.subscriptionCredits || 0);
+      cloudEl.balanceSub.textContent = subBc > 0
+        ? t('davon {bc} aus dem Abo, gültig bis {date}', { bc: fmtBc(s.wallet.subscriptionCredits), date: fmtDate(s.wallet.subscriptionExpiresAt) })
+        : '';
+      renderPlans();
       if (cloud.loadedFor !== s.email) { cloud.loadedFor = s.email; loadCloudExtras(); }
     } else {
       cloud.loadedFor = null;
@@ -3533,11 +3542,93 @@
     if (s.error && !cloud.busy) footer(cloudEl.msg, s.error, 'err');
   }
 
+  // Abo: Plan anbieten oder laufendes Abo zeigen (verwalten im Stripe-Kundenportal)
+  function renderPlans() {
+    const s = cloud.state;
+    cloudEl.plans.textContent = '';
+    if (!s?.signedIn || !cloud.plans.length) return;
+    const sub = s.subscription;
+    if (sub?.active) {
+      const r = document.createElement('div');
+      r.className = 'row';
+      const l = document.createElement('span');
+      l.className = 'row-label two';
+      l.textContent = sub.plan?.name || t('Abo');
+      const small = document.createElement('small');
+      small.textContent = sub.cancelAtPeriodEnd
+        ? t('gekündigt, läuft bis {date}', { date: fmtDate(sub.currentPeriodEnd) })
+        : t('{bc} pro Monat · nächste Verlängerung {date}', { bc: fmtBc(sub.plan?.monthlyCredits || 0), date: fmtDate(sub.currentPeriodEnd) });
+      l.appendChild(small);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'link';
+      b.textContent = t('Verwalten');
+      b.addEventListener('click', () => cloudRun(() => api.cloud.portal(), t('Das Kundenportal ist im Browser offen.')));
+      r.append(l, b);
+      cloudEl.plans.appendChild(r);
+      return;
+    }
+    for (const plan of cloud.plans) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'row row-button';
+      const l = document.createElement('span');
+      l.className = 'row-label two';
+      l.textContent = plan.name;
+      const small = document.createElement('small');
+      small.textContent = t('{bc} pro Monat', { bc: fmtBc(plan.monthlyCredits) });
+      l.appendChild(small);
+      const v = document.createElement('span');
+      v.className = 'row-value';
+      v.textContent = t('{price} / Monat', { price: fmtUsd(plan.price) });
+      b.append(l, v);
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        footer(cloudEl.msg, t('Öffne das Abo im Browser …'));
+        await cloudRun(() => api.cloud.subscribe(plan.id), t('Abo im Browser geöffnet. Das Guthaben erscheint, sobald Stripe die erste Zahlung bestätigt hat.'));
+        b.disabled = false;
+      });
+      cloudEl.plans.appendChild(b);
+    }
+  }
+
+  // Eigener Betrag: Vorschau der Credits (nur Anzeige; gerechnet wird auf dem Server)
+  function amountPreview() {
+    const c = cloud.config;
+    const raw = cloudEl.amount.value.trim().replace(',', '.');
+    if (!raw || !c?.ready) { cloudEl.buyFoot.textContent = BUY_FOOT; return null; }
+    if (!/^\d{1,4}(\.\d{1,2})?$/.test(raw) || Number(raw) < Number(c.minPurchase) || Number(raw) > Number(c.maxPurchase)) {
+      cloudEl.buyFoot.textContent = t('Möglich sind {min} bis {max}.', { min: fmtUsd(c.minPurchase), max: fmtUsd(c.maxPurchase) });
+      return null;
+    }
+    cloudEl.buyFoot.textContent = t('{usd} ergibt {bc}.', { usd: fmtUsd(raw), bc: fmtBc(Number(raw) * Number(c.creditsPerUsd)) });
+    return raw;
+  }
+  cloudEl.amount.addEventListener('input', amountPreview);
+  cloudEl.amount.addEventListener('keydown', (e) => { if (e.key === 'Enter') cloudEl.amountBuy.click(); });
+  cloudEl.amountBuy.addEventListener('click', async () => {
+    const amount = amountPreview();
+    if (!amount) { footer(cloudEl.msg, t('Bitte gib einen gültigen Betrag ein.'), 'err'); return; }
+    cloudEl.amountBuy.disabled = true;
+    footer(cloudEl.msg, t('Öffne die Zahlung im Browser …'));
+    const r = await api.cloud.buyAmount(amount);
+    cloudEl.amountBuy.disabled = false;
+    if (!r.ok) { footer(cloudEl.msg, r.error, 'err'); return; }
+    cloudEl.amount.value = '';
+    amountPreview();
+    footer(cloudEl.msg, t('Zahlung für {bc} ({usd}) im Browser geöffnet. Das Guthaben erscheint nach der Bestätigung durch Stripe.', { bc: fmtBc(r.checkout.credits), usd: fmtUsd(r.checkout.amount) }), 'ok');
+  });
+
   async function loadCloudExtras() {
-    const [p, h] = await Promise.all([api.cloud.packages(), api.cloud.history()]);
+    const [o, h] = await Promise.all([api.cloud.offer(), api.cloud.history()]);
     cloudEl.packages.textContent = '';
-    if (p.ok && p.packages.length) {
-      for (const pkg of p.packages) {
+    if (o.ok) {
+      cloud.config = o.config;
+      cloud.plans = o.plans || [];
+      cloudEl.amount.placeholder = o.config?.ready
+        ? t('Eigener Betrag ({min} bis {max})', { min: fmtUsd(o.config.minPurchase), max: fmtUsd(o.config.maxPurchase) })
+        : t('Eigener Betrag in USD');
+      for (const pkg of o.packages || []) {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'row row-button';
@@ -3546,16 +3637,14 @@
         l.textContent = `${pkg.name} · ${fmtBc(pkg.credits)}`;
         const v = document.createElement('span');
         v.className = 'row-value';
-        v.textContent = fmtChf(pkg.priceChf);
+        v.textContent = fmtUsd(pkg.price);
         b.append(l, v);
         b.addEventListener('click', () => buyPackage(pkg, b));
         cloudEl.packages.appendChild(b);
       }
+      renderCloud();
     } else {
-      const r = document.createElement('div');
-      r.className = 'row';
-      r.textContent = p.ok ? t('Zurzeit gibt es keine Pakete.') : p.error;
-      cloudEl.packages.appendChild(r);
+      footer(cloudEl.msg, o.error, 'err');
     }
     const list = (node, rows, empty, line) => {
       node.textContent = '';
@@ -3592,7 +3681,7 @@
     ]);
     const purchaseStatus = { completed: t('bezahlt'), refunded: t('zurückerstattet'), partially_refunded: t('teilweise zurückerstattet'), failed: t('fehlgeschlagen'), expired: t('abgelaufen') };
     list(cloudEl.purchases, h.history.purchases, t('Noch keine Käufe.'), (p2) => [
-      `${fmtBc(p2.credits)} · ${fmtChf(p2.amountChf)}`,
+      `${fmtBc(p2.credits)} · ${fmtUsd(p2.amount)}`,
       [fmtDay(p2.completedAt || p2.createdAt), purchaseStatus[p2.status] || p2.status].join(' · '),
       '',
     ]);
@@ -3604,7 +3693,7 @@
     const r = await api.cloud.buy(pkg.id);
     button.disabled = false;
     if (!r.ok) { footer(cloudEl.msg, r.error, 'err'); return; }
-    footer(cloudEl.msg, t('Zahlung für {bc} ({chf}) im Browser geöffnet. Das Guthaben erscheint nach der Bestätigung durch Stripe.', { bc: fmtBc(r.checkout.credits), chf: fmtChf(r.checkout.amountChf) }), 'ok');
+    footer(cloudEl.msg, t('Zahlung für {bc} ({usd}) im Browser geöffnet. Das Guthaben erscheint nach der Bestätigung durch Stripe.', { bc: fmtBc(r.checkout.credits), usd: fmtUsd(r.checkout.amount) }), 'ok');
   }
 
   async function cloudRun(fn, okText) {

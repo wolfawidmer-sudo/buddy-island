@@ -6,7 +6,7 @@ Buddy hat zwei unabhängige Betriebsarten:
 |---|---|---|
 | KI | Ollama / Colibrì auf dem eigenen PC | OpenAI über das Buddy-Backend |
 | Konto | keins | Buddy-Konto (E-Mail oder Google) |
-| Kosten | gratis | Buddy Credits (BC), Prepaid |
+| Kosten | gratis | Buddy Credits (BC): Pay as you go ab $5 (eigener Betrag) oder Abo mit Monats-Credits |
 | Offline | ja | nein |
 
 Die lokale KI und eigene API-Keys funktionieren unverändert, auch ohne Konto und wenn das Backend nicht erreichbar ist.
@@ -43,7 +43,9 @@ Der vorhandene Client vom Typ **Desktop app** wird weiterverwendet. Kein neuer C
 
 ## Buddy Credits
 
-- Preis je Anfrage = echte OpenAI-Kosten (USD) + 10 % → in CHF → in BC. Gerechnet wird nur in Postgres (`numeric`), nie mit JavaScript-Fliesskommazahlen.
+- Preis je Anfrage = echte OpenAI-Kosten (USD) + **25 % Kommission** → in BC (`credits_per_usd`). Gerechnet wird nur in Postgres (`numeric`), nie mit JavaScript-Fliesskommazahlen.
+- Bezahlung in **USD**. Pay as you go: Paket oder eigener Betrag ($5 bis $500, einstellbar in `billing_settings`).
+- **Abo** (eine Stufe, monatlich): jede bezahlte Abo-Rechnung (`invoice.paid`) schreibt die Monats-Credits gut. Abo-Credits verfallen am Periodenende, gekaufte Credits nie. Verbraucht wird zuerst das Abo-Guthaben. Kündigen/Zahlungsart über das Stripe-Kundenportal.
 - Ablauf: reservieren (Schätzung, gesperrte Wallet-Zeile) → OpenAI → mit echter Nutzung abrechnen → Rest freigeben.
 - Anbieterkosten, Aufschlag und Gesamtkosten werden getrennt gespeichert (`usage_events`).
 - Kein negatives Guthaben (Check-Constraint + Begrenzung beim Abrechnen). Buchungen sind unveränderlich (Trigger).
@@ -54,10 +56,12 @@ Der vorhandene Client vom Typ **Desktop app** wird weiterverwendet. Kein neuer C
 
 | Wert | Wo | Wirkung, solange leer |
 |---|---|---|
-| `credits_per_chf` (BC je CHF) | `public.billing_settings` | Cloud-Anfragen werden abgelehnt |
-| `usd_to_chf` (Kurs) | `public.billing_settings` | Cloud-Anfragen werden abgelehnt |
+| `credits_per_usd` (BC je USD) | `public.billing_settings` | Cloud-Anfragen und Käufe werden abgelehnt |
 | Modellpreise | `public.model_pricing` | Modell nicht verfügbar |
-| Credit-Pakete (CHF, BC) | `public.credit_packages` | keine Pakete zum Kaufen |
+| Abo-Plan (USD/Monat, BC/Monat) | `public.subscription_plans` | kein Abo im Angebot |
+| Credit-Pakete (USD, BC), optional | `public.credit_packages` | nur eigener Betrag |
+
+Bereits festgelegt: Kommission 25 % (`markup_rate`), Mindestbetrag $5, Höchstbetrag $500.
 
 Vorlage: `supabase/seed/pricing-and-packages.template.sql`. Preise nur von https://developers.openai.com/api/docs/pricing übernehmen.
 
@@ -72,8 +76,10 @@ Vorlage: `supabase/seed/pricing-and-packages.template.sql`. Preise nur von https
 | POST | `/v1/auth/logout` | Token |
 | GET/PATCH | `/v1/me` | Token |
 | GET | `/v1/wallet`, `/v1/wallet/transactions`, `/v1/usage`, `/v1/purchases` | Token |
-| GET | `/v1/credit-packages` | öffentlich |
-| POST | `/v1/purchases/checkout` | Token, Rate-Limit |
+| GET | `/v1/credit-packages`, `/v1/subscription-plans`, `/v1/billing/config` | öffentlich |
+| POST | `/v1/purchases/checkout` (`packageId` oder `amount`) | Token, Rate-Limit |
+| GET | `/v1/subscription` | Token |
+| POST | `/v1/subscription/checkout`, `/v1/subscription/portal` | Token, Rate-Limit |
 | GET | `/v1/cloud/models` | Token |
 | POST | `/v1/cloud/responses` | Token, Rate-Limit, Credits |
 | POST | `/v1/cloud/audio/transcriptions`, `/v1/cloud/realtime/sessions` | 501 (noch nicht umgesetzt) |
@@ -116,9 +122,12 @@ Eigenes Projekt «Buddy Cloud» mit Projekt-Key und Ausgabenlimit. Key nur in Ra
 4. `/health` muss `configured` überall `true` zeigen.
 
 ### 5. Stripe
-1. Erst im Testmodus: Webhook-Endpunkt `https://<backend>/webhooks/stripe` mit den Ereignissen `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `charge.refunded`.
-2. Signing Secret als `STRIPE_WEBHOOK_SECRET` in Railway.
-3. Testkauf mit Testkarte, danach Live-Keys.
+1. Erst im Testmodus: Webhook-Endpunkt `https://api.buddy-island.top/webhooks/stripe` mit den Ereignissen `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `charge.refunded`, `invoice.paid`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`.
+2. Kundenportal einschalten: Stripe → Settings → Billing → Customer portal (Kündigen und Zahlungsart erlauben).
+3. Signing Secret als `STRIPE_WEBHOOK_SECRET` in Railway.
+4. Testkauf und Test-Abo mit Testkarte, danach Live-Keys.
+
+Hinweis: Das Stripe-Konto rechnet in CHF ab. USD-Zahlungen werden von Stripe umgerechnet (mit Umrechnungsgebühr); das geht von der Kommission ab.
 
 ### 6. App
 `package.json` → `"buddyCloud": { "apiUrl": "https://api.buddy-island.top" }` setzen. Erst dann erscheint «Buddy Cloud» als Anbieter. Das geht mit dem nächsten Release an alle.

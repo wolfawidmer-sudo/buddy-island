@@ -38,6 +38,8 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
   let profile = null;
   /** @type {any} */
   let wallet = null;
+  /** @type {any} */
+  let subscription = null;
   let status = 'signed_out'; // signed_out | signed_in | offline | expired
   /** @type {string|null} */
   let lastError = null;
@@ -58,7 +60,21 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
       email: session?.user?.email || null,
       provider: session?.user?.provider || null,
       displayName: profile?.displayName || null,
-      wallet: wallet ? { available: wallet.available, reserved: wallet.reserved, lifetimeConsumed: wallet.lifetimeConsumed } : null,
+      wallet: wallet ? {
+        available: wallet.available,
+        purchased: wallet.purchased ?? wallet.available,
+        subscriptionCredits: wallet.subscription?.credits ?? '0',
+        subscriptionExpiresAt: wallet.subscription?.expiresAt ?? null,
+        reserved: wallet.reserved,
+        lifetimeConsumed: wallet.lifetimeConsumed,
+      } : null,
+      subscription: subscription ? {
+        status: subscription.status,
+        active: Boolean(subscription.active),
+        currentPeriodEnd: subscription.currentPeriodEnd || null,
+        cancelAtPeriodEnd: Boolean(subscription.cancelAtPeriodEnd),
+        plan: subscription.plan || null,
+      } : null,
       error: lastError,
       googleRunning: Boolean(googleFlow),
     };
@@ -112,6 +128,7 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
     session = null;
     profile = null;
     wallet = null;
+    subscription = null;
     status = next;
     clearTimeout(refreshTimer);
     storage.save(null);
@@ -182,6 +199,7 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
     const data = await request('GET', '/v1/me', { auth: true });
     profile = data.profile;
     wallet = data.wallet;
+    subscription = data.subscription || null;
     if (session) status = 'signed_in';
     changed();
     return publicState();
@@ -264,13 +282,39 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
   };
 
   const packages = async () => (await request('GET', '/v1/credit-packages')).packages;
+  const plans = async () => (await request('GET', '/v1/subscription-plans')).plans;
+  const billingConfig = async () => request('GET', '/v1/billing/config');
 
-  /** Kauf: öffnet Stripe Checkout im System-Browser. Gutschrift kommt nur über den Webhook. */
-  async function buy(/** @type {string} */ packageId) {
-    const data = await request('POST', '/v1/purchases/checkout', { auth: true, body: { packageId } });
-    if (!/^https:\/\/checkout\.stripe\.com\//.test(String(data.checkoutUrl))) throw new CloudError('bad_checkout', t('Ungültige Zahlungsseite.'));
-    await openExternal(data.checkoutUrl);
-    return { amountChf: data.amountChf, credits: data.credits };
+  /** Nur echte Stripe-Seiten im Browser öffnen */
+  async function openStripe(/** @type {string} */ url, /** @type {RegExp} */ allowed) {
+    if (!allowed.test(String(url))) throw new CloudError('bad_checkout', t('Ungültige Zahlungsseite.'));
+    await openExternal(url);
+  }
+
+  /**
+   * Pay as you go: Paket ODER eigener Betrag in USD («12.50»). Öffnet Stripe Checkout im
+   * System-Browser. Gutschrift kommt nur über den Webhook.
+   * @param {{ packageId?: string, amount?: string }} what
+   */
+  async function buy(what) {
+    const body = what.packageId ? { packageId: what.packageId } : { amount: String(what.amount || '') };
+    const data = await request('POST', '/v1/purchases/checkout', { auth: true, body });
+    await openStripe(data.checkoutUrl, /^https:\/\/checkout\.stripe\.com\//);
+    return { amount: data.amount, currency: data.currency, credits: data.credits };
+  }
+
+  /** Abo abschliessen (Stripe Checkout, monatlich) */
+  async function subscribe(/** @type {string} */ planId) {
+    const data = await request('POST', '/v1/subscription/checkout', { auth: true, body: { planId } });
+    await openStripe(data.checkoutUrl, /^https:\/\/checkout\.stripe\.com\//);
+    return { plan: data.plan };
+  }
+
+  /** Abo verwalten (kündigen, Zahlungsart, Rechnungen) im Stripe-Kundenportal */
+  async function portal() {
+    const data = await request('POST', '/v1/subscription/portal', { auth: true });
+    await openStripe(data.portalUrl, /^https:\/\/billing\.stripe\.com\//);
+    return {};
   }
 
   /** Für den Anbieter «Buddy Cloud»: aktuelles Access-Token (synchron) */
@@ -282,7 +326,7 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
   return {
     publicState, restore, ensureFresh, accessToken, refresh, refreshWallet, loadMe,
     signup, login, verifyEmail, resendConfirmation, requestPasswordReset, confirmPasswordReset,
-    google, cancelGoogle, logout, updateProfile, history, packages, buy, configured,
+    google, cancelGoogle, logout, updateProfile, history, packages, plans, billingConfig, buy, subscribe, portal, configured,
   };
 }
 

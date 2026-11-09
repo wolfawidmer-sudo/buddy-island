@@ -84,7 +84,11 @@ contextBridge.exposeInMainWorld('buddy', {
     setName: (displayName) => ipcRenderer.invoke('cloud:profile', { displayName: String(displayName || '') }),
     history: () => ipcRenderer.invoke('cloud:history'),
     packages: () => ipcRenderer.invoke('cloud:packages'),
+    offer: () => ipcRenderer.invoke('cloud:offer'),
     buy: (packageId) => ipcRenderer.invoke('cloud:buy', { packageId: String(packageId || '') }),
+    buyAmount: (amount) => ipcRenderer.invoke('cloud:buy', { amount: String(amount || '') }),
+    subscribe: (planId) => ipcRenderer.invoke('cloud:subscribe', { planId: String(planId || '') }),
+    portal: () => ipcRenderer.invoke('cloud:portal'),
   },
   onCloudState: (cb) => on('cloud:state', cb),
 
