@@ -17,6 +17,7 @@ const { createRouter } = require('./router');
 const { createAgent } = require('./agent');
 const updateSecurity = require('./update-security');
 const { createAiUsage } = require('./ai-usage');
+const { migrateToCloudOnly } = require('./cloud-only');
 const systemSpecs = require('./system-specs');
 const { createAudioMeter } = require('./audio-meter');
 const { createLlm } = require('./llm');
@@ -53,11 +54,15 @@ const CLOSED_H = 36 + TOP_GAP;
 const NOTCH_H = 12 + TOP_GAP;
 const SETTINGS_VERSION = 6;
 const MODELS_CACHE_MS = 6 * 3600 * 1000;
+// Ab 0.13: Buddy läuft nur noch über Buddy Cloud. Eigene API-Keys, lokale KI (Ollama, Colibrì,
+// Hugging Face) und die Admin-Keys der Nutzungsansicht sind abgeschaltet. Der Code dafür ist noch
+// da (Tests), wird aber weder gestartet noch ist er über die Oberfläche erreichbar.
+const CLOUD_ONLY = true;
 
 const DEFAULTS = {
   name: 'Buddy',
-  provider: 'anthropic',
-  model: 'claude-sonnet-5-5', // manuelle Wahl und Rückfall
+  provider: 'buddy',
+  model: 'cloud:gpt-6.1-terra', // manuelle Wahl und Rückfall (Cloud-Standardmodell)
   autoModel: true, // Router wählt Modell und Denkaufwand
   modelFallback: true, // bei Überlastung/Rate-Limit einmalig ein anderes verfügbares Modell desselben Anbieters nehmen (mit Hinweis)
   fallbackModels: [], // optional: bevorzugte Ausweichmodelle (IDs); leer = automatisch aus der Modellliste
@@ -68,7 +73,7 @@ const DEFAULTS = {
   historyEnabled: true,
   memoryEnabled: true,
   bannerHintDismissed: false,
-  usageLocal: true, // lokale Nutzungsdaten von Claude Code und Codex lesen
+  usageLocal: false, // lokale Nutzungsdaten von Claude Code und Codex lesen (ab 0.13 abgeschaltet)
   maxTokens: 4096,
   hotkey: 'Control+Shift+Space',
   shortcuts: { newChat: '', settings: '', stop: '', voice: '' },
@@ -115,6 +120,8 @@ const DEFAULTS = {
   localAdvanced: { ctx: null, temperature: null, topP: null, maxTokens: null, keepAlive: 'auto', gpu: 'auto', threads: null, batch: null },
   localPermissions: { high: 'block' }, // lokale Modelle: riskante Aktionen standardmässig gesperrt
   shortcutsCreated: false,
+  onboarded: false, // Einführung beim ersten Start gesehen (oder übersprungen)
+  cloudNotice: null, // einmaliger Hinweis: 'keys-removed' (hatte eigene Keys/lokale KI) | 'new-cloud' (bestehender Nutzer)
   settingsVersion: SETTINGS_VERSION,
 };
 
@@ -275,6 +282,16 @@ function loadSettings() {
     migrateKey();
     saveSettings();
   }
+  if (CLOUD_ONLY) enforceCloudOnly(saved);
+}
+
+// Nur Buddy Cloud: alte Keys löschen, Anbieter fest auf Buddy Cloud (siehe src/cloud-only.js)
+function enforceCloudOnly(saved) {
+  const changed = migrateToCloudOnly(settings, saved, {
+    isCloudModel: (id) => models.providerOf(id) === 'buddy',
+    defaultModel: models.resolveTiers([], 'buddy').sonnet || DEFAULTS.model,
+  });
+  if (changed) { log('Nur noch Buddy Cloud: alte Keys und lokale Auswahl entfernt'); saveSettings(); }
 }
 
 // Ein unverschlüsselt gespeicherter Key wird verschlüsselt, sobald Windows es kann.
@@ -348,10 +365,11 @@ function displayList() {
 function providerList() {
   const found = discovery?.peek();
   return Object.values(models.PROVIDERS)
+    .filter((p) => !CLOUD_ONLY || p.id === 'buddy')
     // Die alte Hugging-Face-Laufzeit nur noch für Nutzer, die sie schon eingerichtet haben
     .filter((p) => p.id !== 'huggingface' || settings.provider === 'huggingface' || Boolean(getSecret('hfModel')))
     // Buddy Cloud erst zeigen, wenn diese Version eine Backend-Adresse hat
-    .filter((p) => p.id !== 'buddy' || cloudConfig.apiUrl() || settings.provider === 'buddy')
+    .filter((p) => p.id !== 'buddy' || cloudConfig.apiUrl() || settings.provider === 'buddy' || CLOUD_ONLY)
     .map((p) => {
       if (p.id === 'buddy') {
         const cs = cloud?.publicState();
@@ -430,6 +448,7 @@ let localProgressTimer = null;
 // Wählt beim Start das lokale Modell, solange der Nutzer keinen Anbieter selbst gewählt
 // und keinen API-Key hat. Das empfohlene Modell richtet sich nach der Hardware.
 async function autoSelectLocal() {
+  if (CLOUD_ONLY) return;
   // Neue lokale KI: Ollama mit einem installierten Modell ist da, aber noch kein Anbieter gewählt
   if (local && !settings.providerChosen && !(getApiKey(currentProvider()) && !['huggingface', 'local'].includes(currentProvider()))) {
     const s = await local.init();
@@ -498,6 +517,7 @@ function onLocalStatus(st) {
 
 // Island geht auf: lokales Modell im Hintergrund schon laden
 function warmLocal() {
+  if (CLOUD_ONLY) return;
   if (currentProvider() === 'local') {
     const s = local?.snapshot();
     // Nur laden, wenn ein Modell installiert ist und nichts anderes läuft
@@ -749,7 +769,7 @@ function applyLanguage() {
 // Claude behält seinen bisherigen Speicherplatz (keyEncrypted), die anderen liegen als
 // key_<anbieter>. Lokale Hugging-Face-Modelle brauchen keinen Key, nur Modell-ID/Pfad.
 
-const currentProvider = () => (models.PROVIDERS[settings.provider] ? settings.provider : 'anthropic');
+const currentProvider = () => (CLOUD_ONLY ? 'buddy' : models.PROVIDERS[settings.provider] ? settings.provider : 'anthropic');
 
 function getApiKey(provider = currentProvider()) {
   if (provider === 'huggingface') return getSecret('hfModel') ? 'lokal' : null;
@@ -1441,7 +1461,7 @@ function createAgentRuntime() {
   });
   // Buddy kann die Nutzung auch im Chat beantworten
   const baseTools = { definitions: tools.definitions, run: tools.run, describe: tools.describe };
-  tools.definitions = [...baseTools.definitions, ...aiUsage.definitions];
+  tools.definitions = CLOUD_ONLY ? baseTools.definitions : [...baseTools.definitions, ...aiUsage.definitions];
   tools.run = (name, input) => (aiUsage.names.has(name) ? aiUsage.run(name, input) : baseTools.run(name, input));
   tools.describe = (name, input) => (aiUsage.names.has(name) ? aiUsage.describe(name, input) : baseTools.describe(name, input));
   // Gedächtnis-Werkzeuge (nur wenn eingeschaltet)
@@ -1852,7 +1872,7 @@ async function runDiagnostics() {
   } else if (provider.id === 'huggingface') {
     const found = await discovery.get();
     add(t('Lokales Modell'), found.python ? true : false, found.python ? `${getSecret('hfModel') || t('kein Modell gewählt')} · transformers ${found.python.transformers} · ${found.python.device}` : t('Python mit transformers und torch fehlt'));
-  } else if (!key) add(provider.name, false, t('Kein API-Key verbunden'));
+  } else if (!key) add(provider.name, false, CLOUD_ONLY ? t('Nicht angemeldet') : t('Kein API-Key verbunden'));
   else {
     try {
       const list = await llm.client(provider.id).listModels(key, provider.id === 'anthropic' ? settings.workspaceId : undefined);
@@ -1902,10 +1922,12 @@ async function runDiagnostics() {
     : t('Nur mit dem Installer'));
   add('Update-Signatur', true, `Ed25519, Schlüssel ${Object.keys(updateSecurity.PUBLIC_KEYS).join(', ')} eingebaut`);
   const b = usage.budget(settings.monthlyLimit);
-  add(t('Ausgabenlimit'), b.level === 'none' ? null : b.level !== 'blocked', b.level === 'none'
-    ? t('Kein Limit gesetzt')
-    : `$${b.spent.toFixed(2)} von $${b.limit.toFixed(2)} diesen Monat`);
-  add(t('API-Key-Schutz'), settings.keyEncrypted ? true : settings.keyPlain ? false : null, settings.keyEncrypted ? t('Mit Windows-Verschlüsselung (DPAPI) gespeichert') : settings.keyPlain ? t('Unverschlüsselt (nur Entwicklung)') : t('Kein Key'));
+  if (!CLOUD_ONLY) {
+    add(t('Ausgabenlimit'), b.level === 'none' ? null : b.level !== 'blocked', b.level === 'none'
+      ? t('Kein Limit gesetzt')
+      : `$${b.spent.toFixed(2)} von $${b.limit.toFixed(2)} diesen Monat`);
+    add(t('API-Key-Schutz'), settings.keyEncrypted ? true : settings.keyPlain ? false : null, settings.keyEncrypted ? t('Mit Windows-Verschlüsselung (DPAPI) gespeichert') : settings.keyPlain ? t('Unverschlüsselt (nur Entwicklung)') : t('Kein Key'));
+  }
   log(`Diagnose: ${results.map((r) => `${r.name}=${r.ok}`).join(', ')}`);
   return results;
 }
@@ -1958,7 +1980,7 @@ function setupCloudIpc() {
   ipcMain.handle('cloud:logout', wrap(async () => {
     await cloud.logout();
     // Abgemeldet und Buddy Cloud aktiv: auf lokale KI ausweichen, falls eingerichtet
-    if (settings.provider === 'buddy' && localHasModel()) { settings.provider = 'local'; saveSettings(); }
+    if (!CLOUD_ONLY && settings.provider === 'buddy' && localHasModel()) { settings.provider = 'local'; saveSettings(); }
   }));
   ipcMain.handle('cloud:profile', wrap((i) => cloud.updateProfile({ displayName: str(i.displayName, 80) })));
   ipcMain.handle('cloud:history', wrap(async () => ({ history: await cloud.history() })));
@@ -2022,7 +2044,7 @@ function setupIpc() {
   ipcMain.on('i18n:sync', (event) => { event.returnValue = i18n.dictionary(); });
 
   ipcMain.handle('settings:set', (_e, patch = {}) => {
-    const allowedKeys = ['usageLocal', 'bannerHintDismissed', 'name', 'model', 'maxTokens', 'sound', 'autostart', 'accent', 'workspaceId', 'computerUse', 'confirmControl', 'glow', 'notifications', 'media', 'gameMode', 'calendarLead', 'voiceWake', 'speak', 'displayId'];
+    const allowedKeys = ['bannerHintDismissed', 'name', 'model', 'maxTokens', 'sound', 'autostart', 'accent', 'workspaceId', 'computerUse', 'confirmControl', 'glow', 'notifications', 'media', 'gameMode', 'calendarLead', 'voiceWake', 'speak', 'displayId'];
     for (const k of allowedKeys) if (k in patch) settings[k] = patch[k];
     // KI-Einstellungen mit Prüfung
     if ('effort' in patch && ['auto', 'low', 'medium', 'high'].includes(patch.effort)) settings.effort = patch.effort;
@@ -2036,13 +2058,16 @@ function setupIpc() {
       settings.fallbackModels = patch.fallbackModels.filter((x) => typeof x === 'string' && /^[\w.:/-]{1,120}$/.test(x)).slice(0, 5);
     }
     if ('showRouting' in patch) settings.showRouting = Boolean(patch.showRouting);
+    if ('onboarded' in patch) settings.onboarded = Boolean(patch.onboarded);
+    if ('cloudNotice' in patch && patch.cloudNotice === null) settings.cloudNotice = null; // nur quittieren
+    if ('usageLocal' in patch && !CLOUD_ONLY) settings.usageLocal = Boolean(patch.usageLocal);
     // Nur Präferenzen sind einstellbar; die Identität (src/prompt.js) nicht
     if ('promptPrefs' in patch) settings.promptPrefs = prompt.cleanPrefs({ ...settings.promptPrefs, ...patch.promptPrefs });
     if ('historyEnabled' in patch) settings.historyEnabled = Boolean(patch.historyEnabled);
     if ('memoryEnabled' in patch) settings.memoryEnabled = Boolean(patch.memoryEnabled);
     if ('visualizer' in patch) settings.visualizer = Boolean(patch.visualizer);
     if ('glowMusic' in patch) settings.glowMusic = Boolean(patch.glowMusic);
-    if ('provider' in patch && models.PROVIDERS[patch.provider] && patch.provider !== settings.provider) {
+    if ('provider' in patch && models.PROVIDERS[patch.provider] && patch.provider !== settings.provider && (!CLOUD_ONLY || patch.provider === 'buddy')) {
       settings.provider = patch.provider;
       settings.providerChosen = true;
       if (patch.provider !== 'huggingface') llm.stopAll();
@@ -2384,7 +2409,7 @@ function setupIpc() {
     if (healthRunning) return healthRunning;
     healthRunning = (async () => {
       const { runHealth, healthReport } = require('./llm/health');
-      const ids = scope === 'current' ? [currentProvider()] : Object.keys(models.PROVIDERS).filter((pid) => (pid === 'huggingface'
+      const ids = scope === 'current' || CLOUD_ONLY ? [currentProvider()] : Object.keys(models.PROVIDERS).filter((pid) => (pid === 'huggingface'
         ? Boolean(getSecret('hfModel') && discovery?.peek()?.python)
         : Boolean(getApiKey(pid))));
       if (!ids.length) ids.push(currentProvider());
@@ -2547,6 +2572,20 @@ function setupIpc() {
   ipcMain.on('link:open', (_e, url) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
   });
+
+  // Nur Buddy Cloud: alte Wege (eigene Keys, lokale KI, Admin-Keys, Programm-Suche) sind gesperrt,
+  // auch wenn jemand sie direkt über die Brücke aufruft.
+  if (CLOUD_ONLY) {
+    const blocked = ['key:set', 'key:clear', 'key:revoke', 'hf:set', 'hf:test', 'hf:setup', 'local:get', 'local:refresh', 'local:registry',
+      'local:install-runtime', 'local:cancel-install', 'local:pull', 'local:cancel-pull', 'local:remove', 'local:select', 'local:use', 'local:load',
+      'local:config', 'local:storage-pick', 'local:storage-set', 'local:restart-runtime', 'local:diagnostics', 'local:colibri-catalog',
+      'local:colibri-plan', 'local:colibri-install', 'local:colibri-setup', 'local:colibri-auto', 'local:colibri-cancel', 'local:colibri-dir',
+      'local:benchmark', 'specs:get', 'discovery:get', 'aiusage:get', 'aiusage:key'];
+    for (const ch of blocked) {
+      ipcMain.removeHandler(ch);
+      ipcMain.handle(ch, () => ({ ok: false, error: t('Buddy läuft nur noch über Buddy Cloud.'), code: 'cloud_only' }));
+    }
+  }
 }
 
 // ---------- Selbsttest (für die Installation) ----------
@@ -2633,8 +2672,8 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     });
     // Im Hintergrund prüfen, welche KI-Tools installiert sind (blockiert den Start nicht).
     // Ohne API-Key wählt Buddy danach automatisch das passende lokale Modell.
-    setTimeout(() => local.init().catch((err) => log(`Lokale KI: ${err.message}`)), 800);
-    setTimeout(() => discovery.get().then(async () => {
+    if (!CLOUD_ONLY) setTimeout(() => local.init().catch((err) => log(`Lokale KI: ${err.message}`)), 800);
+    if (!CLOUD_ONLY) setTimeout(() => discovery.get().then(async () => {
       liveWin()?.webContents.send('discovery', publicDiscovery(discovery.peek()));
       await autoSelectLocal().catch((err) => log(`Lokale Auswahl: ${err.message}`));
       // Oberfläche weiss jetzt, ob die lokale KI wirklich bereit ist
