@@ -13,6 +13,8 @@ const PUBLIC_KEYS = {
   // Öffentlicher Schlüssel und seine ID: kein Geheimnis
   '72db1fd0b545': '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAikuWbB7YhjNdIKn1fw6O/kLyCQU5wlIDXSW+uCG8b3M=\n-----END PUBLIC KEY-----\n', // pragma: allowlist secret
 };
+// Selbstnachweis pro Schlüssel (öffentlich), wird beim Release-Build eingesetzt
+const KEY_PROOFS = { '72db1fd0b545': '' };
 
 const SIGNED_FIELDS = ['app', 'version', 'file', 'sha512', 'size', 'minWindowsBuild', 'arch', 'minUpdateFrom', 'created', 'keyId'];
 const APP_ID = 'buddy-island';
@@ -110,6 +112,6 @@ function isAllowedUrl(url) {
 }
 
 module.exports = {
-  PUBLIC_KEYS, MANIFEST_NAME, APP_ID, canonical, sign, verifyManifest, checkCompatibility, compareVersions,
+  PUBLIC_KEYS, KEY_PROOFS, MANIFEST_NAME, APP_ID, canonical, sign, verifyManifest, checkCompatibility, compareVersions,
   sha512File, parseLatestYml, isAllowedUrl, keyIdOf,
 };
