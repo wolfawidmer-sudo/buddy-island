@@ -1,7 +1,7 @@
 name: Testversion
 
 # Baut einen Windows-Installer nur zum Testen. Kein Release, kein Auto-Update für andere.
-# Start: Tag test-<irgendwas> pushen, z. B. git tag test-cloud-1 && git push origin test-cloud-1
+# Start: Commit mit «[testversion]» in der Nachricht auf buddy-cloud pushen, oder Tag test-* pushen.
 # Der Installer liegt danach im Lauf unter «Artifacts» (nur mit GitHub-Login herunterladbar).
 #
 # Die Version bekommt den Zusatz -test.<Laufnummer> (z. B. 0.12.1-test.3). Sie ist neuer als das
@@ -10,6 +10,7 @@ name: Testversion
 
 on:
   push:
+    branches: [buddy-cloud]
     tags: ['test-*']
 
 permissions:
@@ -18,6 +19,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/test-') || contains(github.event.head_commit.message, '[testversion]')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
