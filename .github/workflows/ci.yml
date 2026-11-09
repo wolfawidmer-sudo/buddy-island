@@ -18,6 +18,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Bekannte Sicherheitslücken in Abhängigkeiten: Laufzeit-Pakete (gehen mit in den Installer) blockieren, Entwicklungs-Pakete nur melden
+      - name: Abhängigkeiten prüfen (npm audit)
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm audit || true
       - run: npm test
       - name: Syntax prüfen
         run: for f in src/*.js src/renderer/*.js src/glow/*.js scripts/*.js; do node --check "$f"; done
