@@ -1555,8 +1555,17 @@ function stopListening() {
 
 // ---------- Updates (electron-updater + Signaturprüfung + Rollback) ----------
 
+// Releases liegen ab 0.13.1 im öffentlichen Repo «buddy-island-releases» (der Code ist privat).
+// In der gepackten App fehlt «build» in package.json, darum gilt dort der Rückfallwert.
+const RELEASES_REPO = { owner: 'wolfawidmer-sudo', repo: 'buddy-island-releases' };
 const PUBLISH = (() => {
-  try { return require('../package.json').build.publish; } catch { return { owner: 'wolfawidmer-sudo', repo: 'buddy-island' }; }
+  try {
+    const p = require('../package.json').build.publish;
+    const entry = Array.isArray(p) ? p[0] : p;
+    return entry && entry.owner && entry.repo ? { owner: entry.owner, repo: entry.repo } : RELEASES_REPO;
+  } catch {
+    return RELEASES_REPO;
+  }
 })();
 const releaseUrl = (version, file) => `https://github.com/${PUBLISH.owner}/${PUBLISH.repo}/releases/download/v${version}/${encodeURIComponent(file)}`;
 const updateStateFile = () => path.join(app.getPath('userData'), 'update-state.json');

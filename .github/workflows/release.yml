@@ -1,5 +1,11 @@
 name: Release
 
+# Releases gehen ab 0.13.1 in BEIDE Repos:
+#   - wolfawidmer-sudo/buddy-island-releases (öffentlich): Downloads, Website, neue Updater
+#   - dieses Repo (Code): damit Buddys bis 0.13.0, die hier nach Updates suchen, 0.13.1 finden
+# Dafür braucht es das Secret RELEASES_TOKEN (Fine-grained Token, nur buddy-island-releases,
+# Contents: Read and write) in der Umgebung «release».
+#
 # Neue Version veröffentlichen:
 #   1. "version" in package.json erhöhen und pushen
 #   2. Tag v0.x.y pushen oder diesen Workflow von Hand starten
@@ -69,3 +75,22 @@ jobs:
           gh release upload "$TAG" dist/BuddyIsland-Setup-*.exe dist/*.blockmap --clobber
           if [ -f dist/update-signature.json ]; then gh release upload "$TAG" dist/update-signature.json --clobber; fi
           gh release upload "$TAG" dist/latest.yml --clobber
+      - name: Release im öffentlichen Release-Repo anlegen
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          RELEASES_REPO: wolfawidmer-sudo/buddy-island-releases
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Secret RELEASES_TOKEN fehlt in der Umgebung «release». Ohne ihn gibt es keine Downloads im Release-Repo."
+            exit 1
+          fi
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          if ! gh release view "$TAG" -R "$RELEASES_REPO" > /dev/null 2>&1; then
+            node scripts/release-notes.js "$VERSION" > release-notes.md
+            gh release create "$TAG" -R "$RELEASES_REPO" --title "Buddy Island $VERSION" --notes-file release-notes.md
+          fi
+          gh release upload "$TAG" -R "$RELEASES_REPO" dist/BuddyIsland-Setup-*.exe dist/*.blockmap --clobber
+          if [ -f dist/update-signature.json ]; then gh release upload "$TAG" -R "$RELEASES_REPO" dist/update-signature.json --clobber; fi
+          gh release upload "$TAG" -R "$RELEASES_REPO" dist/latest.yml --clobber

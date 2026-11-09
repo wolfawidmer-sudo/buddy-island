@@ -54,3 +54,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ inputs.version }}
         run: gh release upload "v$VERSION" rel/update-signature.json --clobber
+      - name: Auch ins öffentliche Release-Repo hochladen
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::warning::RELEASES_TOKEN fehlt, nur im Code-Repo hochgeladen."; exit 0; fi
+          if gh release view "v$VERSION" -R wolfawidmer-sudo/buddy-island-releases > /dev/null 2>&1; then
+            gh release upload "v$VERSION" -R wolfawidmer-sudo/buddy-island-releases rel/update-signature.json --clobber
+          fi

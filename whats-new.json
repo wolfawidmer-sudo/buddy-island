@@ -2,6 +2,15 @@
   "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Für Kundinnen und Kunden geschrieben: Nutzen statt Technik, keine Fachbegriffe.",
   "versions": [
     {
+      "version": "0.13.1",
+      "highlights": [
+        {
+          "title": "Neuer Ort für Updates",
+          "text": "Updates und Downloads kommen jetzt aus einem eigenen Bereich. Für dich ändert sich nichts: Buddy aktualisiert sich weiter selbst, nach Prüfung der Signatur."
+        }
+      ]
+    },
+    {
       "version": "0.13.0",
       "highlights": [
         {

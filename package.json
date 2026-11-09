@@ -1,11 +1,11 @@
 {
   "name": "buddy-island",
   "productName": "Buddy Island",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Ein kleiner Claude-Assistent im Dynamic-Island-Stil für Windows: Chat, Timer, Musik, Kalender, Mitteilungen, Sprache und PC-Steuerung.",
   "main": "src/main.js",
   "author": "Wolf Widmer",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "scripts": {
     "start": "electron .",
     "test": "node test/claude.test.js && node test/calendar.test.js && node test/core.test.js && node test/files.test.js && node test/router.test.js && node test/speed.test.js && node test/agent.test.js && node test/ai-usage.test.js && node test/providers.test.js && node test/matrix.test.js && node test/resilience.test.js && node test/memory.test.js && node test/audio.test.js && node test/models.test.js && node test/whats-new.test.js && node test/local.test.js && node test/colibri.test.js && node test/perception.test.js && node test/prompt.test.js && node test/auth.test.js && node test/cloud.test.js && node test/cloud-only.test.js",
@@ -88,7 +88,7 @@
       {
         "provider": "github",
         "owner": "wolfawidmer-sudo",
-        "repo": "buddy-island",
+        "repo": "buddy-island-releases",
         "releaseType": "release"
       }
     ]

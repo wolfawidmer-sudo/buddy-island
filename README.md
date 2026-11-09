@@ -2,7 +2,9 @@
 
 Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windows-Bildschirms wohnt. Buddy läuft über **Buddy Cloud**: Du meldest dich mit Google oder E-Mail an und bezahlst mit Buddy Credits. Er beantwortet Fragen, stellt Timer, zeigt Musik, Termine und Windows-Mitteilungen und hört auf «Hey Buddy».
 
-**Website:** https://buddy-island.top ([Quellcode der Website](https://github.com/wolfawidmer-sudo/buddy-island-website))
+**Website:** https://buddy-island.top · **Downloads:** https://github.com/wolfawidmer-sudo/buddy-island-releases/releases
+
+> **Ab 0.13.1 nicht mehr Open Source.** Alle Rechte vorbehalten, siehe [LICENSE](LICENSE). Versionen bis und mit 0.13.0 bleiben unter MIT.
 
 > **Ab 0.13:** Buddy läuft nur noch über Buddy Cloud. Eigene API-Keys und die lokale KI (Ollama, Colibrì, Hugging Face) gibt es nicht mehr; gespeicherte Keys werden beim Update gelöscht. Die PC-Steuerung mit Maus und Tastatur ist vorerst nicht verfügbar.
 
@@ -30,7 +32,7 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 
 ## Installation
 
-1. **Installer herunterladen**: unter [Releases](../../releases) die Datei `BuddyIsland-Setup-….exe`.
+1. **Installer herunterladen**: unter [Releases](https://github.com/wolfawidmer-sudo/buddy-island-releases/releases) die Datei `BuddyIsland-Setup-….exe`.
 2. **Installieren**: Doppelklick. Falls Windows «Der Computer wurde durch Windows geschützt» zeigt: «Weitere Informationen» → «Trotzdem ausführen». Das erscheint, weil der Installer nicht mit einem kostenpflichtigen Zertifikat signiert ist.
 3. **Anmelden**: Die Einführung öffnet sich beim ersten Start. Mit Google oder E-Mail anmelden, Guthaben aufladen.
 4. **Öffnen**: <kbd>Strg</kbd> + <kbd>Umschalt</kbd> + <kbd>Leertaste</kbd> oder Klick aufs Island.
@@ -96,4 +98,4 @@ Der Code für lokale KI und eigene Keys (`src/local/`, Adapter in `src/llm/`) li
 
 ## Lizenz
 
-MIT, siehe [LICENSE](LICENSE). Gebaut von Wolf Widmer.
+Alle Rechte vorbehalten, siehe [LICENSE](LICENSE). Versionen bis und mit 0.13.0 unter MIT. Gebaut von Wolf Widmer.
