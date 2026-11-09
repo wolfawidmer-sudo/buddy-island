@@ -11,3 +11,6 @@ Thumbs.db
 
 .netlify
 test-results/
+
+# Vorlagen ohne Werte dürfen ins Repo
+!.env.example

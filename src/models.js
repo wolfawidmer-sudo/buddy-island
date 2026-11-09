@@ -143,6 +143,12 @@ const PROVIDERS = {
     id: 'gemini', kind: 'gemini', name: 'Google Gemini', consoleUrl: 'https://aistudio.google.com/apikey',
     host: 'generativelanguage.googleapis.com', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', needsKey: true, family: /^(models\/)?gemini/i,
   },
+  // Buddy Cloud: OpenAI über das Buddy-Island-Backend, bezahlt mit Buddy Credits (kein eigener Key).
+  // Gleiches Protokoll wie OpenAI (Responses API), nur andere Adresse und Anmeldung mit dem Buddy-Konto.
+  buddy: {
+    id: 'buddy', kind: 'openai-responses', name: 'Buddy Cloud', consoleUrl: 'https://buddy-island.top',
+    host: 'buddy-cloud', get baseUrl() { return cloudBase(); }, needsKey: false, account: true, modelPrefix: 'cloud:',
+  },
   local: {
     id: 'local', kind: 'local', name: 'Lokal auf diesem PC', consoleUrl: 'https://ollama.com',
     host: '127.0.0.1', baseUrl: 'http://127.0.0.1:11434', needsKey: false, local: true,
@@ -155,6 +161,13 @@ const PROVIDERS = {
 
 const HF_PREFIX = 'hf:';
 const LOCAL_PREFIX = 'local:';
+const CLOUD_PREFIX = 'cloud:';
+
+/** Basis-Adresse des Cloud-Gateways (leer, wenn Buddy Cloud nicht eingerichtet ist) */
+function cloudBase() {
+  const api = require('./cloud/config').apiUrl();
+  return api ? `${api}/v1/cloud` : '';
+}
 
 // Fähigkeiten lokaler Modelle kennt erst die Laufzeit (Ollama meldet tools/vision/thinking).
 /** @type {(id: string) => { tools: boolean, vision: boolean } | null} */
@@ -174,6 +187,7 @@ function providerOf(modelId) {
   if (known) return known.provider;
   if (id.startsWith(HF_PREFIX)) return 'huggingface';
   if (id.startsWith(LOCAL_PREFIX)) return 'local';
+  if (id.startsWith(CLOUD_PREFIX)) return 'buddy';
   if (/^claude/i.test(id)) return 'anthropic';
   for (const p of /** @type {ProviderInfo[]} */ (Object.values(PROVIDERS))) if (p.family && p.family.test(id)) return p.id;
   return 'anthropic';
@@ -181,7 +195,7 @@ function providerOf(modelId) {
 
 /** @param {string} modelId @returns {Tier|'fable'} */
 function tierOf(modelId) {
-  const id = String(modelId || '').toLowerCase();
+  const id = String(modelId || '').toLowerCase().replace(/^cloud:/, '');
   const known = CATALOG.find((m) => m.id === id);
   if (known) return known.tier;
   for (const tier of [...TIERS, 'fable']) if (id.includes(tier)) return /** @type {Tier} */ (tier);
@@ -206,6 +220,13 @@ function info(modelId) {
   const known = CATALOG.find((m) => m.id === modelId);
   if (known) return known;
   const provider = providerOf(modelId);
+  if (provider === 'buddy') {
+    // Gleiche Fähigkeiten wie das OpenAI-Modell; Preis 0 hier, weil Buddy Cloud in Buddy Credits
+    // auf dem Server abrechnet (die lokale USD-Schätzung und das Monatslimit zählen es nicht).
+    const raw = String(modelId).slice(CLOUD_PREFIX.length);
+    const base = CATALOG.find((m) => m.id === raw) || info(raw);
+    return { ...base, id: modelId, provider: 'buddy', price: ZERO_PRICE, priceEstimated: false, cloud: true };
+  }
   if (provider === 'local') {
     const raw = String(modelId).slice(LOCAL_PREFIX.length);
     const c = localCaps(raw) || { tools: false, vision: false };
@@ -331,7 +352,10 @@ function resolveTiers(available, providerId = 'anthropic') {
     if (ids[0]) for (const tier of TIERS) result[tier] = ids[0];
     return result;
   }
-  const own = CATALOG.filter((m) => m.provider === providerId);
+  // Buddy Cloud bietet die OpenAI-Modelle an (mit Präfix «cloud:»)
+  const own = providerId === 'buddy'
+    ? CATALOG.filter((m) => m.provider === 'openai').map((m) => ({ ...m, id: CLOUD_PREFIX + m.id }))
+    : CATALOG.filter((m) => m.provider === providerId);
   for (const tier of TIERS) {
     const preferred = own.find((m) => m.tier === tier);
     // Abgelehntes Katalogmodell: Nachfolger nehmen, den der Anbieter in der Fehlermeldung nannte
@@ -437,6 +461,7 @@ module.exports = {
   PROVIDERS,
   HF_PREFIX,
   LOCAL_PREFIX,
+  CLOUD_PREFIX,
   setLocalResolver,
   providerOf,
   tierOf,

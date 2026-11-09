@@ -68,6 +68,26 @@ contextBridge.exposeInMainWorld('buddy', {
   getAiUsage: (force) => ipcRenderer.invoke('aiusage:get', { force: Boolean(force) }),
   setUsageKey: (provider, key) => ipcRenderer.invoke('aiusage:key', { provider, key }),
 
+  // Buddy Cloud: Konto und Guthaben. Tokens bleiben im Hauptprozess, hier nur Status.
+  cloud: {
+    state: () => ipcRenderer.invoke('cloud:state'),
+    reload: () => ipcRenderer.invoke('cloud:reload'),
+    signup: (email, password, displayName) => ipcRenderer.invoke('cloud:signup', { email: String(email || ''), password: String(password || ''), displayName: String(displayName || '') }),
+    login: (email, password) => ipcRenderer.invoke('cloud:login', { email: String(email || ''), password: String(password || '') }),
+    verifyEmail: (email, code) => ipcRenderer.invoke('cloud:verify-email', { email: String(email || ''), code: String(code || '') }),
+    resendConfirmation: (email) => ipcRenderer.invoke('cloud:resend', { email: String(email || '') }),
+    requestPasswordReset: (email) => ipcRenderer.invoke('cloud:reset-request', { email: String(email || '') }),
+    confirmPasswordReset: (email, code, password) => ipcRenderer.invoke('cloud:reset-confirm', { email: String(email || ''), code: String(code || ''), password: String(password || '') }),
+    google: () => ipcRenderer.invoke('cloud:google'),
+    cancelGoogle: () => ipcRenderer.invoke('cloud:google-cancel'),
+    logout: () => ipcRenderer.invoke('cloud:logout'),
+    setName: (displayName) => ipcRenderer.invoke('cloud:profile', { displayName: String(displayName || '') }),
+    history: () => ipcRenderer.invoke('cloud:history'),
+    packages: () => ipcRenderer.invoke('cloud:packages'),
+    buy: (packageId) => ipcRenderer.invoke('cloud:buy', { packageId: String(packageId || '') }),
+  },
+  onCloudState: (cb) => on('cloud:state', cb),
+
   sendChat: (id, messages, meta) => ipcRenderer.send('chat:send', { id, messages, meta }),
   abortChat: (id) => ipcRenderer.send('chat:abort', id),
   confirmControl: (id, allow) => ipcRenderer.send('agent:confirm-reply', { id, allow }),

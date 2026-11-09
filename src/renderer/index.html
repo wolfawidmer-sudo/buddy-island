@@ -186,6 +186,7 @@
 
             <nav class="cat-nav" aria-label="Bereiche">
               <button type="button" data-cat="cat-provider">Provider</button>
+              <button type="button" data-cat="cat-account">Konto</button>
               <button type="button" data-cat="cat-tools">Tools</button>
               <button type="button" data-cat="cat-av">Audio &amp; Visuals</button>
               <button type="button" data-cat="cat-system">System</button>
@@ -491,6 +492,55 @@
               <button type="button" class="row row-button left danger" id="memoryClear">Alles vergessen</button>
             </div>
             <p class="footer">Bleibt auf diesem PC. An die KI geht nur, was zur aktuellen Frage passt. Passwörter, Karten- und Kontonummern oder Schlüssel speichert Buddy nie.</p>
+
+            <!-- Buddy Cloud: Konto und Buddy Credits. Ohne Konto läuft alles Lokale normal weiter. -->
+            <h2 class="category" id="cat-account">Konto</h2>
+            <h3 class="section">Buddy Cloud</h3>
+            <p class="footer" id="cloudOff" hidden>Buddy Cloud ist in dieser Version noch nicht verfügbar. Lokale KI und eigene API-Keys funktionieren wie bisher.</p>
+            <div class="group" id="cloudSignedOut" hidden>
+              <button type="button" class="row row-button left" id="cloudGoogle">Mit Google fortfahren</button>
+              <div class="row field-row" id="cloudEmailRow">
+                <input id="cloudEmail" type="email" placeholder="E-Mail" spellcheck="false" autocomplete="email" aria-label="E-Mail">
+              </div>
+              <div class="row field-row" id="cloudNameRow" hidden>
+                <input id="cloudName" type="text" placeholder="Name (optional)" spellcheck="false" autocomplete="name" aria-label="Name">
+              </div>
+              <div class="row field-row" id="cloudCodeRow" hidden>
+                <input id="cloudCode" type="text" inputmode="numeric" placeholder="Code aus der E-Mail" spellcheck="false" autocomplete="one-time-code" aria-label="Code aus der E-Mail">
+              </div>
+              <div class="row field-row" id="cloudPasswordRow">
+                <input id="cloudPassword" type="password" placeholder="Passwort" spellcheck="false" autocomplete="current-password" aria-label="Passwort">
+                <button type="button" class="button primary small" id="cloudSubmit">Anmelden</button>
+              </div>
+              <div class="row">
+                <button type="button" class="link" id="cloudSwitch">Konto erstellen</button>
+                <button type="button" class="link" id="cloudForgot">Passwort vergessen?</button>
+              </div>
+            </div>
+            <div class="group" id="cloudSignedIn" hidden>
+              <div class="row">
+                <span class="row-label two" id="cloudWho">Konto<small id="cloudWhoSub"></small></span>
+                <button type="button" class="link danger" id="cloudLogout">Abmelden</button>
+              </div>
+              <div class="row">
+                <span class="row-label">Guthaben</span>
+                <span class="row-value" id="cloudBalance">–</span>
+              </div>
+            </div>
+            <p class="footer" id="cloudMsg"></p>
+
+            <div id="cloudBuyBox" hidden>
+              <h3 class="section">Buddy Credits kaufen</h3>
+              <div class="group" id="cloudPackages"></div>
+              <p class="footer" id="cloudBuyFoot">Bezahlt wird im Browser über Stripe. Das Guthaben erscheint, sobald Stripe die Zahlung bestätigt hat.</p>
+            </div>
+
+            <div id="cloudHistoryBox" hidden>
+              <h3 class="section">Nutzung</h3>
+              <div class="group" id="cloudUsage"></div>
+              <h3 class="section">Käufe</h3>
+              <div class="group" id="cloudPurchases"></div>
+            </div>
 
             <h2 class="category" id="cat-tools">Erkannte System-Tools</h2>
             <div class="group" id="toolsGroup">

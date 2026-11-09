@@ -25,6 +25,8 @@ const { createRuntime } = require('./local/runtime');
 const { createColibri } = require('./local/colibri');
 const { createLocalManager, cleanAdvanced } = require('./local/manager');
 const i18n = require('./i18n');
+const { createCloudAccount } = require('./cloud/account');
+const cloudConfig = require('./cloud/config');
 const { t } = i18n;
 const { createComputer, supportsCaptureExclusion } = require('./computer');
 const { createSystemWatcher } = require('./notifications');
@@ -210,6 +212,8 @@ function usagePresent(id) {
   }
 }
 let llm = null;
+/** Buddy-Cloud-Konto (Tokens bleiben im Hauptprozess) */
+let cloud = null;
 let discovery = null;
 let local = null; // Lokale KI (src/local/manager.js)
 let audioMeter = null;
@@ -346,7 +350,13 @@ function providerList() {
   return Object.values(models.PROVIDERS)
     // Die alte Hugging-Face-Laufzeit nur noch für Nutzer, die sie schon eingerichtet haben
     .filter((p) => p.id !== 'huggingface' || settings.provider === 'huggingface' || Boolean(getSecret('hfModel')))
+    // Buddy Cloud erst zeigen, wenn diese Version eine Backend-Adresse hat
+    .filter((p) => p.id !== 'buddy' || cloudConfig.apiUrl() || settings.provider === 'buddy')
     .map((p) => {
+      if (p.id === 'buddy') {
+        const cs = cloud?.publicState();
+        return { id: 'buddy', name: 'Buddy Cloud', consoleUrl: p.consoleUrl, local: false, account: true, hasKey: Boolean(cs?.signedIn), hint: null, status: cs?.status || null, ready: Boolean(cs?.configured), auth: null, keyNotice: null };
+      }
       if (p.id === 'local') {
         return { id: 'local', name: t('Lokal auf diesem PC'), consoleUrl: p.consoleUrl, local: true, hasKey: localHasModel(), hint: null, status: null, ready: true, auth: null, keyNotice: null };
       }
@@ -744,6 +754,7 @@ const currentProvider = () => (models.PROVIDERS[settings.provider] ? settings.pr
 function getApiKey(provider = currentProvider()) {
   if (provider === 'huggingface') return getSecret('hfModel') ? 'lokal' : null;
   if (provider === 'local') return settings.localModel ? 'lokal' : null;
+  if (provider === 'buddy') return cloud?.accessToken() || null;
   if (provider !== 'anthropic') return getSecret(`key_${provider}`);
   if (settings.keyEncrypted && safeStorage.isEncryptionAvailable()) {
     try {
@@ -793,6 +804,7 @@ function providerKeyInfo(id) {
   if (id === 'anthropic') return { has: Boolean(settings.keyEncrypted || settings.keyPlain), hint: settings.keyHint, protected: Boolean(settings.keyEncrypted) };
   if (id === 'huggingface') return { has: Boolean(getSecret('hfModel')), hint: null, protected: Boolean(settings.hfModelEncrypted) };
   if (id === 'local') return { has: localHasModel(), hint: null, protected: false };
+  if (id === 'buddy') return { has: Boolean(cloud?.accessToken()), hint: null, protected: true };
   return { has: Boolean(settings[`key_${id}Encrypted`] || settings[`key_${id}Plain`]), hint: settings.keyHints?.[id] || null, protected: Boolean(settings[`key_${id}Encrypted`]) };
 }
 
@@ -1341,9 +1353,13 @@ function computerAvailable() {
 async function runChat(id, messages, meta, send) {
   const controller = new AbortController();
   running.set(id, controller);
+  const viaCloud = currentProvider() === 'buddy';
   try {
+    // Buddy Cloud: Token vorher erneuern, falls es bald abläuft (Offline ist hier kein Fehler)
+    if (viaCloud) await cloud?.ensureFresh().catch(() => {});
     await agent.run({ id, messages, meta, send, signal: controller.signal });
   } finally {
+    if (viaCloud) cloud?.refreshWallet();
     running.delete(id);
     // Aufgabe zu Ende: Buddy wertet keine Aufnahmen mehr aus
     if (!running.size) perception.taskEnd();
@@ -1455,7 +1471,8 @@ function createAgentRuntime() {
     askControl: askToControl,
     askPermission,
     onControl: setControlling,
-    onAuthError: (pid) => markKeyInvalid(pid || currentProvider()),
+    // Buddy Cloud: abgelehntes Token → Sitzung erneuern statt «Key ungültig»
+    onAuthError: (pid) => ((pid || currentProvider()) === 'buddy' ? cloud?.refresh(true).catch(() => {}) : markKeyInvalid(pid || currentProvider())),
   });
 }
 
@@ -1893,6 +1910,62 @@ async function runDiagnostics() {
   return results;
 }
 
+// ---------- Buddy Cloud (Konto, Guthaben) ----------
+
+function setupCloud() {
+  cloud = createCloudAccount({
+    apiUrl: cloudConfig.apiUrl,
+    fetchImpl: (url, init) => net.fetch(url, init),
+    storage: {
+      load: () => { try { return JSON.parse(getSecret('cloudSession') || 'null'); } catch { return null; } },
+      save: (s) => { try { setSecret('cloudSession', s ? JSON.stringify(s) : ''); } catch (err) { log(`Cloud: Sitzung nicht gespeichert: ${err.message}`); } },
+    },
+    // Nur echte Web-Adressen im System-Browser öffnen
+    openExternal: (url) => (/^https:\/\//.test(url) ? shell.openExternal(url) : Promise.reject(new Error('blocked'))),
+    t,
+    log,
+    onChange: (state) => {
+      modelCache.delete('buddy');
+      liveWin()?.webContents.send('cloud:state', state);
+      liveWin()?.webContents.send('settings:changed', publicSettings());
+    },
+  });
+  if (cloud.configured()) cloud.restore();
+}
+
+function setupCloudIpc() {
+  const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  /** Einheitliche Antwort an die Oberfläche: nie Tokens, nur Status und verständliche Fehler */
+  const wrap = (fn) => async (_e, input = {}) => {
+    if (!cloud) return { ok: false, code: 'not_ready', error: t('Bitte einen Moment warten.') };
+    try {
+      return { ok: true, ...((await fn(input || {})) || {}), state: cloud.publicState() };
+    } catch (err) {
+      return { ok: false, code: err.code || 'error', error: err.message || t('Unbekannter Fehler.'), state: cloud.publicState() };
+    }
+  };
+  const creds = (i) => ({ email: str(i.email, 320), password: typeof i.password === 'string' ? i.password.slice(0, 128) : '' });
+  ipcMain.handle('cloud:state', wrap(async () => ({})));
+  ipcMain.handle('cloud:reload', wrap(() => cloud.loadMe()));
+  ipcMain.handle('cloud:signup', wrap((i) => cloud.signup({ ...creds(i), ...(str(i.displayName, 80) ? { displayName: str(i.displayName, 80) } : {}) })));
+  ipcMain.handle('cloud:login', wrap((i) => cloud.login(creds(i))));
+  ipcMain.handle('cloud:verify-email', wrap((i) => cloud.verifyEmail({ email: str(i.email, 320), code: str(i.code, 10) })));
+  ipcMain.handle('cloud:resend', wrap((i) => cloud.resendConfirmation({ email: str(i.email, 320) })));
+  ipcMain.handle('cloud:reset-request', wrap((i) => cloud.requestPasswordReset({ email: str(i.email, 320) })));
+  ipcMain.handle('cloud:reset-confirm', wrap((i) => cloud.confirmPasswordReset({ email: str(i.email, 320), code: str(i.code, 10), password: typeof i.password === 'string' ? i.password.slice(0, 128) : '' })));
+  ipcMain.handle('cloud:google', wrap(() => cloud.google()));
+  ipcMain.handle('cloud:google-cancel', wrap(async () => { cloud.cancelGoogle(); }));
+  ipcMain.handle('cloud:logout', wrap(async () => {
+    await cloud.logout();
+    // Abgemeldet und Buddy Cloud aktiv: auf lokale KI ausweichen, falls eingerichtet
+    if (settings.provider === 'buddy' && localHasModel()) { settings.provider = 'local'; saveSettings(); }
+  }));
+  ipcMain.handle('cloud:profile', wrap((i) => cloud.updateProfile({ displayName: str(i.displayName, 80) })));
+  ipcMain.handle('cloud:history', wrap(async () => ({ history: await cloud.history() })));
+  ipcMain.handle('cloud:packages', wrap(async () => ({ packages: await cloud.packages() })));
+  ipcMain.handle('cloud:buy', wrap(async (i) => ({ checkout: await cloud.buy(str(i.packageId, 64)) })));
+}
+
 // ---------- IPC ----------
 
 function setupIpc() {
@@ -1928,6 +2001,7 @@ function setupIpc() {
   });
 
   ipcMain.handle('settings:get', () => publicSettings());
+  setupCloudIpc();
   ipcMain.handle('i18n:get', () => i18n.dictionary());
   // Zwischenablage über den Hauptprozess: navigator.clipboard scheitert im Island oft,
   // weil das Fenster nicht den Fokus hat.
@@ -2606,6 +2680,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       getCalendar: (from, to) => (getSecret('calendar') ? calendar.list(from, to) : []),
     });
     createAgentRuntime();
+    setupCloud();
 
     watcher = createSystemWatcher({
       scriptDir: app.getPath('userData'),

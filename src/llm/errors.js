@@ -98,6 +98,13 @@ function classify(status, raw = '', type = '') {
 function friendlyMessage(status, raw = '', type = '', name = 'Claude', category = classify(status, raw, type)) {
   const text = `${raw} ${type}`.toLowerCase();
   if (text.includes('workspace') && category !== 'model') return t('Dein Key braucht eine Workspace-ID. Trag sie in den Einstellungen ein oder erstelle einen Key für einen bestimmten Workspace.');
+  // Buddy Cloud: Konto statt API-Key, Buddy Credits statt Anbieter-Guthaben
+  if (name === 'Buddy Cloud') {
+    if (category === 'quota' || /insufficient_credits/.test(text)) return t('Nicht genug Buddy Credits. Lade in den Einstellungen unter «Konto» Guthaben auf.');
+    if (category === 'auth') return t('Deine Buddy-Anmeldung ist abgelaufen. Bitte melde dich unter «Konto» neu an.');
+    if (/billing_not_configured|not_configured/.test(text)) return t('Buddy Cloud ist noch nicht freigeschaltet.');
+    if (/model_not_available/.test(text)) return t('Dieses Modell gibt es in Buddy Cloud nicht. Wähle ein anderes.');
+  }
   switch (category) {
     case 'quota': return t('Dein API-Guthaben bei {name} ist aufgebraucht.', { name });
     case 'auth': return t('{name} hat den API-Key abgelehnt. Prüfe ihn in den Einstellungen.', { name });

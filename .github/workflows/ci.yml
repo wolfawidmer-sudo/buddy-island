@@ -21,3 +21,32 @@ jobs:
       - run: npm test
       - name: Syntax prüfen
         run: for f in src/*.js src/renderer/*.js src/glow/*.js scripts/*.js; do node --check "$f"; done
+      - name: Syntax prüfen (Cloud)
+        run: for f in src/cloud/*.js; do node --check "$f"; done
+
+  # Buddy-Cloud-Backend: ohne Fremdpakete, Datenbank-Tests gegen echtes PostgreSQL
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      BUDDY_TEST_PG: -h localhost -p 5432 -U postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: psql installieren
+        run: sudo apt-get update -q && sudo apt-get install -yq postgresql-client
+      # Attrappen für Supabase, Google, OpenAI, Stripe + echte Datenbank (Migrationen, RLS, Wallet, Gleichzeitigkeit)
+      - name: Backend- und Datenbank-Tests
+        working-directory: backend
+        run: npm test

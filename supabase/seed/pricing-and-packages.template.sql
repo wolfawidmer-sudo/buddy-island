@@ -1,0 +1,25 @@
+-- VORLAGE – NICHT AUSFÜHREN, BEVOR WOLF DIE WERTE BESTÄTIGT HAT.
+--
+-- 1) Umrechnung (Entscheid von Wolf):
+--    usd_to_chf      = Kurs, mit dem OpenAI-Kosten (USD) in CHF umgerechnet werden
+--    credits_per_chf = wie viele Buddy Credits 1 CHF entspricht
+--    Solange einer der Werte fehlt, lehnt Buddy Cloud jede Anfrage ab (billing_not_configured).
+--
+-- update public.billing_settings set usd_to_chf = <KURS>, credits_per_chf = <BC_PRO_CHF>;
+--
+-- 2) Modellpreise in USD je 1 Million Tokens – NUR von der offiziellen Seite übernehmen:
+--    https://developers.openai.com/api/docs/pricing  (Standard-Tarif, kurzer Kontext)
+--    Die folgenden Zahlen stammen aus Drittquellen (Stand Oktober/November 2026) und sind
+--    NICHT geprüft. Ausserdem: OpenAI verrechnet inzwischen teils «cache writes» extra und
+--    über 272k Eingabe-Tokens höhere Preise. Buddy Cloud nimmt so lange Anfragen nicht an
+--    (CLOUD_MAX_INPUT_TOKENS=250000) und setzt kein explizites Prompt-Caching.
+--
+-- insert into public.model_pricing (model_id, input_price, cached_input_price, output_price, effective_from) values
+--   ('gpt-6-luna',   0.10, 0.01, 0.50, now()),   -- ungeprüft
+--   ('gpt-6.1-sol',  2.00, 0.10, 10.00, now());  -- ungeprüft
+--
+-- Preisänderung später: neue Zeile mit neuem effective_from einfügen (alte bleibt für die Historie).
+--
+-- 3) Credit-Pakete (CHF-Preis und BC sichtbar beim Kauf):
+-- insert into public.credit_packages (name, price_chf, credits, display_order) values
+--   ('<Name>', <CHF>, <BC>, 1);

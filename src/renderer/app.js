@@ -1996,6 +1996,16 @@
       return;
     }
     el.workspaceRow.hidden = pid !== 'anthropic';
+    if (pid === 'buddy') {
+      // Buddy Cloud: kein API-Key, Anmeldung über das Konto
+      el.keyBlock.hidden = true;
+      el.setupBox.hidden = true;
+      el.specsBox.hidden = true;
+      el.keyFoot.textContent = p.hasKey
+        ? t('Buddy Cloud nutzt OpenAI über dein Buddy-Konto. Bezahlt wird mit Buddy Credits, du brauchst keinen eigenen API-Key.')
+        : t('Für Buddy Cloud meldest du dich unten unter «Konto» an. Ein eigener API-Key ist nicht nötig.');
+      return;
+    }
     if (!local) {
       const invalid = p.hasKey && p.status === 'invalid';
       el.keyStatus.textContent = !p.hasKey ? t('Nicht verbunden') : invalid ? t('Abgelehnt, bitte ersetzen') : `${t('Verbunden')} · …${p.hint || ''}${s.keyProtected ? ` · ${t('verschlüsselt')}` : ''}`;
@@ -3456,6 +3466,199 @@
     updateFootnote();
     if (state.open && !state.history.length) renderEmpty();
   });
+  // ---------- Buddy Cloud: Konto, Guthaben, Käufe ----------
+  // Die Oberfläche sieht nie Tokens, nur den Status vom Hauptprozess (window.buddy.cloud).
+  const cloudEl = {
+    off: $('cloudOff'), out: $('cloudSignedOut'), in: $('cloudSignedIn'), msg: $('cloudMsg'),
+    google: $('cloudGoogle'), email: $('cloudEmail'), name: $('cloudName'), nameRow: $('cloudNameRow'),
+    code: $('cloudCode'), codeRow: $('cloudCodeRow'), password: $('cloudPassword'), passwordRow: $('cloudPasswordRow'),
+    submit: $('cloudSubmit'), switchBtn: $('cloudSwitch'), forgot: $('cloudForgot'),
+    who: $('cloudWho'), whoSub: $('cloudWhoSub'), logout: $('cloudLogout'), balance: $('cloudBalance'),
+    buyBox: $('cloudBuyBox'), packages: $('cloudPackages'), historyBox: $('cloudHistoryBox'), usage: $('cloudUsage'), purchases: $('cloudPurchases'),
+  };
+  const cloud = { state: null, mode: 'login', busy: false, loadedFor: null };
+
+  // Anzeige von Buddy Credits (nur Anzeige; gerechnet wird ausschliesslich auf dem Server)
+  function fmtBc(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '–';
+    const abs = Math.abs(n);
+    const digits = abs > 0 && abs < 1 ? 4 : 2;
+    return `${n.toLocaleString(I18N.locale, { minimumFractionDigits: Math.min(2, digits), maximumFractionDigits: digits })} BC`;
+  }
+  const fmtChf = (v) => `CHF ${Number(v).toLocaleString(I18N.locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtDay = (iso) => (iso ? new Date(iso).toLocaleString(I18N.locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+
+  function cloudMode(mode) {
+    cloud.mode = mode;
+    const m = mode;
+    cloudEl.nameRow.hidden = m !== 'signup';
+    cloudEl.codeRow.hidden = !['verify', 'reset-confirm'].includes(m);
+    cloudEl.passwordRow.hidden = m === 'verify' || m === 'reset';
+    cloudEl.password.autocomplete = m === 'login' ? 'current-password' : 'new-password';
+    cloudEl.password.placeholder = m === 'reset-confirm' ? t('Neues Passwort') : t('Passwort');
+    cloudEl.google.hidden = m !== 'login' && m !== 'signup';
+    cloudEl.forgot.hidden = m !== 'login';
+    cloudEl.submit.textContent = { login: t('Anmelden'), signup: t('Konto erstellen'), verify: t('Bestätigen'), reset: t('Code senden'), 'reset-confirm': t('Passwort setzen') }[m];
+    cloudEl.switchBtn.textContent = m === 'login' ? t('Konto erstellen') : t('Zurück zur Anmeldung');
+    // Bei «verify» und «reset» gibt es nur einen Knopf in der Code-/E-Mail-Zeile
+    if (m === 'verify' || m === 'reset') {
+      const host = m === 'verify' ? cloudEl.codeRow : $('cloudEmailRow');
+      host.appendChild(cloudEl.submit);
+    } else {
+      cloudEl.passwordRow.appendChild(cloudEl.submit);
+    }
+  }
+
+  function renderCloud() {
+    const s = cloud.state;
+    if (!s) return;
+    cloudEl.off.hidden = s.configured;
+    cloudEl.out.hidden = !s.configured || s.signedIn;
+    cloudEl.in.hidden = !s.signedIn;
+    cloudEl.buyBox.hidden = !s.signedIn;
+    cloudEl.historyBox.hidden = !s.signedIn;
+    cloudEl.google.disabled = cloud.busy;
+    cloudEl.google.textContent = s.googleRunning ? t('Anmeldung im Browser läuft … (abbrechen)') : t('Mit Google fortfahren');
+    cloudEl.submit.disabled = cloud.busy;
+    if (s.signedIn) {
+      cloudEl.who.firstChild.nodeValue = s.displayName || s.email || t('Konto');
+      cloudEl.whoSub.textContent = s.displayName ? s.email || '' : s.provider === 'google' ? 'Google' : '';
+      cloudEl.balance.textContent = s.wallet ? fmtBc(s.wallet.available) : s.status === 'offline' ? t('Offline') : '–';
+      cloudEl.balance.classList.toggle('bad', Boolean(s.wallet) && Number(s.wallet.available) <= 0);
+      if (cloud.loadedFor !== s.email) { cloud.loadedFor = s.email; loadCloudExtras(); }
+    } else {
+      cloud.loadedFor = null;
+    }
+    if (s.error && !cloud.busy) footer(cloudEl.msg, s.error, 'err');
+  }
+
+  async function loadCloudExtras() {
+    const [p, h] = await Promise.all([api.cloud.packages(), api.cloud.history()]);
+    cloudEl.packages.textContent = '';
+    if (p.ok && p.packages.length) {
+      for (const pkg of p.packages) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'row row-button';
+        const l = document.createElement('span');
+        l.className = 'row-label';
+        l.textContent = `${pkg.name} · ${fmtBc(pkg.credits)}`;
+        const v = document.createElement('span');
+        v.className = 'row-value';
+        v.textContent = fmtChf(pkg.priceChf);
+        b.append(l, v);
+        b.addEventListener('click', () => buyPackage(pkg, b));
+        cloudEl.packages.appendChild(b);
+      }
+    } else {
+      const r = document.createElement('div');
+      r.className = 'row';
+      r.textContent = p.ok ? t('Zurzeit gibt es keine Pakete.') : p.error;
+      cloudEl.packages.appendChild(r);
+    }
+    const list = (node, rows, empty, line) => {
+      node.textContent = '';
+      if (!rows.length) {
+        const r = document.createElement('div');
+        r.className = 'row';
+        r.textContent = empty;
+        node.appendChild(r);
+        return;
+      }
+      for (const item of rows.slice(0, 15)) {
+        const [left, sub, right] = line(item);
+        const r = document.createElement('div');
+        r.className = 'row';
+        const l = document.createElement('span');
+        l.className = 'row-label two';
+        l.textContent = left;
+        const small = document.createElement('small');
+        small.textContent = sub;
+        l.appendChild(small);
+        const v = document.createElement('span');
+        v.className = 'row-value';
+        v.textContent = right;
+        r.append(l, v);
+        node.appendChild(r);
+      }
+    };
+    if (!h.ok) { footer(cloudEl.msg, h.error, 'err'); return; }
+    const usageStatus = { settled: '', partial: t('teilweise'), released: t('abgebrochen'), failed: t('fehlgeschlagen') };
+    list(cloudEl.usage, h.history.usage, t('Noch keine Cloud-Anfragen.'), (u) => [
+      String(u.model || '').replace(/^gpt-/, 'GPT-').replace(/-/g, ' '),
+      [fmtDay(u.createdAt), usageStatus[u.status] || ''].filter(Boolean).join(' · '),
+      Number(u.credits) > 0 ? `−${fmtBc(u.credits)}` : '–',
+    ]);
+    const purchaseStatus = { completed: t('bezahlt'), refunded: t('zurückerstattet'), partially_refunded: t('teilweise zurückerstattet'), failed: t('fehlgeschlagen'), expired: t('abgelaufen') };
+    list(cloudEl.purchases, h.history.purchases, t('Noch keine Käufe.'), (p2) => [
+      `${fmtBc(p2.credits)} · ${fmtChf(p2.amountChf)}`,
+      [fmtDay(p2.completedAt || p2.createdAt), purchaseStatus[p2.status] || p2.status].join(' · '),
+      '',
+    ]);
+  }
+
+  async function buyPackage(pkg, button) {
+    button.disabled = true;
+    footer(cloudEl.msg, t('Öffne die Zahlung im Browser …'));
+    const r = await api.cloud.buy(pkg.id);
+    button.disabled = false;
+    if (!r.ok) { footer(cloudEl.msg, r.error, 'err'); return; }
+    footer(cloudEl.msg, t('Zahlung für {bc} ({chf}) im Browser geöffnet. Das Guthaben erscheint nach der Bestätigung durch Stripe.', { bc: fmtBc(r.checkout.credits), chf: fmtChf(r.checkout.amountChf) }), 'ok');
+  }
+
+  async function cloudRun(fn, okText) {
+    cloud.busy = true;
+    renderCloud();
+    const r = await fn();
+    cloud.busy = false;
+    if (r?.state) cloud.state = r.state;
+    renderCloud();
+    if (!r?.ok) { footer(cloudEl.msg, r?.error || t('Unbekannter Fehler.'), 'err'); return r; }
+    footer(cloudEl.msg, typeof okText === 'function' ? okText(r) : okText || '', okText ? 'ok' : undefined);
+    return r;
+  }
+
+  cloudEl.switchBtn.addEventListener('click', () => { footer(cloudEl.msg, ''); cloudMode(cloud.mode === 'login' ? 'signup' : 'login'); });
+  cloudEl.forgot.addEventListener('click', () => { footer(cloudEl.msg, t('Gib deine E-Mail ein. Du bekommst einen Code.')); cloudMode('reset'); cloudEl.email.focus(); });
+  cloudEl.google.addEventListener('click', async () => {
+    if (cloud.state?.googleRunning) { api.cloud.cancelGoogle(); return; }
+    footer(cloudEl.msg, t('Der Browser öffnet sich. Melde dich dort bei Google an.'));
+    await cloudRun(() => api.cloud.google(), t('Angemeldet.'));
+  });
+  cloudEl.submit.addEventListener('click', async () => {
+    const email = cloudEl.email.value.trim();
+    const password = cloudEl.password.value;
+    const code = cloudEl.code.value.replace(/\s/g, '');
+    if (!email) { footer(cloudEl.msg, t('Bitte gib deine E-Mail ein.'), 'err'); return; }
+    const m = cloud.mode;
+    if (m === 'login') {
+      const r = await cloudRun(() => api.cloud.login(email, password), t('Angemeldet.'));
+      if (r?.code === 'email_not_confirmed') { cloudMode('verify'); footer(cloudEl.msg, t('Gib den Code aus der Bestätigungs-Mail ein.')); }
+    } else if (m === 'signup') {
+      if (password.length < 8) { footer(cloudEl.msg, t('Das Passwort braucht mindestens 8 Zeichen.'), 'err'); return; }
+      const r = await cloudRun(() => api.cloud.signup(email, password, cloudEl.name.value), (x) => (x.confirmationRequired ? t('Wir haben dir einen Code geschickt. Gib ihn hier ein.') : t('Konto erstellt.')));
+      if (r?.ok && r.confirmationRequired) cloudMode('verify');
+    } else if (m === 'verify') {
+      const r = await cloudRun(() => api.cloud.verifyEmail(email, code), t('E-Mail bestätigt. Du bist angemeldet.'));
+      if (r?.ok) cloudMode('login');
+    } else if (m === 'reset') {
+      const r = await cloudRun(() => api.cloud.requestPasswordReset(email), t('Falls es ein Konto gibt, ist ein Code unterwegs. Gib ihn mit dem neuen Passwort ein.'));
+      if (r?.ok) cloudMode('reset-confirm');
+    } else if (m === 'reset-confirm') {
+      if (password.length < 8) { footer(cloudEl.msg, t('Das Passwort braucht mindestens 8 Zeichen.'), 'err'); return; }
+      const r = await cloudRun(() => api.cloud.confirmPasswordReset(email, code, password), t('Neues Passwort gesetzt. Du bist angemeldet.'));
+      if (r?.ok) cloudMode('login');
+    }
+    if (cloud.state?.signedIn) { cloudEl.password.value = ''; cloudEl.code.value = ''; }
+  });
+  cloudEl.password.addEventListener('keydown', (e) => { if (e.key === 'Enter') cloudEl.submit.click(); });
+  cloudEl.code.addEventListener('keydown', (e) => { if (e.key === 'Enter') cloudEl.submit.click(); });
+  cloudEl.logout.addEventListener('click', () => cloudRun(() => api.cloud.logout(), t('Abgemeldet. Lokale KI funktioniert weiter.')));
+  api.onCloudState((s) => { cloud.state = s; renderCloud(); });
+  cloudMode('login');
+  api.cloud.state().then((r) => { if (r?.state) { cloud.state = r.state; renderCloud(); } });
+
   api.onSettingsChanged((s) => {
     state.settings = s;
     accentNow = s.accent || accentNow;

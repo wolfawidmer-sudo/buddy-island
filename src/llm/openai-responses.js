@@ -130,6 +130,9 @@ function createOpenAiResponsesClient({ provider, fetchImpl = globalThis.fetch, c
   const name = provider.name;
   const base = () => baseUrl(provider);
   const endpoint = () => `${base()}/responses`;
+  // Buddy Cloud: Modell-IDs tragen in Buddy ein Präfix («cloud:gpt-…»), der Server kennt sie ohne
+  const prefix = provider.modelPrefix || '';
+  const wire = (/** @type {string} */ m) => (prefix && String(m).startsWith(prefix) ? String(m).slice(prefix.length) : m);
   /** @param {string} apiKey */
   const headers = (apiKey) => ({ authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' });
 
@@ -153,6 +156,7 @@ function createOpenAiResponsesClient({ provider, fetchImpl = globalThis.fetch, c
   async function listModels(apiKey) {
     const local = new AbortController();
     const timer = setTimeout(() => local.abort(), 20000);
+    if (!base()) throw new ProviderError(0, 'Buddy Cloud ist nicht eingerichtet', 'not_configured', name, { providerId: provider.id, stage: 'models' });
     const url = `${base()}/models`;
     let response;
     try {
@@ -164,7 +168,10 @@ function createOpenAiResponsesClient({ provider, fetchImpl = globalThis.fetch, c
     }
     if (!response.ok) throw await toError(response, { endpoint: url, stage: 'models' });
     const json = await response.json();
-    return (json.data || []).map((/** @type {any} */ m) => ({ id: String(m.id || ''), name: models.info(String(m.id || '')).name })).filter((/** @type {{id:string}} */ m) => m.id);
+    return (json.data || []).map((/** @type {any} */ m) => {
+      const id = m.id ? `${prefix}${m.id}` : '';
+      return { id, name: models.info(id).name };
+    }).filter((/** @type {{id:string}} */ m) => m.id);
   }
 
   /** @param {string} apiKey @param {any} body @param {AbortSignal|undefined} signal */
@@ -218,7 +225,7 @@ function createOpenAiResponsesClient({ provider, fetchImpl = globalThis.fetch, c
     const converted = toResponsesTools(caps.tools ? tools : []);
     let streaming = req.stream !== false;
     /** @type {any} */
-    const body = { model, input: toResponsesInput(messages, caps), stream: streaming, store: false, max_output_tokens: maxTokens };
+    const body = { model: wire(model), input: toResponsesInput(messages, caps), stream: streaming, store: false, max_output_tokens: maxTokens };
     if (system && system.trim()) body.instructions = system.trim();
     if (converted.tools.length) body.tools = converted.tools;
     const thinks = info.effortParam === 'reasoning_effort' && !learned.get(provider.id, model, 'noReasoningEffort');
