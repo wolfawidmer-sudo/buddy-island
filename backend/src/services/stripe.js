@@ -229,7 +229,8 @@ function createStripeService({ config, supabase, logger, fetchImpl = globalThis.
 
   /** Geprüftes Webhook-Ereignis verarbeiten. Idempotent (Datenbankfunktionen). */
   async function handleEvent(event) {
-    const live = /^sk_live_/.test(sc.secretKey);
+    // Live-Modus: voller Secret Key (sk_live_) oder eingeschränkter Key (rk_live_)
+    const live = /^(sk|rk)_live_/.test(sc.secretKey);
     if (Boolean(event.livemode) !== live) {
       logger.warn('stripe_mode_mismatch', { eventId: event.id, livemode: event.livemode });
       return 'ignored';

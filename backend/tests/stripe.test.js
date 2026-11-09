@@ -257,6 +257,19 @@ test.describe('Stripe: Abo mit Monats-Credits', () => {
   });
 });
 
+test.describe('Stripe Live-Modus', () => {
+  test('eingeschränkter Live-Key (rk_live_) verarbeitet Live-Ereignisse, Test-Ereignisse werden ignoriert', async () => {
+    const s = setup();
+    const app = await startApp({ handlers: s.handlers, config: { stripe: { secretKey: 'rk_live_restrictedkey0000', webhookSecret: SECRET, apiBase: 'https://api.stripe.test', successUrl: 'https://buddy-island.top/kauf/danke', cancelUrl: 'https://buddy-island.top/kauf/abgebrochen' } } });
+    try {
+      await post(app, { ...completedEvent, id: 'evt_test_mode', livemode: false });
+      assert.equal(s.rpc.length, 0);
+      await post(app, { ...completedEvent, id: 'evt_live', livemode: true });
+      assert.equal(s.rpc.filter((x) => x.name === 'confirm_purchase').length, 1);
+    } finally { await app.close(); }
+  });
+});
+
 test.describe('Beträge exakt', () => {
   test('Dollar ↔ Cent und Summen ohne Fliesskomma', () => {
     assert.equal(dollarsToCents('10.00'), 1000);
