@@ -80,6 +80,18 @@ function createStripeService({ config, supabase, logger, fetchImpl = globalThis.
     return data;
   }
 
+  // AGB-Häkchen im Checkout. Die AGB-URL ist im Stripe-Dashboard hinterlegt (Öffentliche Daten).
+  // Der Text deckt den Verzicht auf das EU-Widerrufsrecht bei digitalen Inhalten ab.
+  const TERMS = {
+    consent_collection: { terms_of_service: 'required' },
+    custom_text: {
+      terms_of_service_acceptance: {
+        message: 'Ich akzeptiere die [AGB](https://buddy-island.top/agb.html) und die [Datenschutzerklärung](https://buddy-island.top/privacy.html). '
+          + 'Ich will, dass Buddy Island sofort liefert, und weiss, dass ich damit mein Widerrufsrecht verliere. Es gibt keine Rückerstattung.',
+      },
+    },
+  };
+
   // ---------------- Pay as you go ----------------
 
   /**
@@ -106,6 +118,7 @@ function createStripeService({ config, supabase, logger, fetchImpl = globalThis.
       }],
       metadata: { purchase_id: purchase.id, kind: 'credits' },
       payment_intent_data: { metadata: { purchase_id: purchase.id } },
+      ...TERMS,
       success_url: sc.successUrl,
       cancel_url: sc.cancelUrl,
     }, `checkout-${purchase.id}`);
@@ -167,6 +180,7 @@ function createStripeService({ config, supabase, logger, fetchImpl = globalThis.
       }],
       metadata: { kind: 'subscription', user_id: user.id, plan_id: p.id },
       subscription_data: { metadata: { user_id: user.id, plan_id: p.id } },
+      ...TERMS,
       success_url: sc.successUrl,
       cancel_url: sc.cancelUrl,
     });

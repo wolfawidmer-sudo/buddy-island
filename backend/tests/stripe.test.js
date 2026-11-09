@@ -102,6 +102,8 @@ test.describe('Stripe: Pay as you go (USD)', () => {
       assert.deepEqual(s.rpc[0], { name: 'create_custom_purchase', a: { p_user_id: USER_A, p_amount: '12.34' } });
       assert.equal(s.stripeCalls[0].form['line_items[0][price_data][unit_amount]'], '1234');
       assert.equal(s.stripeCalls[0].form['line_items[0][price_data][product_data][name]'], '1234 Buddy Credits');
+      assert.equal(s.stripeCalls[0].form['consent_collection[terms_of_service]'], 'required');
+      assert.match(s.stripeCalls[0].form['custom_text[terms_of_service_acceptance][message]'], /agb\.html.*Widerrufsrecht/s);
       // zu klein → Meldung aus der Datenbank
       const small = await app.call('POST', '/v1/purchases/checkout', { token: signToken(), body: { amount: '4.99' } });
       assert.equal(small.status, 400);
@@ -176,6 +178,8 @@ test.describe('Stripe: Abo mit Monats-Credits', () => {
       assert.equal(f['line_items[0][price_data][currency]'], 'usd');
       assert.equal(f['subscription_data[metadata][user_id]'], USER_A);
       assert.equal(f['subscription_data[metadata][plan_id]'], PLAN);
+      assert.equal(f['consent_collection[terms_of_service]'], 'required');
+      assert.match(f['custom_text[terms_of_service_acceptance][message]'], /agb\.html.*Widerrufsrecht/s);
       assert.equal(r.data.plan.monthlyCredits, '1000.000000');
       // unbekannter Plan
       assert.equal((await app.call('POST', '/v1/subscription/checkout', { token: signToken(), body: { planId: PACKAGE } })).status, 404);
