@@ -32,8 +32,8 @@
         <button class="icon-btn" id="newBtn" type="button" data-tip="Neuer Chat (Strg+N)" data-tip-align="end" aria-label="Neuer Chat">
           <svg viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11"/></svg>
         </button>
-        <button class="icon-btn" id="usageBtn" type="button" data-tip="KI-Nutzung" data-tip-align="end" aria-label="KI-Nutzung">
-          <svg viewBox="0 0 20 20"><path d="M4 16V11M8.5 16V6M13 16v-7M17 16V4"/></svg>
+        <button class="icon-btn" id="accountBtn" type="button" data-tip="Konto und Guthaben" data-tip-align="end" aria-label="Konto und Guthaben">
+          <svg viewBox="0 0 20 20"><circle cx="10" cy="7" r="3"/><path d="M4.5 16.5c.8-2.9 3-4.5 5.5-4.5s4.7 1.6 5.5 4.5"/></svg>
         </button>
         <button class="icon-btn" id="settingsBtn" type="button" data-tip="Einstellungen (Strg+,)" data-tip-align="end" aria-label="Einstellungen">
           <svg viewBox="0 0 20 20"><path d="M3.5 6h8M15.5 6h1M3.5 14h1M8.5 14h8"/><circle cx="13.5" cy="6" r="2"/><circle cx="6.5" cy="14" r="2"/></svg>
@@ -51,6 +51,13 @@
         <section class="view" id="chatView">
           <!-- Karten oben (Musik, Termine, Mitteilungen, Timer): eigener Scrollbereich mit Obergrenze -->
           <div class="chat-cards" id="chatCards">
+          <!-- Einmaliger Hinweis für bestehende Nutzer: Buddy läuft jetzt über Buddy Cloud -->
+          <div class="inbox-hint cloud-hint" id="cloudHint" hidden>
+            <span id="cloudHintText"></span>
+            <div class="inbox-hint-actions">
+              <button type="button" class="link" id="cloudHintDismiss">Verstanden</button>
+            </div>
+          </div>
           <div class="now" id="nowPlaying" hidden>
             <img class="now-cover" id="nowCover" alt="">
             <span class="now-cover now-cover-empty" id="nowCoverEmpty"><svg viewBox="0 0 20 20"><path d="M8 14.5V5l7-1.5v9.5"/><circle cx="6" cy="14.5" r="2"/><circle cx="13" cy="13" r="2"/></svg></span>
@@ -92,39 +99,11 @@
               <button type="button" class="chip" data-send="Mach die Musik etwas leiser">Musik leiser</button>
               <button type="button" class="chip" data-send="Öffne den Rechner">Rechner öffnen</button>
               <button type="button" class="chip" data-send="Öffne den Editor und schreib eine Einkaufsliste für Spaghetti Bolognese hinein">Einkaufsliste im Editor schreiben</button>
-              <button type="button" class="chip" data-send="Wie viel KI-Nutzung habe ich noch, und was haben meine KI-Tools heute gemacht?">KI-Nutzung heute</button>
-            </div>
-            <!-- Ersteinrichtung der lokalen KI: Hardware, ein empfohlenes Modell, ein Knopf -->
-            <div class="local-card" id="localCard" hidden>
-              <p class="lc-hw" id="lcHw"></p>
-              <div class="lc-model" id="lcModel">
-                <b id="lcName"></b>
-                <small id="lcMeta"></small>
-              </div>
-              <div class="lc-confirm" id="lcConfirm" hidden>
-                <p id="lcConfirmText"></p>
-                <div class="empty-actions">
-                  <button type="button" class="button" id="lcCancel">Abbrechen</button>
-                  <button type="button" class="button primary" id="lcGo">Ja, herunterladen</button>
-                </div>
-              </div>
-              <div class="lc-progress" id="lcProgress" hidden>
-                <div class="lc-progress-head"><span id="lcStep"></span><button type="button" class="link" id="lcStop">Abbrechen</button></div>
-                <div class="setup-progress" id="lcBarBox"><i id="lcBar"></i></div>
-                <span class="lc-sub" id="lcSub"></span>
-              </div>
-              <p class="lc-error" id="lcError" hidden></p>
-              <div class="empty-actions" id="lcActions">
-                <button type="button" class="button primary" id="lcStart">Lokale KI einrichten</button>
-                <button type="button" class="button" id="lcOther">Anderes Modell</button>
-              </div>
-              <p class="lc-note" id="lcNote">Danach läuft Buddy ohne Internet und ohne Kosten direkt auf deinem PC.</p>
+              <button type="button" class="chip" data-send="Was steht heute in meinem Kalender?">Was steht heute an?</button>
             </div>
             <div class="empty-actions">
-              <button type="button" class="button primary" id="localBtn" hidden>Lokale KI einrichten</button>
-              <button type="button" class="button" id="connectBtn" hidden>API-Key hinzufügen</button>
+              <button type="button" class="button primary" id="connectBtn" hidden>Anmelden</button>
             </div>
-            <div class="setup-progress" id="emptyProgress" hidden><i id="emptyBar"></i></div>
           </div>
 
           <form class="composer" id="composer" autocomplete="off">
@@ -140,648 +119,478 @@
           <p class="footnote" id="footnote"></p>
         </section>
 
-        <!-- KI-Nutzung -->
-        <section class="view usage" id="usageView" hidden>
+        <!-- Konto: Buddy Cloud (Anmeldung, Guthaben, Abo, Aufladen, Verlauf) -->
+        <section class="view account" id="accountView" hidden>
           <div class="settings-scroll">
-            <div class="usage-head">
-              <span id="usageUpdated">Noch nicht geladen</span>
-              <button type="button" class="button small" id="usageRefresh">Aktualisieren</button>
+            <p class="footer" id="cloudOff" hidden>Buddy Cloud ist gerade nicht erreichbar. Versuch es später nochmals.</p>
+
+            <!-- Abgemeldet: wird beim Onboarding in die Einführung verschoben (ein Formular für beides) -->
+            <div class="signin" id="cloudSignedOut" hidden>
+              <div class="signin-intro" id="cloudIntro">
+                <h2 class="view-title">Buddy Cloud</h2>
+                <p class="lead">Melde dich an, dann kannst du mit Buddy chatten. Bezahlt wird mit Buddy Credits.</p>
+              </div>
+              <button type="button" class="gsi-button" id="cloudGoogle">
+                <span class="gsi-icon"><img src="img/google-g.svg" alt="" width="20" height="20"></span>
+                <span class="gsi-text" id="cloudGoogleText">Mit Google anmelden</span>
+              </button>
+              <div class="or" aria-hidden="true"><span>oder</span></div>
+              <div class="signin-fields">
+                <div id="cloudEmailRow" class="field-line">
+                  <input id="cloudEmail" type="email" placeholder="E-Mail" spellcheck="false" autocomplete="email" aria-label="E-Mail">
+                </div>
+                <div id="cloudNameRow" class="field-line" hidden>
+                  <input id="cloudName" type="text" placeholder="Name (optional)" spellcheck="false" autocomplete="name" aria-label="Name">
+                </div>
+                <div id="cloudCodeRow" class="field-line" hidden>
+                  <input id="cloudCode" type="text" inputmode="numeric" placeholder="Code aus der E-Mail" spellcheck="false" autocomplete="one-time-code" aria-label="Code aus der E-Mail">
+                </div>
+                <div id="cloudPasswordRow" class="field-line">
+                  <input id="cloudPassword" type="password" placeholder="Passwort" spellcheck="false" autocomplete="current-password" aria-label="Passwort">
+                </div>
+                <div class="field-line" id="cloudSubmitRow">
+                  <button type="button" class="button primary wide" id="cloudSubmit">Anmelden</button>
+                </div>
+              </div>
+              <div class="signin-links">
+                <button type="button" class="link" id="cloudSwitch">Konto erstellen</button>
+                <button type="button" class="link" id="cloudForgot">Passwort vergessen?</button>
+              </div>
+              <p class="footer" id="cloudMsg"></p>
             </div>
-            <div id="usageCards"></div>
-            <h3 class="section">Verbindungen</h3>
-            <div class="group">
-              <div id="adminAnthRows">
-              <div class="row">
-                <span class="row-label two">Anthropic-Admin-Zugang<small>Nutzung und Kosten aller Claude-API-Keys deiner Organisation (Key mit Admin-Rechten, ohne Workspace-Beschränkung)</small></span>
-                <span class="row-value" id="adminAnthStatus">–</span>
+
+            <!-- Angemeldet -->
+            <div id="cloudSignedIn" hidden>
+              <div class="balance">
+                <span class="balance-label">Guthaben</span>
+                <span class="balance-value" id="cloudBalance">–</span>
+                <span class="balance-sub" id="cloudBalanceSub"></span>
               </div>
-              <div class="row field-row">
-                <input id="adminAnthInput" type="password" placeholder="Key mit Admin-Rechten einfügen" spellcheck="false" autocomplete="off" aria-label="Anthropic-Admin-Key">
-                <button type="button" class="button small" id="adminAnthSave">Speichern</button>
+              <div class="group">
+                <div class="row">
+                  <span class="row-label two" id="cloudWho">Konto<small id="cloudWhoSub"></small></span>
+                  <button type="button" class="link" id="cloudLogout">Abmelden</button>
+                </div>
               </div>
+              <p class="footer" id="cloudMsgIn"></p>
+
+              <div id="cloudPlanBox" hidden>
+                <h3 class="section">Buddy Plus</h3>
+                <div class="group" id="cloudPlans"></div>
+                <p class="footer" id="cloudPlanFoot">Jeden Monat neues Guthaben. Was am Monatsende übrig ist, verfällt. Gekaufte Credits bleiben.</p>
               </div>
-              <div id="adminOaiRows">
-              <div class="row">
-                <span class="row-label two">OpenAI-Admin-Key<small>Tokens und Kosten deiner OpenAI-API (nicht ChatGPT-Abo)</small></span>
-                <span class="row-value" id="adminOaiStatus">–</span>
+
+              <div id="cloudBuyBox" hidden>
+                <h3 class="section">Aufladen</h3>
+                <div class="group">
+                  <div id="cloudPackages"></div>
+                  <div class="row field-row">
+                    <input id="cloudAmount" type="text" inputmode="decimal" placeholder="Eigener Betrag in USD" spellcheck="false" autocomplete="off" aria-label="Eigener Betrag in USD">
+                    <button type="button" class="button small" id="cloudAmountBuy">Bezahlen</button>
+                  </div>
+                </div>
+                <p class="footer" id="cloudBuyFoot">Bezahlt wird im Browser über Stripe. Das Guthaben erscheint, sobald die Zahlung bestätigt ist.</p>
               </div>
-              <div class="row field-row">
-                <input id="adminOaiInput" type="password" placeholder="OpenAI-Admin-Key einfügen" spellcheck="false" autocomplete="off" aria-label="OpenAI-Admin-Key">
-                <button type="button" class="button small" id="adminOaiSave">Speichern</button>
+
+              <div id="cloudHistoryBox" hidden>
+                <h3 class="section">Verlauf</h3>
+                <div class="group">
+                  <details class="row disclosure">
+                    <summary><span class="row-label">Nutzung</span></summary>
+                    <div id="cloudUsage"></div>
+                  </details>
+                  <details class="row disclosure">
+                    <summary><span class="row-label">Käufe</span></summary>
+                    <div id="cloudPurchases"></div>
+                  </details>
+                </div>
               </div>
-              </div>
-              <label class="row" id="usageLocalUsageRow">
-                <span class="row-label two">Lokale Protokolle lesen<small>Claude Code und Codex auf diesem PC</small></span>
-                <span class="switch"><input type="checkbox" id="usageLocalToggle"><span></span></span>
-              </label>
             </div>
-            <p class="footer" id="adminMsg"></p>
-            <p class="footer">Nur offizielle Schnittstellen. Admin-Keys werden verschlüsselt gespeichert und nur an den jeweiligen Anbieter geschickt. Leeres Feld + Speichern löscht einen Key.</p>
           </div>
         </section>
 
-        <!-- Einstellungen -->
+        <!-- Einstellungen: fünf Reiter, immer nur einer sichtbar -->
         <section class="view settings" id="settingsView" hidden>
-          <div class="settings-scroll">
+          <nav class="cat-nav" id="tabNav" role="tablist" aria-label="Bereiche">
+            <button type="button" role="tab" data-tab="general">Allgemein</button>
+            <button type="button" role="tab" data-tab="features">Funktionen</button>
+            <button type="button" role="tab" data-tab="safety">Sicherheit</button>
+            <button type="button" role="tab" data-tab="keys">Kürzel</button>
+            <button type="button" role="tab" data-tab="system">System</button>
+          </nav>
+          <div class="settings-scroll" id="settingsScroll">
 
-            <nav class="cat-nav" aria-label="Bereiche">
-              <button type="button" data-cat="cat-provider">Provider</button>
-              <button type="button" data-cat="cat-account">Konto</button>
-              <button type="button" data-cat="cat-tools">Tools</button>
-              <button type="button" data-cat="cat-av">Audio &amp; Visuals</button>
-              <button type="button" data-cat="cat-system">System</button>
-            </nav>
-
-            <h2 class="category" id="cat-provider">Provider &amp; API-Keys</h2>
-            <h3 class="section">KI-Anbieter</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label">Anbieter</span>
-                <select id="providerSelect" class="row-select"></select>
-              </label>
-              <div id="keyBlock">
-                <div class="row">
-                  <span class="row-label">API-Key</span>
-                  <span class="row-value" id="keyStatus">Nicht verbunden</span>
-                  <button type="button" class="link danger" id="keyRemove" hidden>Entfernen</button>
-                </div>
-                <div class="row field-row">
-                  <input id="keyInput" type="password" placeholder="API-Key einfügen" spellcheck="false" autocomplete="off" aria-label="API-Key">
-                  <button type="button" class="button primary small" id="keySave">Verbinden</button>
-                </div>
-                <details class="row disclosure" id="workspaceRow">
-                  <summary><span class="row-label">Workspace-ID</span><span class="row-value">nur falls nötig</span></summary>
-                  <input id="workspaceInput" type="text" placeholder="wrkspc_…" spellcheck="false" aria-label="Workspace-ID">
-                </details>
-                <button type="button" class="row row-button left danger" id="keyRevoke" hidden>Key widerrufen …</button>
-              </div>
-              <div id="localBlock" hidden>
-                <div class="row">
-                  <span class="row-label">Lokales Modell</span>
-                  <span class="row-value" id="hfStatus">–</span>
-                </div>
-                <div class="row field-row">
-                  <input id="hfModelInput" type="text" placeholder="Qwen/Qwen2.5-1.5B-Instruct oder Ordner" spellcheck="false" autocomplete="off" aria-label="Hugging-Face-Modell">
-                  <button type="button" class="button primary small" id="hfSave">Übernehmen</button>
-                </div>
-                <details class="row disclosure">
-                  <summary><span class="row-label">Hugging-Face-Token</span><span class="row-value">nur für geschützte Modelle</span></summary>
-                  <input id="hfTokenInput" type="password" placeholder="Hugging-Face-Token (optional)" spellcheck="false" autocomplete="off" aria-label="Hugging-Face-Token">
-                </details>
-                <button type="button" class="row row-button left" id="hfTest">Modell testen</button>
-              </div>
-            </div>
-            <p class="footer" id="keyMsg"></p>
-            <p class="footer" id="keyFoot"></p>
-
-            <!-- Lokale KI über Ollama -->
-            <div id="ollamaBox" hidden>
-              <h3 class="section">Lokale KI</h3>
-              <div class="group">
-                <div class="row">
-                  <span class="row-label two" id="olModelLine">Modell<small id="olStatusSub"></small></span>
-                  <span class="row-value" id="olStatus">–</span>
-                </div>
-                <div class="row stacked" id="olProgressRow" hidden>
-                  <div class="lc-progress-head"><span id="olProgressText"></span><button type="button" class="link" id="olStop">Abbrechen</button></div>
-                  <div class="setup-progress" id="olBarBox"><i id="olBar"></i></div>
-                  <span class="specs-sub" id="olProgressSub"></span>
-                </div>
-                <button type="button" class="row row-button left" id="olAction" hidden></button>
-              </div>
-              <p class="footer" id="olMsg"></p>
-
-              <h3 class="section">Empfehlung für deinen PC</h3>
+            <!-- Allgemein -->
+            <div class="pane" data-pane="general" role="tabpanel">
               <div class="group">
                 <div class="row stacked">
-                  <span class="row-label" id="olHw">Prüfe die Hardware …</span>
-                  <span class="specs-sub" id="olHwSub"></span>
+                  <span class="row-label">Erscheinungsbild</span>
+                  <div class="segmented" id="themeSeg" role="radiogroup" aria-label="Erscheinungsbild">
+                    <button type="button" role="radio" data-value="system">System</button>
+                    <button type="button" role="radio" data-value="dark">Dunkel</button>
+                    <button type="button" role="radio" data-value="light">Hell</button>
+                  </div>
                 </div>
-                <div id="olPicks"></div>
-                <details class="row disclosure" id="olMore">
-                  <summary><span class="row-label">Alle passenden Modelle</span><span class="row-value" id="olMoreCount"></span></summary>
-                  <div id="olAll"></div>
-                </details>
+                <div class="row stacked">
+                  <span class="row-label">Akzentfarbe</span>
+                  <div class="swatches" id="swatches">
+                    <button type="button" data-color="#F2F2F7" style="--c:#F2F2F7" aria-label="Weiss" title="Weiss"></button>
+                    <button type="button" data-color="#8EE0D2" style="--c:#8EE0D2" aria-label="Lagune" title="Lagune"></button>
+                    <button type="button" data-color="#8E8E93" style="--c:#8E8E93" aria-label="Grau" title="Grau"></button>
+                    <button type="button" data-color="#0A84FF" style="--c:#0A84FF" aria-label="Blau" title="Blau"></button>
+                    <button type="button" data-color="#30D158" style="--c:#30D158" aria-label="Grün" title="Grün"></button>
+                    <button type="button" data-color="#FF9F0A" style="--c:#FF9F0A" aria-label="Orange" title="Orange"></button>
+                    <button type="button" data-color="#FF375F" style="--c:#FF375F" aria-label="Pink" title="Pink"></button>
+                    <button type="button" data-color="#BF5AF2" style="--c:#BF5AF2" aria-label="Lila" title="Lila"></button>
+                    <label class="custom-color" title="Eigene Farbe"><input type="color" id="customColor" aria-label="Eigene Farbe"></label>
+                  </div>
+                </div>
+                <label class="row">
+                  <span class="row-label">Name</span>
+                  <input id="nameInput" class="row-input" type="text" maxlength="20">
+                </label>
+                <label class="row">
+                  <span class="row-label">Sprache</span>
+                  <select id="langSelect" class="row-select"></select>
+                </label>
+                <label class="row">
+                  <span class="row-label">Ton, wenn etwas fertig ist</span>
+                  <span class="switch"><input type="checkbox" id="soundToggle"><span></span></span>
+                </label>
               </div>
-              <p class="footer" id="olPicksFoot">Tempo-Stufen sind Schätzungen. Wie schnell es wirklich ist, hängt von deinem PC ab; unter «Diagnose» kannst du es messen.</p>
 
-              <h3 class="section">Auf diesem PC</h3>
+              <h3 class="section">So antwortet Buddy</h3>
               <div class="group">
-                <div id="olInstalled"></div>
-                <div class="row">
-                  <span class="row-label two">Speicherort<small id="olDir"></small></span>
-                  <button type="button" class="button small" id="olDirBtn">Ändern …</button>
+                <label class="row">
+                  <span class="row-label">Länge</span>
+                  <select id="prefLength" class="row-select"><option value="short">Kurz</option><option value="normal">Normal</option><option value="detailed">Ausführlich</option></select>
+                </label>
+                <label class="row">
+                  <span class="row-label">Tonfall</span>
+                  <select id="prefStyle" class="row-select"><option value="friendly">Freundlich</option><option value="neutral">Sachlich</option><option value="casual">Locker</option></select>
+                </label>
+                <div class="row stacked">
+                  <span class="row-label two">Hinweise für Buddy<small>z. B. «Ich programmiere in Python»</small></span>
+                  <textarea id="promptInput" rows="3" maxlength="600" aria-label="Hinweise für Buddy"></textarea>
                 </div>
               </div>
-              <p class="footer">Modelle kommen beim Herunterladen von ollama.com. Deine Gespräche mit lokalen Modellen verlassen den PC nicht.</p>
+            </div>
 
-              <div id="colBox" hidden>
-                <h3 class="section">Grosse Modelle (Colibrì)</h3>
-                <div class="group">
-                  <div class="row stacked" id="colOffer" hidden>
-                    <span class="row-label" id="colOfferLine"></span>
-                    <span class="specs-sub" id="colOfferSub"></span>
-                    <div class="ol-actions"><button type="button" class="button small" id="colOfferBtn"></button></div>
-                  </div>
-                  <div class="row stacked">
-                    <span class="row-label" id="colLine"></span>
-                    <span class="specs-sub" id="colSub"></span>
-                  </div>
-                  <div class="row stacked" id="colProgressRow" hidden>
-                    <div class="lc-progress-head"><span id="colProgressText"></span><button type="button" class="link" id="colStop">Abbrechen</button></div>
-                    <div class="setup-progress" id="colBarBox"><i id="colBar"></i></div>
-                  </div>
-                  <div id="colList"></div>
-                  <button type="button" class="row row-button left" id="colAction" hidden></button>
-                  <label class="row" id="colAutoRow" hidden><span class="row-label two">Immer Colibrì<small>Lokale Modelle laufen mit Colibrì, wo immer es geht. Ollama nur für Modelle, die Colibrì nicht kann.</small></span><span class="switch"><input type="checkbox" id="colAutoToggle"><span></span></span></label>
+            <!-- Funktionen -->
+            <div class="pane" data-pane="features" role="tabpanel" hidden>
+              <div class="group">
+                <label class="row">
+                  <span class="row-label">Laufende Musik im Island</span>
+                  <span class="switch"><input type="checkbox" id="mediaToggle"><span></span></span>
+                </label>
+                <label class="row">
+                  <span class="row-label">Musik-Visualizer</span>
+                  <span class="switch"><input type="checkbox" id="visualizerToggle"><span></span></span>
+                </label>
+                <label class="row">
+                  <span class="row-label two">Spielmodus<small>Bei Spielen und Vollbild hält sich Buddy zurück</small></span>
+                  <span class="switch"><input type="checkbox" id="gameToggle"><span></span></span>
+                </label>
+              </div>
+
+              <h3 class="section">Mitteilungen</h3>
+              <div class="group">
+                <label class="row">
+                  <span class="row-label">Windows-Mitteilungen im Island</span>
+                  <span class="switch"><input type="checkbox" id="notifyToggle"><span></span></span>
+                </label>
+                <div class="row">
+                  <span class="row-label">Status</span>
+                  <span class="row-value" id="notifyStatus">–</span>
                 </div>
-                <p class="footer" id="colFoot">Colibrì ist ein eigenständiges Open-Source-Programm für sehr grosse Modelle: Teile des Modells liegen auf der SSD und werden bei Bedarf gelesen. So laufen auch Modelle, die nicht in den Arbeitsspeicher passen, und auf PCs ohne passende Grafikkarte war Colibrì im Test sogar schneller als Ollama.</p>
+                <button type="button" class="row row-button left" id="dndBtn">Windows-Banner unten rechts ausschalten</button>
+              </div>
+
+              <h3 class="section">Kalender</h3>
+              <div class="group">
+                <div class="row">
+                  <span class="row-label">Kalender</span>
+                  <span class="row-value" id="calStatus">Nicht verbunden</span>
+                  <button type="button" class="link danger" id="calRemove" hidden>Entfernen</button>
+                </div>
+                <div class="row field-row">
+                  <input id="calInput" type="password" placeholder="Privater iCal-Link" spellcheck="false" autocomplete="off" aria-label="iCal-Link">
+                  <button type="button" class="button small" id="calSave">Verbinden</button>
+                </div>
+                <label class="row">
+                  <span class="row-label">Erinnerung vor Terminen</span>
+                  <select id="calLead" class="row-select">
+                    <option value="0">Aus</option>
+                    <option value="5">5 Min.</option>
+                    <option value="10">10 Min.</option>
+                    <option value="15">15 Min.</option>
+                    <option value="30">30 Min.</option>
+                    <option value="60">1 Std.</option>
+                  </select>
+                </label>
+              </div>
+              <p class="footer" id="calMsg"></p>
+              <p class="footer">Google Kalender: Einstellungen → dein Kalender → «Privatadresse im iCal-Format». Outlook: Kalender veröffentlichen → ICS-Link.</p>
+
+              <h3 class="section">Stimme</h3>
+              <div class="group">
+                <label class="row">
+                  <span class="row-label">Auf «Hey Buddy» hören</span>
+                  <span class="switch"><input type="checkbox" id="wakeToggle"><span></span></span>
+                </label>
+                <label class="row">
+                  <span class="row-label">Antworten vorlesen</span>
+                  <span class="switch"><input type="checkbox" id="speakToggle"><span></span></span>
+                </label>
+                <div class="row">
+                  <span class="row-label">Spracherkennung</span>
+                  <span class="row-value" id="voiceStatus">–</span>
+                </div>
+              </div>
+
+              <h3 class="section">Gedächtnis</h3>
+              <div class="group">
+                <label class="row">
+                  <span class="row-label two">Buddy darf sich Dinge merken<small>Nur wenn du es sagst</small></span>
+                  <span class="switch"><input type="checkbox" id="memoryToggle"><span></span></span>
+                </label>
+                <div id="memoryList" class="memory-list"></div>
+                <button type="button" class="row row-button left danger" id="memoryClear">Alles vergessen</button>
+              </div>
+              <p class="footer">Bleibt auf diesem PC. Passwörter, Karten- und Kontonummern speichert Buddy nie.</p>
+            </div>
+
+            <!-- Sicherheit -->
+            <div class="pane" data-pane="safety" role="tabpanel" hidden>
+              <div class="group">
+                <label class="row">
+                  <span class="row-label">Buddy darf den PC steuern</span>
+                  <span class="switch"><input type="checkbox" id="computerToggle"><span></span></span>
+                </label>
+                <label class="row">
+                  <span class="row-label">Vor jeder Aufgabe fragen</span>
+                  <span class="switch"><input type="checkbox" id="confirmToggle"><span></span></span>
+                </label>
+              </div>
+              <p class="footer">Buddy sieht dabei deinen Bildschirm, ein Leuchtrand zeigt das an. Stoppen geht jederzeit mit dem Stopp-Knopf im Island.</p>
+
+              <h3 class="section">Berechtigungen</h3>
+              <div class="group">
+                <div class="row">
+                  <span class="row-label two">Niedriges Risiko<small>Lesen, Programme öffnen, Bildschirmfotos</small></span>
+                  <span class="row-value">Erlaubt</span>
+                </div>
+                <label class="row">
+                  <span class="row-label two">Mittleres Risiko<small>Dateien verschieben, Software installieren</small></span>
+                  <select id="permMedium" class="row-select">
+                    <option value="ask">Pro Aufgabe fragen</option>
+                    <option value="allow">Ohne Nachfrage</option>
+                  </select>
+                </label>
+                <label class="row">
+                  <span class="row-label two">Hohes Risiko<small>Löschen, Admin-Befehle, System</small></span>
+                  <select id="permHigh" class="row-select">
+                    <option value="ask">Jedes Mal fragen</option>
+                    <option value="block">Nie erlauben</option>
+                  </select>
+                </label>
+              </div>
+              <p class="footer">Buddy läuft ohne Administratorrechte, löscht nur in den Papierkorb und schaltet Windows-Sicherheitsfunktionen nie ab.</p>
+
+              <h3 class="section">Ausführungsverlauf</h3>
+              <div class="group">
+                <label class="row">
+                  <span class="row-label">Verlauf speichern</span>
+                  <span class="switch"><input type="checkbox" id="historyToggle"><span></span></span>
+                </label>
+                <div id="historyList" class="history" data-empty="Noch keine Aufgaben."></div>
+                <button type="button" class="row row-button left danger" id="historyClear">Verlauf löschen</button>
+              </div>
+            </div>
+
+            <!-- Kürzel -->
+            <div class="pane" data-pane="keys" role="tabpanel" hidden>
+              <div class="group" id="shortcutGroup">
+                <div class="row">
+                  <span class="row-label">Buddy öffnen / schliessen</span>
+                  <button type="button" class="hotkey" data-shortcut="toggle"></button>
+                </div>
+                <div class="row">
+                  <span class="row-label">Neuer Chat</span>
+                  <button type="button" class="hotkey" data-shortcut="newChat"></button>
+                </div>
+                <div class="row">
+                  <span class="row-label">Einstellungen öffnen</span>
+                  <button type="button" class="hotkey" data-shortcut="settings"></button>
+                </div>
+                <div class="row">
+                  <span class="row-label">Aufgabe stoppen</span>
+                  <button type="button" class="hotkey" data-shortcut="stop"></button>
+                </div>
+                <div class="row">
+                  <span class="row-label">Sprechen</span>
+                  <button type="button" class="hotkey" data-shortcut="voice"></button>
+                </div>
+              </div>
+              <p class="footer" id="hotkeyMsg"></p>
+              <p class="footer">Klick auf ein Kürzel und drück die neuen Tasten. Entf löscht es, Esc bricht ab.</p>
+
+              <h3 class="section">Eigene Kurzbefehle</h3>
+              <div class="group" id="customGroup">
+                <div id="customList"></div>
+                <button type="button" class="row row-button left" id="addShortcut">Kurzbefehl hinzufügen</button>
+              </div>
+              <p class="footer">Ein Kurzbefehl schickt Buddy einen festen Auftrag, z. B. «Pausier die Musik».</p>
+            </div>
+
+            <!-- System -->
+            <div class="pane" data-pane="system" role="tabpanel" hidden>
+              <div class="group">
+                <label class="row">
+                  <span class="row-label">Bildschirm</span>
+                  <select id="displaySelect" class="row-select"></select>
+                </label>
+                <label class="row">
+                  <span class="row-label">Mit Windows starten</span>
+                  <span class="switch"><input type="checkbox" id="autostartToggle"><span></span></span>
+                </label>
+              </div>
+
+              <h3 class="section">Über Buddy</h3>
+              <div class="group">
+                <div class="row">
+                  <span class="row-label">Version</span>
+                  <span class="row-value" id="versionValue">–</span>
+                </div>
+                <div class="row">
+                  <span class="row-label">Updates</span>
+                  <span class="row-value" id="updateStatus">–</span>
+                  <button type="button" class="button small" id="updateBtn">Prüfen</button>
+                </div>
+                <button type="button" class="row row-button left" id="rollbackBtn" hidden>Vorherige Version wiederherstellen</button>
+                <button type="button" class="row row-button left" id="onboardingBtn">Einführung zeigen</button>
+                <details class="row disclosure">
+                  <summary><span class="row-label">Datenschutz</span></summary>
+                  <div class="privacy">
+                    <p>Buddy hat keine Werbung und keine Statistiken.</p>
+                    <p><b>An Buddy Cloud</b> geht, was du Buddy schreibst oder sagst, und bei der PC-Steuerung Bildschirmfotos. Buddy Cloud leitet das an OpenAI weiter, um die Antwort zu erzeugen. Abgerechnet wird über dein Konto.</p>
+                    <p><b>Nur auf deinem PC</b> bleiben: Chatverlauf, Gedächtnis, Mitteilungen, Musik-Infos, Kalender-Link (verschlüsselt) und das Protokoll.</p>
+                    <p><b>Updates</b> installiert Buddy nur mit gültiger Signatur.</p>
+                  </div>
+                </details>
               </div>
 
               <h3 class="section">Erweitert</h3>
               <div class="group">
-                <details class="row disclosure" id="olAdv">
-                  <summary><span class="row-label">Für Fortgeschrittene</span><span class="row-value">nur falls nötig</span></summary>
-                  <div class="ol-adv">
-                    <label class="row"><span class="row-label">Kontextlänge</span>
-                      <select id="olCtx" class="row-select">
-                        <option value="">Automatisch</option><option value="4096">4 000 Tokens</option><option value="8192">8 000 Tokens</option><option value="16384">16 000 Tokens</option><option value="32768">32 000 Tokens</option><option value="65536">64 000 Tokens</option>
-                      </select></label>
-                    <label class="row"><span class="row-label">Rechnen auf</span>
-                      <select id="olGpu" class="row-select"><option value="auto">Automatisch</option><option value="cpu">Nur Prozessor</option></select></label>
-                    <label class="row"><span class="row-label">Im Speicher halten</span>
-                      <select id="olKeep" class="row-select"><option value="auto">Automatisch</option><option value="5m">5 Minuten</option><option value="30m">30 Minuten</option><option value="2h">2 Stunden</option><option value="forever">Solange Buddy läuft</option></select></label>
-                    <label class="row"><span class="row-label">Temperatur</span><input class="ol-num" id="olTemp" type="number" min="0" max="2" step="0.1" placeholder="0.7"></label>
-                    <label class="row"><span class="row-label">Top-p</span><input class="ol-num" id="olTopP" type="number" min="0.05" max="1" step="0.05" placeholder="Standard"></label>
-                    <label class="row"><span class="row-label">Max. Antwortlänge</span><input class="ol-num" id="olMaxTok" type="number" min="64" max="32768" step="64" placeholder="Standard"></label>
-                    <label class="row"><span class="row-label">Prozessor-Threads</span><input class="ol-num" id="olThreads" type="number" min="1" max="256" step="1" placeholder="Automatisch"></label>
-                    <label class="row"><span class="row-label">Batch-Grösse</span><input class="ol-num" id="olBatch" type="number" min="16" max="4096" step="16" placeholder="Automatisch"></label>
-                    <label class="row"><span class="row-label two">Werkzeuge erlauben<small>Timer, Apps, Musik … nur bei Modellen, die das können</small></span><span class="switch"><input type="checkbox" id="olTools"><span></span></span></label>
-                    <label class="row"><span class="row-label two">Riskante Aktionen<small>z. B. Dateien löschen, immer mit Nachfrage</small></span><span class="switch"><input type="checkbox" id="olRisky"><span></span></span></label>
-                    <label class="row"><span class="row-label two">Beim Beenden freigeben<small>Modell aus dem Speicher nehmen, wenn Buddy schliesst</small></span><span class="switch"><input type="checkbox" id="olUnload"><span></span></span></label>
+                <details class="row disclosure" id="modelBox">
+                  <summary><span class="row-label">Modell und Denktiefe</span><span class="row-value" id="modelShort"></span></summary>
+                  <div>
+                    <label class="row">
+                      <span class="row-label">Automatische Modellwahl</span>
+                      <span class="switch"><input type="checkbox" id="autoToggle"><span></span></span>
+                    </label>
+                    <label class="row">
+                      <span class="row-label" id="modelLabel">Modell</span>
+                      <select id="modelSelect" class="row-select"></select>
+                    </label>
+                    <p class="footer err" id="modelNotice" hidden></p>
+                    <div class="row stacked">
+                      <span class="row-label">Denktiefe</span>
+                      <div class="segmented" id="effortSeg" role="radiogroup" aria-label="Denktiefe">
+                        <button type="button" data-value="auto">Auto</button>
+                        <button type="button" data-value="low">Schnell</button>
+                        <button type="button" data-value="medium">Normal</button>
+                        <button type="button" data-value="high">Gründlich</button>
+                      </div>
+                    </div>
+                    <label class="row">
+                      <span class="row-label">Ausweichmodell bei Überlastung</span>
+                      <span class="switch"><input type="checkbox" id="fallbackToggle"><span></span></span>
+                    </label>
+                    <label class="row">
+                      <span class="row-label">Modellwahl im Chat anzeigen</span>
+                      <span class="switch"><input type="checkbox" id="routeToggle"><span></span></span>
+                    </label>
                   </div>
                 </details>
-                <details class="row disclosure" id="olDiagBox">
-                  <summary><span class="row-label">Diagnose</span><span class="row-value" id="olDiagShort"></span></summary>
-                  <div class="ol-diag" id="olDiag"></div>
-                  <div class="ol-diag-actions">
-                    <button type="button" class="button small" id="olBench">Tempo messen</button>
-                    <button type="button" class="button small" id="olDiagCopy">Diagnose kopieren</button>
-                    <button type="button" class="button small" id="olRestart">Ollama neu starten</button>
+                <button type="button" class="row row-button left" id="diagBtn">Selbsttest starten</button>
+                <div id="diagList" class="diag" hidden></div>
+                <button type="button" class="row row-button left" id="logsBtn">Log-Ordner öffnen</button>
+              </div>
+
+              <div class="group last">
+                <button type="button" class="row row-button danger" id="quitBtn">Buddy Island beenden</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Einführung beim ersten Start (unter System › Über Buddy erneut startbar) -->
+        <section class="view onboarding" id="onboardingView" hidden>
+          <div class="ob-steps" id="obDots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="ob-body">
+            <div class="ob-step" data-step="0">
+              <h2 class="ob-title" id="obHello">Hoi, ich bin Buddy.</h2>
+              <p class="lead">Ich wohne oben auf deinem Bildschirm. Frag mich etwas, stell einen Timer oder lass mich etwas am PC erledigen.</p>
+              <div class="group">
+                <div class="row stacked">
+                  <span class="row-label">Sprache</span>
+                  <div class="segmented" id="obLang" role="radiogroup" aria-label="Sprache">
+                    <button type="button" role="radio" data-value="de">Deutsch</button>
+                    <button type="button" role="radio" data-value="en">English</button>
+                    <button type="button" role="radio" data-value="fr">Français</button>
                   </div>
-                </details>
+                </div>
               </div>
             </div>
-
-            <div id="setupBox" hidden>
-              <h3 class="section">Lokale KI einrichten</h3>
+            <div class="ob-step" data-step="1" hidden>
+              <h2 class="ob-title">Anmelden</h2>
+              <p class="lead" id="obCloudLead">Buddy läuft über Buddy Cloud. Bezahlt wird mit Buddy Credits: ab $5 oder mit Buddy Plus für $10 im Monat.</p>
+              <div id="obSigninHost"></div>
+              <div class="ob-done" id="obSignedIn" hidden>
+                <span class="ob-check" aria-hidden="true"></span>
+                <span id="obSignedInText">Angemeldet.</span>
+              </div>
+            </div>
+            <div class="ob-step" data-step="2" hidden>
+              <h2 class="ob-title">So öffnest du Buddy</h2>
+              <p class="lead">Klick auf das Island oben oder drück dein Tastenkürzel, von überall in Windows.</p>
+              <div class="ob-keys" id="obHotkey"></div>
               <div class="group">
-                <div class="row stacked">
-                  <span class="row-label" id="setupText">Für lokale Modelle braucht Buddy Python mit den Hugging-Face-Paketen «transformers» und «torch».</span>
-                  <div class="setup-progress" id="setupProgress" hidden><i id="setupBar"></i></div>
-                  <span class="setup-log" id="setupLog"></span>
-                </div>
-                <button type="button" class="row row-button left" id="setupBtn">Lokale KI einrichten</button>
-              </div>
-              <p class="footer">Lädt einmalig etwa 1 bis 3 GB (Python-Pakete und Modell). Danach läuft Buddy ohne Internet und ohne Kosten auf deinem PC.</p>
-            </div>
-
-            <div id="specsBox" hidden>
-              <h3 class="section">Empfehlung für deinen PC</h3>
-              <div class="group">
-                <div class="row stacked">
-                  <span class="row-label" id="specsLine">Prüfe die Hardware …</span>
-                  <span class="specs-sub" id="specsSummary"></span>
-                </div>
-                <div id="recoList"></div>
-              </div>
-              <p class="footer">Geschätzt aus Arbeitsspeicher, Prozessor und Grafikkarte. Mit Grafikkarte laufen Modelle viel schneller.</p>
-            </div>
-
-            <h3 class="section">Verbindung testen</h3>
-            <div class="group">
-              <div class="row">
-                <span class="row-label two">Alle KI-Anbieter prüfen<small>Schritt für Schritt: einfache Antwort, Streaming, Verlauf, Werkzeuge, Router</small></span>
-                <span class="health-actions">
-                  <button type="button" class="button small" id="healthCopy" hidden>Ergebnisse kopieren</button>
-                  <button type="button" class="button small" id="healthBtn">Testen</button>
-                </span>
-              </div>
-              <div id="healthList" hidden></div>
-            </div>
-            <p class="footer" id="healthFoot">Kostet pro Anbieter nur ein paar wenige Tokens. Der Bericht enthält keine Keys und keine Inhalte.</p>
-
-            <h3 class="section">Modell und Denktiefe</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label">Automatische Modellwahl</span>
-                <span class="switch"><input type="checkbox" id="autoToggle"><span></span></span>
-              </label>
-              <label class="row">
-                <span class="row-label" id="modelLabel">Modell</span>
-                <select id="modelSelect" class="row-select"></select>
-              </label>
-              <p class="footer err" id="modelNotice" hidden></p>
-              <div class="row stacked">
-                <span class="row-label">Denktiefe</span>
-                <div class="segmented" id="effortSeg" role="radiogroup" aria-label="Denktiefe">
-                  <button type="button" data-value="auto">Auto</button>
-                  <button type="button" data-value="low">Schnell</button>
-                  <button type="button" data-value="medium">Normal</button>
-                  <button type="button" data-value="high">Gründlich</button>
-                </div>
-              </div>
-              <label class="row">
-                <span class="row-label">Ausweichmodell bei Überlastung</span>
-                <span class="switch"><input type="checkbox" id="fallbackToggle"><span></span></span>
-              </label>
-              <label class="row">
-                <span class="row-label">Modellwahl im Chat anzeigen</span>
-                <span class="switch"><input type="checkbox" id="routeToggle"><span></span></span>
-              </label>
-            </div>
-            <p class="footer" id="routeHint"></p>
-            <p class="footer" id="fallbackHint">Ist ein Modell gerade überlastet oder am Limit, antwortet Buddy für diese eine Anfrage mit einem anderen verfügbaren Modell desselben Anbieters und sagt dir das im Chat. Deine Modellwahl bleibt unverändert.</p>
-
-            <h3 class="section">Kosten</h3>
-            <div class="group">
-              <div class="row stacked budget">
-                <div class="budget-head"><span class="row-label">Diesen Monat</span><span class="budget-value" id="costMonth">$0.00</span></div>
-                <div class="budget-bar"><i id="costBar"></i></div>
-                <span class="budget-note" id="costNote"></span>
-              </div>
-              <label class="row">
-                <span class="row-label">Ausgabenlimit pro Monat</span>
-                <select id="limitSelect" class="row-select">
-                  <option value="0">Kein Limit</option>
-                  <option value="1">$1</option>
-                  <option value="2">$2</option>
-                  <option value="5">$5</option>
-                  <option value="10">$10</option>
-                  <option value="20">$20</option>
-                  <option value="50">$50</option>
-                  <option value="100">$100</option>
-                </select>
-              </label>
-              <div class="row"><span class="row-label">Hochrechnung für den Monat</span><span class="row-value" id="costEstimate">–</span></div>
-              <div class="row"><span class="row-label">Seit dem Start von Buddy</span><span class="row-value" id="costSession">–</span></div>
-              <div class="row"><span class="row-label">Tokens diesen Monat</span><span class="row-value" id="costTokens">–</span></div>
-              <div id="modelUsage"></div>
-              <details class="row disclosure" id="recentBox">
-                <summary><span class="row-label">Letzte Anfragen</span><span class="row-value" id="recentCount"></span></summary>
-                <div class="mini-list" id="recentList" data-empty="Noch keine Anfragen."></div>
-              </details>
-              <button type="button" class="row row-button left danger" id="usageReset">Statistik zurücksetzen</button>
-            </div>
-            <p class="footer">Geschätzt in US-Dollar, massgebend ist die Abrechnung des Anbieters. Nahe am Limit nimmt Buddy günstigere Modelle, bei 100 % hält er an.</p>
-
-            <h3 class="section">Berechtigungen</h3>
-            <div class="group">
-              <div class="row">
-                <span class="row-label two">Niedriges Risiko<small>Lesen, Programme öffnen, Bildschirmfotos</small></span>
-                <span class="row-value">Immer erlaubt</span>
-              </div>
-              <label class="row">
-                <span class="row-label two">Mittleres Risiko<small>Dateien verschieben, App-Einstellungen, Software installieren</small></span>
-                <select id="permMedium" class="row-select">
-                  <option value="ask">Pro Aufgabe fragen</option>
-                  <option value="allow">Ohne Nachfrage</option>
-                </select>
-              </label>
-              <label class="row">
-                <span class="row-label two">Hohes Risiko<small>Löschen, Admin-Befehle, System und Sicherheit</small></span>
-                <select id="permHigh" class="row-select">
-                  <option value="ask">Jedes Mal fragen</option>
-                  <option value="block">Nie erlauben</option>
-                </select>
-              </label>
-            </div>
-            <p class="footer">Buddy läuft ohne Administratorrechte, arbeitet mit Dateien nur in deinen Benutzerordnern, löscht nur in den Papierkorb und schaltet Windows-Sicherheitsfunktionen nie ab.</p>
-
-            <h3 class="section">PC-Steuerung</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label">Buddy darf den PC steuern</span>
-                <span class="switch"><input type="checkbox" id="computerToggle"><span></span></span>
-              </label>
-              <label class="row">
-                <span class="row-label">Vor jeder Aufgabe fragen</span>
-                <span class="switch"><input type="checkbox" id="confirmToggle"><span></span></span>
-              </label>
-            </div>
-            <p class="footer">Buddy sieht dabei deinen Bildschirm und benutzt Maus und Tastatur. Stoppen kannst du jederzeit mit deinem Tastenkürzel oder dem Stopp-Knopf im Island.</p>
-
-            <h3 class="section">Ausführungsverlauf</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label">Verlauf speichern</span>
-                <span class="switch"><input type="checkbox" id="historyToggle"><span></span></span>
-              </label>
-              <div id="historyList" class="history" data-empty="Noch keine Aufgaben."></div>
-              <button type="button" class="row row-button left danger" id="historyClear">Verlauf löschen</button>
-            </div>
-            <p class="footer">Bleibt auf diesem PC. Gespeichert werden ein kurzer Titel, die Schritte, Modelle und Kosten, aber keine Antworten.</p>
-
-            <h3 class="section">Gedächtnis</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label two">Buddy darf sich Dinge merken<small>Nur wenn du es sagst, z. B. «Merk dir, dass ich Tee lieber mag als Kaffee»</small></span>
-                <span class="switch"><input type="checkbox" id="memoryToggle"><span></span></span>
-              </label>
-              <div id="memoryList" class="memory-list"></div>
-              <button type="button" class="row row-button left danger" id="memoryClear">Alles vergessen</button>
-            </div>
-            <p class="footer">Bleibt auf diesem PC. An die KI geht nur, was zur aktuellen Frage passt. Passwörter, Karten- und Kontonummern oder Schlüssel speichert Buddy nie.</p>
-
-            <!-- Buddy Cloud: Konto und Buddy Credits. Ohne Konto läuft alles Lokale normal weiter. -->
-            <h2 class="category" id="cat-account">Konto</h2>
-            <h3 class="section">Buddy Cloud</h3>
-            <p class="footer" id="cloudOff" hidden>Buddy Cloud ist in dieser Version noch nicht verfügbar. Lokale KI und eigene API-Keys funktionieren wie bisher.</p>
-            <div class="group" id="cloudSignedOut" hidden>
-              <button type="button" class="row row-button left" id="cloudGoogle">Mit Google fortfahren</button>
-              <div class="row field-row" id="cloudEmailRow">
-                <input id="cloudEmail" type="email" placeholder="E-Mail" spellcheck="false" autocomplete="email" aria-label="E-Mail">
-              </div>
-              <div class="row field-row" id="cloudNameRow" hidden>
-                <input id="cloudName" type="text" placeholder="Name (optional)" spellcheck="false" autocomplete="name" aria-label="Name">
-              </div>
-              <div class="row field-row" id="cloudCodeRow" hidden>
-                <input id="cloudCode" type="text" inputmode="numeric" placeholder="Code aus der E-Mail" spellcheck="false" autocomplete="one-time-code" aria-label="Code aus der E-Mail">
-              </div>
-              <div class="row field-row" id="cloudPasswordRow">
-                <input id="cloudPassword" type="password" placeholder="Passwort" spellcheck="false" autocomplete="current-password" aria-label="Passwort">
-                <button type="button" class="button primary small" id="cloudSubmit">Anmelden</button>
-              </div>
-              <div class="row">
-                <button type="button" class="link" id="cloudSwitch">Konto erstellen</button>
-                <button type="button" class="link" id="cloudForgot">Passwort vergessen?</button>
+                <label class="row">
+                  <span class="row-label two">Auf «Hey Buddy» hören<small>Läuft nur auf deinem PC. Du kannst es später ändern.</small></span>
+                  <span class="switch"><input type="checkbox" id="obWake"><span></span></span>
+                </label>
               </div>
             </div>
-            <div class="group" id="cloudSignedIn" hidden>
-              <div class="row">
-                <span class="row-label two" id="cloudWho">Konto<small id="cloudWhoSub"></small></span>
-                <button type="button" class="link danger" id="cloudLogout">Abmelden</button>
+            <div class="ob-step" data-step="3" hidden>
+              <h2 class="ob-title">Du behältst die Kontrolle</h2>
+              <ul class="ob-points">
+                <li><b>PC-Steuerung nur mit Freigabe.</b> Bevor Buddy klickt oder tippt, fragt er dich.</li>
+                <li><b>Leuchtrand.</b> Sieht Buddy deinen Bildschirm, leuchtet der Rand. Sonst nie.</li>
+                <li><b>Jederzeit stoppen.</b> Mit dem Stopp-Knopf im Island.</li>
+              </ul>
+              <p class="footer">Alles lässt sich unter Einstellungen › Sicherheit ändern.</p>
+            </div>
+            <div class="ob-step" data-step="4" hidden>
+              <h2 class="ob-title">Fertig.</h2>
+              <p class="lead" id="obTryLead">Probier es gleich aus:</p>
+              <div class="empty-actions" id="obSigninLater" hidden>
+                <button type="button" class="button primary" id="obToAccount">Anmelden</button>
               </div>
-              <div class="row">
-                <span class="row-label two">Guthaben<small id="cloudBalanceSub"></small></span>
-                <span class="row-value" id="cloudBalance">–</span>
-              </div>
-            </div>
-            <p class="footer" id="cloudMsg"></p>
-
-            <div id="cloudPlanBox" hidden>
-              <h3 class="section">Abo</h3>
-              <div class="group" id="cloudPlans"></div>
-              <p class="footer" id="cloudPlanFoot">Jeden Monat neues Guthaben. Was am Monatsende übrig ist, verfällt. Gekaufte Credits bleiben.</p>
-            </div>
-
-            <div id="cloudBuyBox" hidden>
-              <h3 class="section">Guthaben aufladen</h3>
-              <div class="group">
-                <div id="cloudPackages"></div>
-                <div class="row field-row">
-                  <input id="cloudAmount" type="text" inputmode="decimal" placeholder="Eigener Betrag in USD" spellcheck="false" autocomplete="off" aria-label="Eigener Betrag in USD">
-                  <button type="button" class="button primary small" id="cloudAmountBuy">Bezahlen</button>
-                </div>
-              </div>
-              <p class="footer" id="cloudBuyFoot">Bezahlt wird im Browser über Stripe. Das Guthaben erscheint, sobald Stripe die Zahlung bestätigt hat.</p>
-            </div>
-
-            <div id="cloudHistoryBox" hidden>
-              <h3 class="section">Nutzung</h3>
-              <div class="group" id="cloudUsage"></div>
-              <h3 class="section">Käufe</h3>
-              <div class="group" id="cloudPurchases"></div>
-            </div>
-
-            <h2 class="category" id="cat-tools">Erkannte System-Tools</h2>
-            <div class="group" id="toolsGroup">
-              <div id="toolsList"></div>
-              <label class="row" id="usageLocalRow" hidden>
-                <span class="row-label two">Protokolle für die KI-Nutzung lesen<small>Claude Code und Codex auf diesem PC</small></span>
-                <span class="switch"><input type="checkbox" id="usageLocalSettingsToggle"><span></span></span>
-              </label>
-              <button type="button" class="row row-button left" id="toolsRescan">Erneut suchen</button>
-            </div>
-            <p class="footer">Buddy zeigt nur Tools, die auf diesem PC installiert sind.</p>
-
-            <h2 class="category" id="cat-av">Audio &amp; Visuals</h2>
-            <h3 class="section">Musik</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label">Laufende Musik im Island zeigen</span>
-                <span class="switch"><input type="checkbox" id="mediaToggle"><span></span></span>
-              </label>
-              <label class="row">
-                <span class="row-label two">Musik-Visualizer<small>Balken folgen dem Systemton</small></span>
-                <span class="switch"><input type="checkbox" id="visualizerToggle"><span></span></span>
-              </label>
-            </div>
-            <p class="footer">Reagiert nur, wenn wirklich Ton läuft. Der Ton wird nur auf dem PC ausgewertet, nichts wird aufgenommen.</p>
-
-            <h3 class="section">Darstellung und Ton</h3>
-            <div class="group">
-              <div class="row stacked">
-                <span class="row-label">Erscheinungsbild</span>
-                <div class="segmented" id="themeSeg" role="radiogroup" aria-label="Erscheinungsbild">
-                  <button type="button" role="radio" data-value="system">System</button>
-                  <button type="button" role="radio" data-value="dark">Dunkel</button>
-                  <button type="button" role="radio" data-value="light">Hell</button>
-                </div>
-              </div>
-              <label class="row">
-                <span class="row-label">Ton, wenn etwas fertig ist</span>
-                <span class="switch"><input type="checkbox" id="soundToggle"><span></span></span>
-              </label>
-            </div>
-
-            <h3 class="section">Stimme</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label">Auf «Hey Buddy» hören</span>
-                <span class="switch"><input type="checkbox" id="wakeToggle"><span></span></span>
-              </label>
-              <label class="row">
-                <span class="row-label">Antworten vorlesen (nach Spracheingabe)</span>
-                <span class="switch"><input type="checkbox" id="speakToggle"><span></span></span>
-              </label>
-              <div class="row">
-                <span class="row-label">Spracherkennung</span>
-                <span class="row-value" id="voiceStatus">–</span>
+              <div class="chips" id="obChips">
+                <button type="button" class="chip" data-send="Stell einen Timer auf 5 Minuten">Timer auf 5 Minuten</button>
+                <button type="button" class="chip" data-send="Was kannst du alles für mich tun?">Was kannst du?</button>
+                <button type="button" class="chip" data-send="Öffne den Rechner">Rechner öffnen</button>
               </div>
             </div>
-            <p class="footer">Das Zuhören auf «Hey Buddy» läuft nur auf deinem PC und braucht etwas Rechenleistung.</p>
-
-            <h3 class="section">Buddy</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label">Name</span>
-                <input id="nameInput" class="row-input" type="text" maxlength="20">
-              </label>
-              <div class="row stacked">
-                <span class="row-label">Akzentfarbe</span>
-                <div class="swatches" id="swatches">
-                  <button type="button" data-color="#F2F2F7" style="--c:#F2F2F7" aria-label="Weiss" title="Weiss"></button>
-                  <button type="button" data-color="#8EE0D2" style="--c:#8EE0D2" aria-label="Lagune" title="Lagune"></button>
-                  <button type="button" data-color="#8E8E93" style="--c:#8E8E93" aria-label="Grau" title="Grau"></button>
-                  <button type="button" data-color="#0A84FF" style="--c:#0A84FF" aria-label="Blau" title="Blau"></button>
-                  <button type="button" data-color="#30D158" style="--c:#30D158" aria-label="Grün" title="Grün"></button>
-                  <button type="button" data-color="#FF9F0A" style="--c:#FF9F0A" aria-label="Orange" title="Orange"></button>
-                  <button type="button" data-color="#FF375F" style="--c:#FF375F" aria-label="Pink" title="Pink"></button>
-                  <button type="button" data-color="#BF5AF2" style="--c:#BF5AF2" aria-label="Lila" title="Lila"></button>
-                  <label class="custom-color" title="Eigene Farbe"><input type="color" id="customColor" aria-label="Eigene Farbe"></label>
-                </div>
-              </div>
-            </div>
-
-            <h3 class="section">So antwortet Buddy</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label">Antwortlänge</span>
-                <select id="prefLength" class="row-select"><option value="short">Kurz</option><option value="normal">Normal</option><option value="detailed">Ausführlich</option></select>
-              </label>
-              <label class="row">
-                <span class="row-label">Tonfall</span>
-                <select id="prefStyle" class="row-select"><option value="friendly">Freundlich</option><option value="neutral">Sachlich</option><option value="casual">Locker</option></select>
-              </label>
-              <div class="row stacked">
-                <span class="row-label two">Hinweise für Buddy<small>z. B. «Ich programmiere in Python» oder «Erklär mir Fachbegriffe»</small></span>
-                <textarea id="promptInput" rows="3" maxlength="600" aria-label="Hinweise für Buddy"></textarea>
-              </div>
-            </div>
-            <p class="footer">Das ändert nur, wie Buddy antwortet. Wer Buddy ist und seine Grundregeln (ehrlich, fragt vor Unumkehrbarem, schützt deine Daten) bleiben immer gleich, bei jedem Anbieter und Modell.</p>
-
-            <h2 class="category" id="cat-system">System &amp; Sprache</h2>
-            <h3 class="section">Sprache der Oberfläche</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label">Sprache</span>
-                <select id="langSelect" class="row-select"></select>
-              </label>
-            </div>
-            <p class="footer" id="langFoot">Buddy übernimmt automatisch die Sprache von Windows. Antworten kommen in derselben Sprache.</p>
-
-            <h3 class="section">Mitteilungen</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label">Windows-Mitteilungen im Island</span>
-                <span class="switch"><input type="checkbox" id="notifyToggle"><span></span></span>
-              </label>
-              <div class="row">
-                <span class="row-label">Status</span>
-                <span class="row-value" id="notifyStatus">–</span>
-              </div>
-              <button type="button" class="row row-button left" id="dndBtn">Windows-Banner unten rechts ausschalten</button>
-            </div>
-            <p class="footer">Öffnet die Windows-Einstellungen. Dort kannst du die Banner ausschalten; im Island siehst du die Mitteilungen weiterhin.</p>
-
-            <h3 class="section">Kalender</h3>
-            <div class="group">
-              <div class="row">
-                <span class="row-label">Kalender</span>
-                <span class="row-value" id="calStatus">Nicht verbunden</span>
-                <button type="button" class="link danger" id="calRemove" hidden>Entfernen</button>
-              </div>
-              <div class="row field-row">
-                <input id="calInput" type="password" placeholder="Privater iCal-Link (https://… oder webcal://…)" spellcheck="false" autocomplete="off" aria-label="iCal-Link">
-                <button type="button" class="button primary small" id="calSave">Verbinden</button>
-              </div>
-              <label class="row">
-                <span class="row-label">Erinnerung vor Terminen</span>
-                <select id="calLead" class="row-select">
-                  <option value="0">Aus</option>
-                  <option value="5">5 Min.</option>
-                  <option value="10">10 Min.</option>
-                  <option value="15">15 Min.</option>
-                  <option value="30">30 Min.</option>
-                  <option value="60">1 Std.</option>
-                </select>
-              </label>
-            </div>
-            <p class="footer" id="calMsg"></p>
-            <p class="footer">Google Kalender: Einstellungen → dein Kalender → «Privatadresse im iCal-Format». Outlook: Einstellungen → Kalender → Freigegebene Kalender → «Kalender veröffentlichen» → ICS-Link. Der Link wird verschlüsselt gespeichert.</p>
-
-            <h3 class="section">Tastenkürzel</h3>
-            <div class="group" id="shortcutGroup">
-              <div class="row">
-                <span class="row-label">Buddy öffnen / schliessen</span>
-                <button type="button" class="hotkey" data-shortcut="toggle"></button>
-              </div>
-              <div class="row">
-                <span class="row-label">Neuer Chat</span>
-                <button type="button" class="hotkey" data-shortcut="newChat"></button>
-              </div>
-              <div class="row">
-                <span class="row-label">Einstellungen öffnen</span>
-                <button type="button" class="hotkey" data-shortcut="settings"></button>
-              </div>
-              <div class="row">
-                <span class="row-label">Aufgabe stoppen</span>
-                <button type="button" class="hotkey" data-shortcut="stop"></button>
-              </div>
-              <div class="row">
-                <span class="row-label">Sprechen</span>
-                <button type="button" class="hotkey" data-shortcut="voice"></button>
-              </div>
-            </div>
-            <p class="footer" id="hotkeyMsg"></p>
-            <p class="footer">Klick auf ein Kürzel und drück die neuen Tasten. Entf löscht es, Esc bricht ab. Die Kürzel funktionieren überall in Windows.</p>
-
-            <h3 class="section">Eigene Kurzbefehle</h3>
-            <div class="group" id="customGroup">
-              <div id="customList"></div>
-              <button type="button" class="row row-button left" id="addShortcut">Kurzbefehl hinzufügen</button>
-            </div>
-            <p class="footer">Ein Kurzbefehl schickt Buddy einen festen Auftrag, z. B. «Pausier die Musik» oder «Stell einen Timer auf 5 Minuten». Das klappt von überall, auch wenn das Island zu ist.</p>
-
-            <h3 class="section">Allgemein</h3>
-            <div class="group">
-              <label class="row">
-                <span class="row-label">Spielmodus (nicht stören)</span>
-                <span class="switch"><input type="checkbox" id="gameToggle"><span></span></span>
-              </label>
-              <label class="row">
-                <span class="row-label">Bildschirm</span>
-                <select id="displaySelect" class="row-select"></select>
-              </label>
-              <label class="row">
-                <span class="row-label">Mit Windows starten</span>
-                <span class="switch"><input type="checkbox" id="autostartToggle"><span></span></span>
-              </label>
-            </div>
-
-            <p class="footer">Im Spielmodus versteckt sich Buddy, sobald ein Spiel oder eine Vollbild-App läuft: keine Pop-ups, kein Ton, keine PC-Steuerung. Verpasste Mitteilungen zeigt er danach.</p>
-
-            <h3 class="section">Über Buddy</h3>
-            <div class="group">
-              <div class="row">
-                <span class="row-label">Version</span>
-                <span class="row-value" id="versionValue">–</span>
-              </div>
-              <div class="row">
-                <span class="row-label">Updates</span>
-                <span class="row-value" id="updateStatus">–</span>
-                <button type="button" class="button small" id="updateBtn">Prüfen</button>
-              </div>
-              <button type="button" class="row row-button left" id="rollbackBtn" hidden>Vorherige Version wiederherstellen</button>
-              <button type="button" class="row row-button left" id="diagBtn">Selbsttest starten</button>
-              <div id="diagList" class="diag" hidden></div>
-              <button type="button" class="row row-button left" id="logsBtn">Log-Ordner öffnen</button>
-              <details class="row disclosure">
-                <summary><span class="row-label">Datenschutz</span></summary>
-                <div class="privacy">
-                  <p>Buddy läuft auf deinem PC und hat keine eigenen Server. Es gibt keine Werbung und keine Statistiken.</p>
-                  <p><b>An den gewählten KI-Anbieter</b> (Claude, OpenAI, Grok oder Gemini) geht nur, was du Buddy schreibst oder sagst, seine Antworten und, nur bei der PC-Steuerung mit Claude, Bildschirmfotos. Das läuft über deinen eigenen API-Key. <b>Lokale Modelle</b> laufen komplett auf deinem PC.</p>
-                  <p><b>Nur auf deinem PC</b> bleiben: API-Key und Kalender-Link (verschlüsselt), Chatverlauf, Mitteilungen, Musik-Infos, Kalender-Termine und das Protokoll. Mitteilungen und Termine sieht Claude nur, wenn du danach fragst.</p>
-                  <p><b>Sprache:</b> «Hey Buddy» wird auf dem PC erkannt. Fürs Diktat nutzt Buddy die Spracherkennung von Windows; ist dort die Online-Erkennung an, verarbeitet Microsoft das Gesprochene.</p>
-                  <p><b>Updates</b> lädt Buddy von GitHub und installiert sie nur mit gültiger Signatur.</p>
-                </div>
-              </details>
-            </div>
-
-            <div class="group last">
-              <button type="button" class="row row-button danger" id="quitBtn">Buddy Island beenden</button>
-            </div>
+          </div>
+          <div class="ob-nav">
+            <button type="button" class="link quiet" id="obSkip">Überspringen</button>
+            <span class="ob-nav-end">
+              <button type="button" class="button" id="obBack">Zurück</button>
+              <button type="button" class="button primary" id="obNext">Weiter</button>
+            </span>
           </div>
         </section>
 

@@ -61,12 +61,6 @@
     input: $('input'),
     sendBtn: $('sendBtn'),
     footnote: $('footnote'),
-    keyStatus: $('keyStatus'),
-    keyRemove: $('keyRemove'),
-    keyInput: $('keyInput'),
-    keySave: $('keySave'),
-    keyMsg: $('keyMsg'),
-    workspaceInput: $('workspaceInput'),
     modelSelect: $('modelSelect'),
     effortSeg: $('effortSeg'),
     themeSeg: $('themeSeg'),
@@ -115,24 +109,11 @@
     diagBtn: $('diagBtn'),
     diagList: $('diagList'),
     logsBtn: $('logsBtn'),
-    providerSelect: $('providerSelect'),
-    keyRevoke: $('keyRevoke'),
     autoToggle: $('autoToggle'),
     modelLabel: $('modelLabel'),
+    modelShort: $('modelShort'),
     routeToggle: $('routeToggle'),
     fallbackToggle: $('fallbackToggle'),
-    routeHint: $('routeHint'),
-    costMonth: $('costMonth'),
-    costBar: $('costBar'),
-    costNote: $('costNote'),
-    limitSelect: $('limitSelect'),
-    costEstimate: $('costEstimate'),
-    costSession: $('costSession'),
-    costTokens: $('costTokens'),
-    modelUsage: $('modelUsage'),
-    recentCount: $('recentCount'),
-    recentList: $('recentList'),
-    usageReset: $('usageReset'),
     permMedium: $('permMedium'),
     permHigh: $('permHigh'),
     historyToggle: $('historyToggle'),
@@ -143,125 +124,19 @@
     historyClear: $('historyClear'),
     rollbackBtn: $('rollbackBtn'),
     pillProgress: $('pillProgress'),
-    localBtn: $('localBtn'),
-    localCard: $('localCard'),
-    lcHw: $('lcHw'),
-    lcName: $('lcName'),
-    lcMeta: $('lcMeta'),
-    lcConfirm: $('lcConfirm'),
-    lcConfirmText: $('lcConfirmText'),
-    lcCancel: $('lcCancel'),
-    lcGo: $('lcGo'),
-    lcProgress: $('lcProgress'),
-    lcStep: $('lcStep'),
-    lcStop: $('lcStop'),
-    lcBarBox: $('lcBarBox'),
-    lcBar: $('lcBar'),
-    lcSub: $('lcSub'),
-    lcError: $('lcError'),
-    lcActions: $('lcActions'),
-    lcStart: $('lcStart'),
-    lcOther: $('lcOther'),
-    lcNote: $('lcNote'),
-    ollamaBox: $('ollamaBox'),
-    olStatus: $('olStatus'),
-    olModelLine: $('olModelLine'),
-    olStatusSub: $('olStatusSub'),
-    olProgressRow: $('olProgressRow'),
-    olProgressText: $('olProgressText'),
-    olStop: $('olStop'),
-    olBarBox: $('olBarBox'),
-    olBar: $('olBar'),
-    olProgressSub: $('olProgressSub'),
-    olAction: $('olAction'),
-    olMsg: $('olMsg'),
-    olHw: $('olHw'),
-    olHwSub: $('olHwSub'),
-    olPicks: $('olPicks'),
-    olMore: $('olMore'),
-    olMoreCount: $('olMoreCount'),
-    olAll: $('olAll'),
-    olInstalled: $('olInstalled'),
-    olDir: $('olDir'),
-    olDirBtn: $('olDirBtn'),
-    olCtx: $('olCtx'),
-    olGpu: $('olGpu'),
-    olKeep: $('olKeep'),
-    olTemp: $('olTemp'),
-    olTopP: $('olTopP'),
-    olMaxTok: $('olMaxTok'),
-    olThreads: $('olThreads'),
-    olBatch: $('olBatch'),
-    olTools: $('olTools'),
-    olRisky: $('olRisky'),
-    olUnload: $('olUnload'),
-    olDiagBox: $('olDiagBox'),
-    olDiag: $('olDiag'),
-    olDiagShort: $('olDiagShort'),
-    olBench: $('olBench'),
-    olDiagCopy: $('olDiagCopy'),
-    olRestart: $('olRestart'),
-    colBox: $('colBox'),
-    colLine: $('colLine'),
-    colOffer: $('colOffer'),
-    colAutoRow: $('colAutoRow'),
-    colAutoToggle: $('colAutoToggle'),
-    colOfferLine: $('colOfferLine'),
-    colOfferSub: $('colOfferSub'),
-    colOfferBtn: $('colOfferBtn'),
-    colSub: $('colSub'),
-    colProgressRow: $('colProgressRow'),
-    colProgressText: $('colProgressText'),
-    colStop: $('colStop'),
-    colBarBox: $('colBarBox'),
-    colBar: $('colBar'),
-    colList: $('colList'),
-    colAction: $('colAction'),
-    colFoot: $('colFoot'),
-    emptyProgress: $('emptyProgress'),
-    emptyBar: $('emptyBar'),
-    keyBlock: $('keyBlock'),
-    localBlock: $('localBlock'),
-    workspaceRow: $('workspaceRow'),
-    keyFoot: $('keyFoot'),
-    hfStatus: $('hfStatus'),
-    hfModelInput: $('hfModelInput'),
-    hfTokenInput: $('hfTokenInput'),
-    hfSave: $('hfSave'),
-    hfTest: $('hfTest'),
-    setupBox: $('setupBox'),
-    setupText: $('setupText'),
-    setupProgress: $('setupProgress'),
-    setupBar: $('setupBar'),
-    setupLog: $('setupLog'),
-    setupBtn: $('setupBtn'),
-    specsBox: $('specsBox'),
-    specsLine: $('specsLine'),
-    specsSummary: $('specsSummary'),
-    recoList: $('recoList'),
-    toolsList: $('toolsList'),
-    usageLocalRow: $('usageLocalRow'),
-    usageLocalSettingsToggle: $('usageLocalSettingsToggle'),
-    toolsRescan: $('toolsRescan'),
     langSelect: $('langSelect'),
     visualizerToggle: $('visualizerToggle'),
     bannerHint: $('bannerHint'),
     bannerOpen: $('bannerOpen'),
     bannerDismiss: $('bannerDismiss'),
-    usageBtn: $('usageBtn'),
-    usageView: $('usageView'),
-    usageUpdated: $('usageUpdated'),
-    usageRefresh: $('usageRefresh'),
-    usageCards: $('usageCards'),
-    adminAnthStatus: $('adminAnthStatus'),
-    adminAnthInput: $('adminAnthInput'),
-    adminAnthSave: $('adminAnthSave'),
-    adminOaiStatus: $('adminOaiStatus'),
-    adminOaiInput: $('adminOaiInput'),
-    adminOaiSave: $('adminOaiSave'),
-    usageLocalToggle: $('usageLocalToggle'),
-    adminMsg: $('adminMsg'),
-  };
+
+    accountBtn: $('accountBtn'),
+    accountView: $('accountView'),
+    onboardingView: $('onboardingView'),
+    cloudHint: $('cloudHint'),
+    cloudHintText: $('cloudHintText'),
+    cloudHintDismiss: $('cloudHintDismiss'),
+    onboardingBtn: $('onboardingBtn'),  };
 
   const STORE_KEY = 'buddy.chat.v1';
   const MAX_HISTORY = 40;
@@ -282,11 +157,6 @@
     settings: null,
     models: [],
     stats: null, // { usage, history }
-    local: null, // Status des lokalen Modells { state, model, device, error, percent }
-    setup: null, // Einrichtung der lokalen KI { state, text, percent, log, error }
-    specs: null, // Hardware und Empfehlungen
-    localState: null, // Lokale KI (Ollama): Phase, Hardware, Empfehlungen, Download …
-    localConfirm: null, // Bestätigung vor einem Download { id, bytes, runtime }
     history: loadHistory(), // [{ role, content, tools? }]
     stream: null, // { id, text, node, raf, tools }
     status: 'idle', // idle | busy | done | error
@@ -305,6 +175,8 @@
     update: { state: 'idle' },
     phase: 'closed', // closed | opening | open | closing
     openedAt: 0,
+    cloud: null, // letzter Stand von Buddy Cloud (configured, signedIn …)
+    onboardingStep: 0,
     notch: (() => { try { return localStorage.getItem(NOTCH_KEY) === '1'; } catch { return false; } })(),
   };
 
@@ -584,6 +456,7 @@
   }
 
   function open(view) {
+    if (!view && state.settings && !state.settings.onboarded) view = 'onboarding';
     if (view) showView(view);
     if (state.alarm) stopAlarm();
     if (state.status === 'done' || state.status === 'error') state.status = state.stream ? 'busy' : 'idle';
@@ -636,15 +509,20 @@
   }
 
   function showView(view) {
+    if (state.view === 'onboarding' && view !== 'onboarding') leaveOnboarding();
     state.view = view;
     el.chatView.hidden = view !== 'chat';
     el.settingsView.hidden = view !== 'settings';
-    el.usageView.hidden = view !== 'usage';
+    el.accountView.hidden = view !== 'account';
+    el.onboardingView.hidden = view !== 'onboarding';
     el.settingsBtn.classList.toggle('active', view === 'settings');
-    el.usageBtn.classList.toggle('active', view === 'usage');
+    el.accountBtn.classList.toggle('active', view === 'account');
+    el.island.classList.toggle('onboarding', view === 'onboarding');
     if (view === 'settings') { fillSettings(); loadAiStats(); }
-    if (view === 'usage') loadUsage(false);
+    if (view === 'account') { api.cloud.reload?.(); renderCloud(); }
+    if (view === 'onboarding') renderOnboarding();
     if (view === 'chat' && state.open) renderAgenda();
+    renderCloudHint();
     render();
   }
 
@@ -834,84 +712,41 @@
     scrollToBottom(true);
   }
 
+  // Leerer Chat: ohne Konto ein Anmelde-Hinweis statt Eingabefeld, sonst Vorschläge
   function renderEmpty() {
     const s = state.settings;
-    const hasKey = s?.hasKey;
+    const ready = Boolean(s?.hasKey);
     const isEmpty = state.history.length === 0 && !state.stream;
-    const setup = state.setup;
-    el.emptyProgress.hidden = true;
-    el.localBtn.hidden = true;
-    el.localCard.hidden = true;
-    // Neue lokale KI (Ollama): Ersteinrichtung für alle ohne Key, ausser wer die alte Hugging-Face-Laufzeit nutzt
-    const legacyHf = s?.provider === 'huggingface' || Boolean(s?.hfModel);
-    if (!hasKey && !legacyHf) {
-      el.empty.hidden = false;
-      el.emptyTitle.textContent = t('Hoi, ich bin {name}.', { name: s?.name || t('Buddy') });
-      el.chips.hidden = true;
-      el.connectBtn.hidden = false;
-      el.emptyText.textContent = t('Ich kann direkt auf deinem PC laufen: ohne Konto, ohne Kosten und ohne dass deine Nachrichten den PC verlassen. Oder du verbindest einen API-Key.');
-      renderLocalCard();
-    } else if (!hasKey) {
-      el.empty.hidden = false;
-      el.emptyTitle.textContent = t('Hoi, ich bin {name}.', { name: s?.name || t('Buddy') });
-      el.chips.hidden = true;
-      el.connectBtn.hidden = false;
-      if (setup && setup.state === 'running') {
-        el.emptyText.textContent = setup.text || t('Richte die lokale KI ein …');
-        el.emptyProgress.hidden = false;
-        el.emptyProgress.classList.toggle('indeterminate', !setup.percent);
-        el.emptyBar.style.width = setup.percent ? `${setup.percent}%` : '';
-        el.connectBtn.hidden = true;
-      } else if (!s?.discovery) {
-        el.emptyText.textContent = t('Ich schaue kurz, ob auf deinem PC eine lokale KI laufen kann …');
-      } else {
-        const issue = s?.discovery?.pythonIssue;
-        el.emptyText.textContent = setup?.state === 'error'
-          ? setup.error
-          : issue?.dllError
-            ? t('PyTorch ist installiert, startet aber nicht, weil eine Windows-Bibliothek fehlt. Tippe auf «Lokale KI einrichten», Buddy zeigt dir, was fehlt.')
-            : s?.localIncomplete || issue?.torch || issue?.transformers
-              ? t('Die lokale KI ist noch nicht fertig eingerichtet. Tippe auf «Lokale KI einrichten», Buddy macht dort weiter, wo er aufgehört hat.')
-              : t('Ich kann direkt auf deinem PC laufen, ohne Kosten und ohne Internet. Dafür richte ich einmalig eine lokale KI ein. Oder du fügst einen API-Key hinzu.');
-        el.localBtn.hidden = false;
-      }
-    } else {
-      el.empty.hidden = !isEmpty;
+    el.empty.hidden = ready ? !isEmpty : false;
+    el.chips.hidden = !ready;
+    el.connectBtn.hidden = ready;
+    if (ready) {
       el.emptyTitle.textContent = t('Was kann ich für dich tun?');
-      el.emptyText.textContent = localLine() || '';
-      el.chips.hidden = false;
-      el.connectBtn.hidden = true;
+      el.emptyText.textContent = '';
+    } else {
+      el.emptyTitle.textContent = t('Hoi, ich bin {name}.', { name: s?.name || t('Buddy') });
+      el.emptyText.textContent = state.cloud && !state.cloud.configured
+        ? t('Buddy Cloud ist gerade nicht erreichbar. Versuch es später nochmals.')
+        : t('Melde dich bei Buddy Cloud an, dann kann es losgehen.');
     }
-    el.composer.hidden = !hasKey;
+    el.composer.hidden = !ready;
+    renderCloudHint();
     updateFootnote();
   }
 
-  // Kurzer Status des lokalen Modells, z. B. «Lokal: Qwen2.5 1.5B · lädt 40 %»
-  function localLine(short) {
-    const s = state.settings;
-    if (s?.provider === 'local') return ollamaLine(short);
-    if (!s || s.provider !== 'huggingface' || !s.hfModel) return '';
-    const name = s.hfModel.split(/[\\/]/).filter(Boolean).pop();
-    const st = state.local || s.hfStatus || {};
-    let what = '';
-    if (st.state === 'loading') what = st.percent ? t('lädt {p} %', { p: st.percent }) : t('lädt …');
-    else if (st.state === 'ready') what = st.device === 'cuda' ? t('bereit (Grafikkarte)') : t('bereit');
-    else if (st.state === 'error') what = t('Fehler');
-    return short ? `${t('Lokal')}: ${name}${what ? ` · ${what}` : ''}` : (st.state === 'loading' ? t('Ich lade gerade {name} auf deinem PC ({what}). Du kannst schon schreiben.', { name, what }) : '');
+  // Einmaliger Hinweis für bestehende Nutzer (eigene Keys und lokale KI gibt es nicht mehr)
+  function renderCloudHint() {
+    const notice = state.settings?.cloudNotice;
+    el.cloudHint.hidden = !notice || state.view !== 'chat';
+    if (!notice) return;
+    el.cloudHintText.textContent = notice === 'keys-removed'
+      ? t('Neu: Buddy läuft jetzt über Buddy Cloud. Eigene API-Keys und lokale KI gibt es nicht mehr, gespeicherte Keys wurden gelöscht.')
+      : t('Neu: Buddy läuft jetzt über Buddy Cloud. Melde dich an, um weiter zu chatten.');
   }
 
-  // Fusszeile nur, wenn sie etwas Neues sagt: das lokale Modell lädt noch oder hat ein Problem.
-  // (Modellname und Tastenkürzel stehen in den Einstellungen.)
   function updateFootnote() {
-    const s = state.settings;
-    if (!s) return;
-    const st = state.local || s.hfStatus || {};
-    const ls = state.localState;
-    const text = s.provider === 'local'
-      ? (s.hasKey && ls && ['loading', 'error', 'downloading', 'starting'].includes(ls.phase) ? ollamaLine(true) : '')
-      : s.provider === 'huggingface' && s.hasKey && ['loading', 'error'].includes(st.state) ? localLine(true) : '';
-    el.footnote.textContent = text;
-    el.footnote.hidden = !text;
+    el.footnote.textContent = '';
+    el.footnote.hidden = true;
   }
 
   async function copyText(text, button) {
@@ -970,7 +805,7 @@
   function send(text, viaVoice = false) {
     const clean = text.trim();
     if (!clean || state.stream) return;
-    if (!state.settings?.hasKey) { open('settings'); return; }
+    if (!state.settings?.hasKey) { open('account'); return; }
 
     state.history.push({ role: 'user', content: clean });
     saveHistory();
@@ -1569,7 +1404,7 @@
 
   function startVoice() {
     if (state.listening) { stopVoice(); return; } // zweiter Klick beendet
-    if (!state.settings?.hasKey) { open('settings'); return; }
+    if (!state.settings?.hasKey) { open('account'); return; }
     stopSpeaking();
     voiceCancelled = false;
     setListening('starting');
@@ -1586,134 +1421,6 @@
   }
 
   el.micBtn.addEventListener('click', startVoice);
-
-  // ---------- Verbindungstest ----------
-  const health = { running: false, groups: new Map(), report: '' };
-  // Status eines Schritts bzw. Anbieters (siehe src/llm/health.js)
-  const HEALTH_LABEL = {
-    ok: 'Funktioniert', limited: 'Eingeschränkt', unavailable: 'Temporär nicht verfügbar', unsupported: 'Nicht unterstützt',
-    config: 'Konfigurationsfehler', error: 'Fehler in der Integration', skipped: 'Nicht geprüft',
-  };
-  const HEALTH_MARK = { ok: '✓', limited: '~', unavailable: '⏳', unsupported: '–', config: '✕', error: '✕', skipped: '–' };
-  const HEALTH_CLASS = { ok: 'ok', limited: 'warn', unavailable: 'warn', unsupported: 'skip', config: 'bad', error: 'bad', skipped: 'skip' };
-  const stepStatus = (st) => st.status || (st.ok === true ? 'ok' : st.ok === false ? 'error' : 'skipped');
-  const groupStatus = (g) => g.status || (g.ok ? 'ok' : 'error');
-  function renderHealth() {
-    const list = $('healthList');
-    list.hidden = !health.groups.size;
-    list.textContent = '';
-    for (const g of health.groups.values()) {
-      const head = document.createElement('div');
-      head.className = 'health-head';
-      const name = document.createElement('b');
-      name.textContent = g.name;
-      const state = document.createElement('span');
-      state.className = 'health-state ' + (g.state === 'done' ? HEALTH_CLASS[groupStatus(g)] || '' : '');
-      state.textContent = g.state === 'done' ? t(HEALTH_LABEL[groupStatus(g)] || groupStatus(g)) : t('prüft …');
-      head.append(name, state);
-      list.appendChild(head);
-      for (const st of g.steps) {
-        const row = document.createElement('div');
-        const status = stepStatus(st);
-        row.className = 'health-step ' + (HEALTH_CLASS[status] || 'skip');
-        row.title = t(HEALTH_LABEL[status] || status);
-        const mark = document.createElement('i');
-        mark.textContent = HEALTH_MARK[status] || '?';
-        const body = document.createElement('span');
-        const label = document.createElement('span');
-        label.textContent = st.label + ((st.id.startsWith('basic:') || st.fallbackModel || st.id === 'fallback') && st.model ? ` (${st.model})` : '') + (st.ms ? ` · ${st.ms < 1000 ? `${st.ms} ms` : `${(st.ms / 1000).toFixed(1)} s`}` : '');
-        body.appendChild(label);
-        // Status nur ausschreiben, wenn es nicht einfach «funktioniert» (das sagt das Häkchen)
-        const retries = st.diag?.retries || 0;
-        if (status !== 'ok' || retries) {
-          const badge = document.createElement('small');
-          badge.className = 'health-badge ' + (HEALTH_CLASS[status] || 'skip');
-          const again = retries === 1 ? t('1 Wiederholung') : retries ? t('{n} Wiederholungen', { n: retries }) : '';
-          badge.textContent = [status !== 'ok' ? t(HEALTH_LABEL[status] || status) : '', again].filter(Boolean).join(' · ');
-          body.appendChild(badge);
-        }
-        const note = [st.error ? st.error.message : '', st.note].filter(Boolean).join(' · ');
-        if (note) {
-          const small = document.createElement('small');
-          small.textContent = note;
-          body.appendChild(small);
-        }
-        // Rohe Anbieter-Meldung nur aufgeklappt (fürs Kopieren steht sie ohnehin im Bericht)
-        if (st.error?.detail) {
-          const more = document.createElement('details');
-          more.className = 'notice-more health-more';
-          const summary = document.createElement('summary');
-          summary.textContent = t('Details');
-          const small = document.createElement('small');
-          small.className = 'health-detail';
-          small.textContent = st.error.detail + (st.error.providerMessage ? ` · ${st.error.providerMessage}` : '') + (st.diag ? ` · API ${st.diag.apiVersion || '-'} · ${st.diag.requestType}` : '');
-          more.append(summary, small);
-          body.appendChild(more);
-        }
-        row.append(mark, body);
-        list.appendChild(row);
-      }
-    }
-    $('healthBtn').disabled = health.running;
-    $('healthBtn').textContent = health.running ? t('Prüft …') : t('Testen');
-    const copyLabel = health.running ? t('Bisherige kopieren') : t('Ergebnisse kopieren');
-    // Zeigt der Knopf gerade «Kopiert», erst danach umbeschriften
-    if ($('healthCopy')._copyLabel != null) $('healthCopy')._copyLabel = copyLabel;
-    else $('healthCopy').textContent = copyLabel;
-    $('healthCopy').hidden = !health.groups.size && !health.report;
-  }
-  // Bericht aus dem, was schon angezeigt wird (auch mitten im Test). Ohne Keys und Inhalte.
-  function healthText() {
-    if (health.report && !health.running) return health.report;
-    const lines = [`Buddy Island · ${new Date().toISOString()}${health.running ? ' · Test läuft noch' : ''}`];
-    for (const g of health.groups.values()) {
-      lines.push('', `## ${g.name}: ${g.state === 'done' ? HEALTH_LABEL[groupStatus(g)] || groupStatus(g) : 'läuft …'}`);
-      for (const st of g.steps) {
-        const status = stepStatus(st);
-        const mark = HEALTH_MARK[status] || '?';
-        lines.push(`${mark} ${st.label}${st.model ? ` [${st.model}]` : ''}${st.ms ? ` ${st.ms} ms` : ''} · ${HEALTH_LABEL[status] || status}${st.note ? ` · ${st.note}` : ''}`);
-        const e = st.error;
-        if (e) {
-          lines.push(`    ${e.message}`);
-          const meta = [e.provider, e.model, e.status ? `HTTP ${e.status}` : '', e.code, e.category, e.stage, e.origin, e.endpoint].filter(Boolean).join(' | ');
-          if (meta) lines.push(`    ${meta}`);
-          if (e.detail) lines.push(`    ${e.detail}`);
-          if (e.providerMessage) lines.push(`    Anbieter: ${e.providerMessage}`);
-        }
-      }
-    }
-    return lines.join('\n');
-  }
-  api.onHealth((ev) => {
-    const g = health.groups.get(ev.providerId) || { name: ev.providerName, steps: [], state: 'running', ok: false };
-    // Neuer Durchlauf (z. B. mit einem anderen Modell, weil das alte nicht mehr angeboten wird)
-    if (ev.state === 'running') { g.state = 'running'; g.steps = []; }
-    if (ev.state === 'step') {
-      // Ein Schritt kann nachträglich aktualisiert werden
-      const at = g.steps.findIndex((x) => x.id === ev.step.id);
-      if (at >= 0) g.steps[at] = ev.step; else g.steps.push(ev.step);
-    }
-    if (ev.state === 'done') { g.state = 'done'; g.ok = ev.result.ok; g.status = ev.result.status; g.steps = ev.result.steps; }
-    health.groups.set(ev.providerId, g);
-    if (state.view === 'settings') renderHealth();
-  });
-  $('healthBtn').addEventListener('click', async () => {
-    if (health.running) return;
-    health.running = true;
-    health.groups.clear();
-    health.report = '';
-    renderHealth();
-    try {
-      const r = await api.runHealth('all');
-      health.report = r?.report || '';
-    } catch (err) {
-      health.report = String(err?.message || err);
-    } finally {
-      health.running = false;
-      renderHealth();
-    }
-  });
-  $('healthCopy').addEventListener('click', () => copyText(healthText(), $('healthCopy')));
 
   api.onVoice((msg) => {
     switch (msg.kind) {
@@ -1969,988 +1676,6 @@
   // Wechselt Windows das Theme (bei «System»), Theme und Kontraste neu setzen
   systemLight.addEventListener('change', applyTheme);
 
-  function fillProvider() {
-    const s = state.settings;
-    const pid = s.provider || 'anthropic';
-    const p = (s.providers || []).find((x) => x.id === pid) || {};
-    el.providerSelect.textContent = '';
-    for (const prov of s.providers || []) {
-      const opt = document.createElement('option');
-      opt.value = prov.id;
-      opt.textContent = prov.name + (prov.hasKey && !prov.local ? ' ✓' : '');
-      el.providerSelect.appendChild(opt);
-    }
-    el.providerSelect.value = pid;
-    const local = pid === 'huggingface';
-    const ollama = pid === 'local';
-    el.keyBlock.hidden = local || ollama;
-    el.localBlock.hidden = !local;
-    el.ollamaBox.hidden = !ollama;
-    if (ollama) {
-      el.workspaceRow.hidden = true;
-      el.setupBox.hidden = true;
-      el.specsBox.hidden = true;
-      el.keyFoot.textContent = t('Lokale Modelle laufen über Ollama direkt auf deinem PC: ohne Konto, ohne Kosten, deine Nachrichten bleiben auf dem PC. Nur das Herunterladen braucht Internet.');
-      fillOllama();
-      if (!state.localState) api.localGet().then((r) => { if (r?.state) { state.localState = r.state; fillOllama(); } });
-      return;
-    }
-    el.workspaceRow.hidden = pid !== 'anthropic';
-    if (pid === 'buddy') {
-      // Buddy Cloud: kein API-Key, Anmeldung über das Konto
-      el.keyBlock.hidden = true;
-      el.setupBox.hidden = true;
-      el.specsBox.hidden = true;
-      el.keyFoot.textContent = p.hasKey
-        ? t('Buddy Cloud nutzt OpenAI über dein Buddy-Konto. Bezahlt wird mit Buddy Credits, du brauchst keinen eigenen API-Key.')
-        : t('Für Buddy Cloud meldest du dich unten unter «Konto» an. Ein eigener API-Key ist nicht nötig.');
-      return;
-    }
-    if (!local) {
-      const invalid = p.hasKey && p.status === 'invalid';
-      el.keyStatus.textContent = !p.hasKey ? t('Nicht verbunden') : invalid ? t('Abgelehnt, bitte ersetzen') : `${t('Verbunden')} · …${p.hint || ''}${s.keyProtected ? ` · ${t('verschlüsselt')}` : ''}`;
-      el.keyStatus.classList.toggle('ok', Boolean(p.hasKey) && !invalid);
-      el.keyStatus.classList.toggle('bad', Boolean(invalid));
-      el.keyRemove.hidden = !p.hasKey;
-      el.keyRevoke.hidden = !p.hasKey;
-      el.keySave.textContent = p.hasKey ? t('Ersetzen') : t('Verbinden');
-      // Anleitung pro Anbieter kommt aus src/llm/auth.js (ein Ort für alle Anbieter)
-      const a = p.auth || {};
-      el.keyInput.placeholder = a.placeholder || t('API-Key einfügen');
-      el.keyFoot.textContent = '';
-      const help = document.createElement('span');
-      help.textContent = `${a.help || ''} `;
-      const where = document.createElement('a');
-      where.href = a.url || p.consoleUrl;
-      where.textContent = a.where || p.consoleUrl;
-      const rest = document.createElement('span');
-      rest.textContent = ` ${a.notIncluded || ''} ${t('Buddy speichert ihn mit der Windows-Verschlüsselung (DPAPI), schreibt ihn nie ins Protokoll und schickt ihn nur an diesen Anbieter. «Widerrufen» löscht ihn hier und öffnet die Console, wo du ihn endgültig sperrst.')}`;
-      el.keyFoot.append(help, where, rest);
-      if (p.keyNotice) {
-        const n = document.createElement('strong');
-        n.className = 'key-notice';
-        n.textContent = ` ${p.keyNotice}`;
-        el.keyFoot.prepend(n, document.createElement('br'));
-      }
-      el.setupBox.hidden = true;
-      el.specsBox.hidden = true;
-    } else {
-      el.keyFoot.textContent = t('Lokale Modelle laufen über Hugging Face Transformers direkt auf deinem PC: ohne API-Key, ohne Kosten, ohne Internet (ausser beim ersten Herunterladen). Bildschirmfotos und Werkzeuge gibt es damit nicht, nur Chat.');
-      if (document.activeElement !== el.hfModelInput) el.hfModelInput.value = s.hfModel || '';
-      el.hfTokenInput.placeholder = s.hasHfToken ? t('Token gespeichert (zum Ersetzen neu eingeben)') : t('Hugging-Face-Token (optional)');
-      const hasRuntime = Boolean(s.discovery?.python);
-      const st = state.local || s.hfStatus || {};
-      el.hfStatus.textContent = !hasRuntime ? t('Nicht eingerichtet')
-        : !s.hfModel ? t('Kein Modell gewählt')
-          : st.state === 'ready' ? `${t('Geladen')} · ${st.device === 'cuda' ? t('Grafikkarte') : st.device === 'mps' ? t('Apple GPU') : t('Prozessor')}`
-            : st.state === 'loading' ? (st.percent ? t('Lädt {p} %', { p: st.percent }) : t('Lädt …'))
-              : st.state === 'error' ? t('Fehler') : t('Bereit zum Laden');
-      el.hfStatus.classList.toggle('ok', st.state === 'ready');
-      el.hfStatus.classList.toggle('bad', st.state === 'error');
-      el.setupBox.hidden = hasRuntime && state.setup?.state !== 'running';
-      el.specsBox.hidden = false;
-      fillSetup();
-      if (!state.specs) loadSpecs();
-      else renderSpecs();
-    }
-  }
-
-  function fillSetup() {
-    const st = state.setup;
-    el.setupProgress.hidden = !st || st.state !== 'running';
-    el.setupProgress.classList.toggle('indeterminate', Boolean(st && st.state === 'running' && !st.percent));
-    el.setupBar.style.width = st?.percent ? `${st.percent}%` : '';
-    el.setupLog.textContent = st?.state === 'running' ? (st.log || '') : st?.state === 'error' ? st.error : '';
-    el.setupText.textContent = st?.state === 'running' ? st.text
-      : st?.state === 'done' ? st.text
-        : t('Für lokale Modelle braucht Buddy Python mit den Hugging-Face-Paketen «transformers» und «torch». Buddy installiert sie nur für deinen Benutzer, ohne Administratorrechte.');
-    el.setupBtn.disabled = st?.state === 'running';
-    el.setupBtn.textContent = st?.state === 'error' ? t('Nochmals versuchen') : t('Lokale KI einrichten');
-  }
-
-  async function loadSpecs() {
-    el.specsLine.textContent = t('Prüfe die Hardware …');
-    try {
-      state.specs = await api.getSpecs();
-    } catch {
-      state.specs = null;
-      el.specsLine.textContent = t('Hardware konnte nicht geprüft werden.');
-      return;
-    }
-    renderSpecs();
-  }
-
-  const SPEED = { 'sehr schnell': t('sehr schnell'), schnell: 'schnell', 'flüssig': t('flüssig'), langsam: 'langsam', 'sehr langsam': t('sehr langsam'), 'passt nicht': t('passt nicht') };
-
-  function renderSpecs() {
-    const r = state.specs;
-    if (!r) return;
-    const sp = r.specs;
-    const gpu = sp.gpus.length ? sp.gpus.map((g) => `${g.name}${g.vramGB ? ` (${g.vramGB} GB)` : ''}`).join(', ') : t('keine eigene Grafikkarte');
-    el.specsLine.textContent = `${sp.ramGB} GB RAM · ${sp.threads} ${t('Threads')} · ${gpu}`;
-    el.specsSummary.textContent = t(r.summary);
-    el.recoList.textContent = '';
-    const current = state.settings?.hfModel;
-    const rows = [
-      { label: t('Am schnellsten'), m: r.fastest },
-      ...(r.best.id !== r.fastest.id ? [{ label: t('Beste Antworten'), m: r.best }] : []),
-    ];
-    for (const { label, m } of rows) {
-      const row = document.createElement('div');
-      row.className = `reco${current === m.id ? ' active' : ''}`;
-      const text = document.createElement('div');
-      text.className = 'reco-text';
-      const b = document.createElement('b');
-      b.textContent = `${label}: ${m.name}`;
-      const small = document.createElement('small');
-      small.textContent = [t(SPEED[m.speed] || m.speed), t('auf dem {device}', { device: t(m.device) }), t('ca. {gb} GB', { gb: m.needGB }), m.cached ? t('schon heruntergeladen') : null, t(m.note)].filter(Boolean).join(' · ');
-      text.append(b, small);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'button small';
-      btn.textContent = current === m.id ? t('Aktiv') : t('Übernehmen');
-      btn.addEventListener('click', () => chooseLocalModel(m.id));
-      row.append(text, btn);
-      el.recoList.appendChild(row);
-    }
-  }
-
-  async function chooseLocalModel(id) {
-    footer(el.keyMsg, t('Speichere …'));
-    const result = await api.setLocalModel(id);
-    if (!result.ok) { footer(el.keyMsg, result.error, 'err'); return; }
-    state.settings = result.settings;
-    footer(el.keyMsg, t('Modell gewählt. Buddy lädt es im Hintergrund.'), 'ok');
-    fillSettings();
-    renderEmpty();
-  }
-
-
-  // ---------- Lokale KI (Ollama) ----------
-
-  const OL_SPEED = () => ({ very_fast: t('sehr schnell'), fast: t('schnell'), smooth: t('flüssig'), slow: t('langsam'), very_slow: t('sehr langsam') });
-  const OL_DEVICE = () => ({ gpu: t('auf der Grafikkarte'), partial: t('teils Grafikkarte, teils Prozessor'), cpu: t('auf dem Prozessor') });
-  const OL_ROLE = () => ({ recommended: t('Empfohlen'), fastest: t('Am schnellsten'), best: t('Beste Qualität') });
-  const OL_STRENGTH = () => ({
-    very_small: t('sehr klein'), small: t('klein'), fast: t('schnell'), balanced: t('ausgewogen'), multilingual: t('viele Sprachen'),
-    german: t('gutes Deutsch'), tools: t('kann Buddys Werkzeuge nutzen'), smart: t('kluge Antworten'), very_smart: t('sehr kluge Antworten'),
-    coding: t('gut beim Programmieren'), reasoning: t('stark beim Nachdenken'), moe_fast: t('schnell für seine Grösse'),
-  });
-  const OL_LIMIT = () => ({
-    simple_answers: t('eher einfache Antworten'), large_download: t('grosser Download'), needs_strong_pc: t('braucht einen starken PC'),
-    needs_much_memory: t('braucht viel Speicher'), german_ok: t('Deutsch brauchbar, nicht perfekt'), english_focus: t('vor allem Englisch'),
-    thinks_first: t('denkt vor jeder Antwort nach (langsamer)'),
-  });
-
-  function fmtBytes(b) {
-    if (!b && b !== 0) return '?';
-    if (b >= 1e9) return `${(b / 1e9).toFixed(b >= 1e10 ? 0 : 1)} GB`;
-    if (b >= 1e6) return `${Math.round(b / 1e6)} MB`;
-    return `${Math.max(1, Math.round(b / 1e3))} KB`;
-  }
-  function fmtEta(sec) {
-    if (!sec && sec !== 0) return '';
-    if (sec < 60) return t('noch {n} s', { n: Math.max(1, Math.round(sec)) });
-    if (sec < 3600) return t('noch {n} Min.', { n: Math.round(sec / 60) });
-    return t('noch {h} h {m} Min.', { h: Math.floor(sec / 3600), m: Math.round((sec % 3600) / 60) });
-  }
-  const modelName = (id) => {
-    const ls = state.localState;
-    if (String(id || '').startsWith('@colibri/')) {
-      const c = ls?.colibri;
-      const entry = c?.catalog?.find((m) => m.id === id);
-      return `${entry?.name || (c?.model && `@colibri/${c.model.id}` === id ? c.model.name : String(id).slice(9))} (Colibrì)`;
-    }
-    const p = ls?.picks?.all?.find((x) => x.id === id);
-    return p?.name || id || '';
-  };
-
-  // Fehlermeldungen ohne Fachbegriffe, mit nächstem Schritt
-  function olError(err) {
-    if (!err) return '';
-    const name = modelName(err.model);
-    switch (err.code) {
-      case 'signature_invalid': return t('Das Installationsprogramm von Ollama war nicht gültig signiert. Buddy hat es aus Sicherheitsgründen nicht ausgeführt. Installiere Ollama bei Bedarf selbst von ollama.com.');
-      case 'install_failed': return t('Ollama konnte nicht installiert werden. Du kannst es auch selbst von ollama.com installieren, Buddy erkennt es danach automatisch.');
-      case 'manual_install': return t('Installiere Ollama von ollama.com, danach erkennt Buddy es automatisch.');
-      case 'network': return t('Keine Verbindung zum Internet. Prüfe die Verbindung und versuch es nochmals; Bereits geladenes bleibt erhalten.');
-      case 'disk_full': return t('Nicht genug freier Platz auf dem Laufwerk ({detail}). Gib Platz frei oder wähle einen anderen Speicherort.', { detail: err.detail || '' });
-      case 'out_of_memory': return t('Für «{model}» reicht der Speicher nicht. Wähle ein kleineres Modell.', { model: name });
-      case 'low_ram': return t('Gerade ist zu wenig Arbeitsspeicher frei für «{model}». Schliesse ein paar Programme und versuch es nochmals, oder wähle ein kleineres Modell.', { model: name });
-      case 'gpu_error': return t('Die Grafikkarte hat einen Fehler gemeldet. Oft hilft ein aktueller Grafiktreiber. In «Erweitert» kannst du auch «Nur Prozessor» wählen.');
-      case 'runner_crashed': return t('Das Modell ist abgestürzt. Versuch es nochmals.');
-      case 'runtime_failed':
-      case 'unreachable':
-      case 'port_in_use': return t('Ollama startet nicht. Versuch «Ollama neu starten» unter «Diagnose».');
-      case 'runtime_missing': return String(err.model || '').startsWith('@colibri/') ? t('Colibrì ist nicht installiert oder nicht mehr auffindbar.') : t('Ollama ist nicht installiert.');
-      case 'python_missing': return t('Für Colibrì fehlt Python 3.10 oder neuer. Installiere Python (python.org oder Microsoft Store) und versuch es nochmals.');
-      case 'checksum_mismatch': return t('Der Colibrì-Download stimmt nicht mit der veröffentlichten Prüfsumme überein. Buddy hat ihn verworfen und nichts ausgeführt.');
-      case 'manual': return t('Colibrì-Modelle verwaltest du in Colibrì selbst.');
-      case 'no_model': return t('In Colibrì ist noch kein Modell eingerichtet.');
-      case 'not_found': return t('«{model}» ist nicht mehr auf diesem PC.', { model: name });
-      case 'runtime_too_old': return t('Dieses Modell braucht eine neuere Ollama-Version. Installiere die neuste Version von ollama.com.');
-      case 'timeout': return t('Das Modell hat zu lange nicht geantwortet. Versuch es nochmals oder wähle ein kleineres Modell.');
-      default: return t('Etwas hat nicht geklappt. Details stehen unter «Diagnose».');
-    }
-  }
-
-  function ollamaLine(short) {
-    const ls = state.localState;
-    const s = state.settings;
-    const id = ls?.config?.model || s?.local?.config?.model;
-    if (!id) return '';
-    const name = modelName(id);
-    let what = '';
-    if (!ls) what = '';
-    else if (ls.phase === 'loading') what = t('lädt …');
-    else if (ls.phase === 'downloading') what = t('lädt herunter {p} %', { p: Math.floor(ls.download?.percent || 0) });
-    else if (ls.phase === 'starting' || ls.phase === 'checking') what = t('startet …');
-    else if (ls.phase === 'ready' && ls.loaded?.runtime === 'colibri') what = t('bereit (Colibrì)');
-    else if (ls.phase === 'ready') what = ls.loaded?.device === 'gpu' ? t('bereit (Grafikkarte)') : ls.loaded?.device === 'partial' ? t('bereit (Grafikkarte und Prozessor)') : t('bereit (Prozessor)');
-    else if (ls.phase === 'idle') what = t('bereit');
-    else if (ls.phase === 'error') what = t('Problem');
-    if (short) return `${t('Lokal')}: ${name}${what ? ` · ${what}` : ''}`;
-    return `${t('Lokal')}: ${name}${what ? ` · ${what}` : ''}`;
-  }
-
-  function hwLine(ls) {
-    const h = ls?.hardware;
-    if (!h) return '';
-    const gpu = h.gpuKind === 'dedicated' ? `${h.gpu}${h.vramGB ? ` (${h.vramGB} GB)` : ''}` : h.gpuKind === 'integrated' ? t('{gpu} (teilt den Arbeitsspeicher)', { gpu: h.gpu }) : t('keine eigene Grafikkarte');
-    return `${t('Dein PC')}: ${h.ramGB} GB ${t('Arbeitsspeicher')} · ${gpu}`;
-  }
-
-  function pickMeta(p) {
-    if (!p) return '';
-    return [
-      `${p.sizeExact ? '' : '≈ '}${fmtBytes(p.downloadBytes)} ${t('Download')}`,
-      `${OL_SPEED()[p.speed] || ''} ${OL_DEVICE()[p.device] || ''}`.trim(),
-      t('braucht ca. {gb} GB Speicher', { gb: p.needGB }),
-    ].filter(Boolean).join(' · ');
-  }
-
-  function progressInfo(ls) {
-    if (!ls) return null;
-    if (ls.phase === 'installing_runtime') {
-      const i = ls.install || {};
-      const step = i.phase === 'verify' ? t('Prüfe die Signatur von Ollama …') : i.phase === 'install' ? t('Installiere Ollama …') : i.phase === 'start' ? t('Starte Ollama …') : t('Lade Ollama herunter …');
-      const sub = i.phase === 'download' && i.totalBytes ? `${fmtBytes(i.completedBytes)} / ${fmtBytes(i.totalBytes)}` : '';
-      return { step, percent: i.phase === 'download' ? i.percent : null, sub, cancel: i.phase === 'download' };
-    }
-    if (ls.phase === 'downloading' && ls.download) {
-      const d = ls.download;
-      const sub = d.totalBytes ? [`${fmtBytes(d.completedBytes)} / ${fmtBytes(d.totalBytes)}`, d.speedBps ? `${fmtBytes(d.speedBps)}/s` : '', fmtEta(d.etaSec)].filter(Boolean).join(' · ') : t('Verbinde …');
-      const verifying = /verifying|writing|success|^ready$|^build$/i.test(d.status || '');
-      if (d.status === 'resuming') return { step: t('Der Download stockte, Buddy setzt ihn fort …'), percent: d.percent, sub: t('Versuch {n} von 3. Schon geladene Teile bleiben erhalten.', { n: d.attempt || 1 }), cancel: true };
-      return { step: verifying ? t('Prüfe {name} …', { name: modelName(d.id) }) : t('Lade {name} herunter …', { name: modelName(d.id) }), percent: verifying ? null : d.percent, sub: verifying ? '' : sub, cancel: !verifying };
-    }
-    if (ls.phase === 'loading' && String(ls.install?.phase || '').startsWith('colibri_')) {
-      const sec = Math.round((ls.install.elapsedMs || 0) / 1000);
-      return { step: t('Colibrì lädt {name} …', { name: modelName(ls.config?.model) }), percent: null, sub: t('Grosse Modelle brauchen dafür einige Minuten ({s} s).', { s: sec }), cancel: true, colibri: true };
-    }
-    if (ls.phase === 'loading') return { step: t('Starte {name} …', { name: modelName(ls.config?.model) }), percent: null, sub: t('Beim ersten Mal kann das einen Moment dauern.'), cancel: false };
-    if (ls.phase === 'checking' || ls.phase === 'starting') return { step: t('Prüfe deinen PC …'), percent: null, sub: '', cancel: false };
-    return null;
-  }
-
-  function paintBar(box, bar, percent) {
-    box.classList.toggle('indeterminate', percent === null || percent === undefined);
-    bar.style.width = percent === null || percent === undefined ? '' : `${Math.max(2, Math.min(100, percent))}%`;
-  }
-
-  // Ersteinrichtung im leeren Island
-  function renderLocalCard() {
-    const ls = state.localState;
-    el.localCard.hidden = false;
-    el.lcError.hidden = true;
-    el.lcConfirm.hidden = true;
-    el.lcProgress.hidden = true;
-    el.lcActions.hidden = false;
-    el.lcHw.textContent = hwLine(ls);
-    const prog = progressInfo(ls);
-    if (!ls || prog) {
-      el.lcName.textContent = '';
-      el.lcMeta.textContent = '';
-      el.lcProgress.hidden = false;
-      el.lcActions.hidden = true;
-      el.connectBtn.hidden = true;
-      el.lcStep.textContent = prog ? prog.step : t('Prüfe deinen PC …');
-      el.lcSub.textContent = prog?.sub || '';
-      el.lcStop.hidden = !prog?.cancel;
-      paintBar(el.lcBarBox, el.lcBar, prog ? prog.percent : null);
-      el.lcNote.textContent = t('Danach läuft Buddy ohne Internet und ohne Kosten direkt auf deinem PC.');
-      return;
-    }
-    el.lcStart.hidden = false;
-    // Schon Modelle in Ollama vorhanden: ohne Download starten
-    const installed = ls.installed || [];
-    const rec = ls.picks?.recommended;
-    const usableInstalled = (ls.picks?.all || []).find((p) => p.installed && p.usable) || (installed[0] ? { id: installed[0].id, name: installed[0].id, installed: true } : null);
-    if (ls.error) {
-      el.lcError.hidden = false;
-      el.lcError.textContent = olError(ls.error);
-    }
-    if (usableInstalled && ls.runtime?.running) {
-      el.lcName.textContent = usableInstalled.name;
-      el.lcMeta.textContent = t('Schon auf deinem PC, kein Download nötig.');
-      el.lcStart.textContent = t('Lokal starten');
-      el.lcStart.dataset.mode = 'use';
-      el.lcStart.dataset.id = usableInstalled.id;
-      el.lcStart.disabled = false;
-    } else if (rec) {
-      const runtimeBytes = ls.runtime?.installed ? 0 : ls.installPlan?.sizeBytes || 0;
-      el.lcName.textContent = `${t('Empfohlen')}: ${rec.name}`;
-      el.lcMeta.textContent = pickMeta(rec);
-      el.lcStart.textContent = ls.runtime?.installed ? t('Herunterladen · {size}', { size: fmtBytes(rec.downloadBytes) }) : t('Einrichten · ca. {size}', { size: fmtBytes(rec.downloadBytes + runtimeBytes) });
-      el.lcStart.dataset.mode = 'pull';
-      el.lcStart.dataset.id = rec.id;
-      el.lcStart.disabled = false;
-    } else if (ls.picks?.nothingFits) {
-      el.lcName.textContent = '';
-      el.lcMeta.textContent = '';
-      el.lcError.hidden = false;
-      el.lcError.textContent = t('Dieser PC hat zu wenig freien Arbeitsspeicher für ein lokales Modell. Verbinde stattdessen einen API-Key.');
-      el.lcStart.hidden = true;
-    } else {
-      el.lcName.textContent = '';
-      el.lcMeta.textContent = ls.offline ? t('Keine Internetverbindung: Buddy kann gerade nicht prüfen, welche Modelle es gibt.') : t('Suche passende Modelle …');
-      el.lcStart.textContent = t('Nochmals prüfen');
-      el.lcStart.dataset.mode = 'retry';
-      el.lcStart.disabled = false;
-    }
-    if (state.localConfirm) {
-      const c = state.localConfirm;
-      el.lcActions.hidden = true;
-      el.lcConfirm.hidden = false;
-      el.lcConfirmText.textContent = c.runtime
-        ? t('Buddy lädt Ollama (die Laufzeit für lokale Modelle) und {name} herunter, zusammen etwa {size}. Das kommt aus dem Internet von ollama.com; danach rechnet alles auf deinem PC.', { name: c.name, size: fmtBytes(c.bytes) })
-        : t('Buddy lädt {name} herunter, etwa {size}. Das kommt aus dem Internet von ollama.com; danach rechnet alles auf deinem PC.', { name: c.name, size: fmtBytes(c.bytes) });
-    }
-    el.lcNote.textContent = ls.runtime?.installed ? t('Ollama ist bereits installiert. Deine Nachrichten bleiben auf diesem PC.') : t('Danach läuft Buddy ohne Internet und ohne Kosten direkt auf deinem PC.');
-  }
-
-  // Ablauf: (Ollama installieren) → Modell laden → Chat. Gefragt wird vorher mit Grösse.
-  function askDownload(id, sourceEl) {
-    const ls = state.localState;
-    const p = (ls?.picks?.all || []).find((x) => x.id === id) || ls?.picks?.recommended;
-    if (!p) return;
-    const runtime = !ls.runtime?.installed;
-    state.localConfirm = { id, name: p.name, bytes: p.downloadBytes + (runtime ? ls.installPlan?.sizeBytes || 0 : 0), runtime, source: sourceEl || 'card' };
-    if (state.localConfirm.source === 'card') renderLocalCard();
-    else fillOllama();
-  }
-
-  async function runLocalSetup(id, activate) {
-    state.localConfirm = null;
-    let ls = state.localState;
-    if (!ls?.runtime?.installed) {
-      const r = await api.localInstallRuntime(activate);
-      if (r?.state) { state.localState = r.state; ls = r.state; }
-      if (!ls?.runtime?.installed || !ls.runtime.running) { renderLocalUi(); return; }
-    }
-    const r = await api.localPull(id, activate);
-    if (r?.state) state.localState = r.state;
-    if (r?.ok === false && r.error) footer(el.olMsg, olError({ code: r.code, model: id }), 'err');
-    state.settings = await api.getSettings();
-    renderLocalUi();
-    render();
-    if (state.settings.hasKey && state.view === 'chat') el.input.focus();
-  }
-
-  el.lcStart.addEventListener('click', async () => {
-    const mode = el.lcStart.dataset.mode;
-    const id = el.lcStart.dataset.id;
-    if (mode === 'retry') { const r = await api.localGet(true); if (r?.state) state.localState = r.state; renderLocalUi(); return; }
-    if (mode === 'use') {
-      el.lcStart.disabled = true;
-      const r = await api.localSelect(id, true);
-      if (r?.state) state.localState = r.state;
-      state.settings = await api.getSettings();
-      renderLocalUi();
-      render();
-      return;
-    }
-    askDownload(id, 'card');
-  });
-  el.lcCancel.addEventListener('click', () => { state.localConfirm = null; renderLocalUi(); });
-  el.lcGo.addEventListener('click', () => { const c = state.localConfirm; if (c) runLocalSetup(c.id, true); });
-  el.lcStop.addEventListener('click', () => {
-    if (state.localState?.download?.runtime === 'colibri' || String(state.localState?.install?.phase || '').startsWith('colibri_')) { api.colibriCancel(); return; }
-    if (state.localState?.phase === 'installing_runtime') api.localCancelInstall();
-    else api.localCancelPull();
-  });
-  el.lcOther.addEventListener('click', async () => {
-    await api.localUse();
-    state.settings = await api.getSettings();
-    open('settings');
-    requestAnimationFrame(() => el.ollamaBox.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  });
-
-  // Einstellungen: Zustand, Empfehlungen, Installierte, Erweitert, Diagnose
-  function pickRow(p, { role, current, installed } = {}) {
-    const row = document.createElement('div');
-    row.className = `reco${current ? ' current' : ''}`;
-    const text = document.createElement('div');
-    text.className = 'reco-text';
-    const b = document.createElement('b');
-    if (role) {
-      const tag = document.createElement('span');
-      tag.className = 'role';
-      tag.textContent = current ? t('Aktiv') : OL_ROLE()[role] || '';
-      b.appendChild(tag);
-    } else if (current) {
-      const tag = document.createElement('span');
-      tag.className = 'role';
-      tag.textContent = t('Aktiv');
-      b.appendChild(tag);
-    }
-    b.appendChild(document.createTextNode(p.name || p.id));
-    const small = document.createElement('small');
-    const good = (p.strengths || []).map((x) => OL_STRENGTH()[x]).filter(Boolean).slice(0, 2);
-    const bad = (p.limits || []).map((x) => OL_LIMIT()[x]).filter(Boolean).slice(0, 2);
-    const lines = installed
-      ? [p.runtime === 'colibri' ? t('läuft mit Colibrì') : fmtBytes(p.sizeBytes || p.downloadBytes), p.speed ? `${OL_SPEED()[p.speed]} ${OL_DEVICE()[p.device] || ''}`.trim() : null, p.usable === false ? t('läuft hier zu langsam') : null]
-      : [pickMeta(p)];
-    small.textContent = lines.filter(Boolean).join(' · ');
-    text.append(b, small);
-    if (good.length || bad.length) {
-      const note = document.createElement('small');
-      note.textContent = [good.length ? `+ ${good.join(', ')}` : '', bad.length ? `− ${bad.join(', ')}` : ''].filter(Boolean).join('   ');
-      text.appendChild(note);
-    }
-    const actions = document.createElement('div');
-    actions.className = 'ol-actions';
-    const ls = state.localState;
-    const busy = ['downloading', 'installing_runtime', 'loading'].includes(ls?.phase);
-    if (installed || p.installed) {
-      if (!current) {
-        const use = document.createElement('button');
-        use.type = 'button';
-        use.className = 'button small';
-        use.textContent = t('Verwenden');
-        use.disabled = busy;
-        use.addEventListener('click', async () => {
-          use.disabled = true;
-          const r = await api.localSelect(p.id, true);
-          if (r?.state) state.localState = r.state;
-          if (!r?.ok) footer(el.olMsg, olError(r?.state?.error || { code: r?.code, model: p.id }), 'err');
-          state.settings = await api.getSettings();
-          renderLocalUi();
-        });
-        actions.appendChild(use);
-      }
-      if (installed && p.runtime === 'colibri') {
-        const note = document.createElement('small');
-        note.className = 'specs-sub';
-        note.textContent = t('in Colibrì');
-        actions.appendChild(note);
-      } else if (installed) {
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 'button small';
-        del.textContent = t('Löschen');
-        del.disabled = busy;
-        del.addEventListener('click', async () => {
-          if (del.dataset.armed !== '1') {
-            del.dataset.armed = '1';
-            del.textContent = t('Wirklich löschen?');
-            setTimeout(() => { del.dataset.armed = ''; del.textContent = t('Löschen'); }, 4000);
-            return;
-          }
-          del.disabled = true;
-          const r = await api.localRemove(p.id);
-          if (r?.state) state.localState = r.state;
-          footer(el.olMsg, r?.ok ? t('{name} gelöscht, {size} frei.', { name: p.name || p.id, size: fmtBytes(p.sizeBytes) }) : olError({ code: r?.code }), r?.ok ? 'ok' : 'err');
-          state.settings = await api.getSettings();
-          renderLocalUi();
-        });
-        actions.appendChild(del);
-      }
-    } else {
-      const dl = document.createElement('button');
-      dl.type = 'button';
-      dl.className = 'button small';
-      const confirming = state.localConfirm?.id === p.id && state.localConfirm.source === 'settings';
-      dl.textContent = confirming ? t('Ja, {size} laden', { size: fmtBytes(state.localConfirm.bytes) }) : t('Laden · {size}', { size: fmtBytes(p.downloadBytes) });
-      if (confirming) dl.classList.add('primary');
-      dl.disabled = busy || p.tooNew;
-      dl.addEventListener('click', () => {
-        if (state.localConfirm?.id === p.id) runLocalSetup(p.id, state.settings?.provider === 'local');
-        else askDownload(p.id, 'settings');
-      });
-      actions.appendChild(dl);
-    }
-    row.append(text, actions);
-    return row;
-  }
-
-  function fillOllama() {
-    const ls = state.localState;
-    if (!ls || el.ollamaBox.hidden) return;
-    const cfg = ls.config || {};
-    const current = cfg.model;
-    // Zustand
-    const phaseText = {
-      checking: t('Prüfe …'), starting: t('Startet …'), needs_runtime: t('Ollama fehlt'), installing_runtime: t('Installiert Ollama …'),
-      needs_model: t('Kein Modell'), downloading: t('Lädt herunter …'), loading: t('Lädt …'), idle: t('Bereit'), ready: t('Bereit'), error: t('Problem'),
-    }[ls.phase] || ls.phase;
-    el.olModelLine.firstChild.nodeValue = current ? modelName(current) : t('Modell');
-    el.olStatusSub.textContent = ls.phase === 'ready' && ls.loaded?.runtime === 'colibri'
-      ? (ls.loaded.backend && ls.loaded.backend !== 'cpu' ? t('läuft mit Colibrì: Grafikkarte, Arbeitsspeicher und SSD') : t('läuft mit Colibrì: Arbeitsspeicher und SSD'))
-      : ls.phase === 'ready' && ls.loaded
-      ? (ls.loaded.device === 'gpu' ? t('läuft auf der Grafikkarte') : ls.loaded.device === 'partial' ? t('{p} % auf der Grafikkarte, Rest auf dem Prozessor', { p: ls.loaded.gpuPercent }) : t('läuft auf dem Prozessor'))
-      : ls.phase === 'idle' ? t('wird beim ersten Satz geladen') : ls.runtime?.version ? `Ollama ${ls.runtime.version}` : '';
-    el.olStatus.textContent = phaseText;
-    el.olStatus.classList.toggle('ok', ls.phase === 'ready' || ls.phase === 'idle');
-    el.olStatus.classList.toggle('bad', ls.phase === 'error');
-    const prog = progressInfo(ls);
-    el.olProgressRow.hidden = !prog || ls.phase === 'checking';
-    if (prog) {
-      el.olProgressText.textContent = prog.step;
-      el.olProgressSub.textContent = prog.sub || '';
-      el.olStop.hidden = !prog.cancel;
-      paintBar(el.olBarBox, el.olBar, prog.percent);
-    }
-    // Nächster Schritt
-    el.olAction.hidden = true;
-    if (ls.phase === 'needs_runtime') {
-      el.olAction.hidden = false;
-      const size = ls.installPlan?.sizeBytes ? ` · ${fmtBytes(ls.installPlan.sizeBytes)}` : '';
-      el.olAction.textContent = ls.installPlan?.automatic === false ? t('Ollama von ollama.com installieren …') : t('Ollama installieren{size}', { size });
-      el.olAction.dataset.action = ls.installPlan?.automatic === false ? 'manual' : 'install';
-    } else if (ls.phase === 'error' && ['runtime_failed', 'unreachable', 'port_in_use'].includes(ls.error?.code)) {
-      el.olAction.hidden = false;
-      el.olAction.textContent = t('Ollama neu starten');
-      el.olAction.dataset.action = 'restart';
-    } else if (ls.phase === 'error' && current) {
-      el.olAction.hidden = false;
-      el.olAction.textContent = t('Nochmals versuchen');
-      el.olAction.dataset.action = 'load';
-    }
-    if (ls.error && !el.olMsg.textContent) footer(el.olMsg, olError(ls.error), 'err');
-    if (!ls.error && el.olMsg.classList.contains('err')) footer(el.olMsg, '');
-    // Kleineres Modell vorschlagen, wenn der Speicher nicht reicht
-    if (ls.error && ['out_of_memory', 'low_ram'].includes(ls.error.code) && ls.picks?.fastest && ls.picks.fastest.id !== current) {
-      footer(el.olMsg, `${olError(ls.error)} ${t('Vorschlag: {name}.', { name: ls.picks.fastest.name })}`, 'err');
-    }
-    // Hardware und Empfehlungen
-    el.olHw.textContent = hwLine(ls) || t('Prüfe die Hardware …');
-    const h = ls.hardware;
-    el.olHwSub.textContent = !h ? '' : [
-      `${h.cpu} · ${h.threads} ${t('Threads')}`,
-      h.avx2 === false ? t('Prozessor ohne AVX2: lokale Modelle laufen hier langsamer') : '',
-      ls.picks?.mode === 'gpu' ? t('Modelle laufen auf der Grafikkarte, solange sie hineinpassen.') : t('Ohne passende Grafikkarte rechnet der Prozessor. Kleine Modelle sind hier am angenehmsten.'),
-      h.diskFreeGB !== null && h.diskFreeGB !== undefined ? t('{gb} GB frei am Speicherort', { gb: h.diskFreeGB }) : '',
-    ].filter(Boolean).join(' · ');
-    el.olPicks.textContent = '';
-    const picks = ls.picks || {};
-    const shown = new Set();
-    for (const role of ['recommended', 'fastest', 'best']) {
-      const p = picks[role];
-      if (!p) continue;
-      shown.add(p.id);
-      el.olPicks.appendChild(pickRow(p, { role, current: p.id === current && p.installed }));
-    }
-    if (!shown.size) {
-      const empty = document.createElement('div');
-      empty.className = 'row';
-      empty.textContent = ls.offline ? t('Keine Internetverbindung: Buddy kann die Modelle gerade nicht prüfen.') : picks.nothingFits ? t('Für diesen PC passt leider kein lokales Modell.') : t('Suche passende Modelle …');
-      el.olPicks.appendChild(empty);
-    }
-    const others = (picks.all || []).filter((p) => !shown.has(p.id) && !p.installed);
-    el.olMore.hidden = !others.length;
-    el.olMoreCount.textContent = others.length ? String(others.length) : '';
-    el.olAll.textContent = '';
-    for (const p of others) el.olAll.appendChild(pickRow(p, {}));
-    // Installiert
-    el.olInstalled.textContent = '';
-    for (const m of ls.installed || []) {
-      const info = (picks.all || []).find((p) => p.id === m.id) || {};
-      el.olInstalled.appendChild(pickRow({ ...info, id: m.id, runtime: m.runtime, name: m.runtime === 'colibri' ? modelName(m.id) : (info.name || m.id), sizeBytes: m.sizeBytes }, { installed: true, current: m.id === current }));
-    }
-    el.olDir.textContent = ls.runtime?.modelsDir || '';
-    // Erweitert
-    const a = cfg.advanced || {};
-    const setVal = (node, v) => { if (document.activeElement !== node) node.value = v === null || v === undefined ? '' : String(v); };
-    setVal(el.olCtx, a.ctx);
-    setVal(el.olGpu, a.gpu || 'auto');
-    setVal(el.olKeep, a.keepAlive || 'auto');
-    setVal(el.olTemp, a.temperature);
-    setVal(el.olTopP, a.topP);
-    setVal(el.olMaxTok, a.maxTokens);
-    setVal(el.olThreads, a.threads);
-    setVal(el.olBatch, a.batch);
-    el.olTools.checked = cfg.tools !== false;
-    el.olRisky.checked = state.settings?.localPermissions?.high === 'ask';
-    el.olUnload.checked = cfg.unloadOnExit !== false;
-    // Kurze Diagnose
-    fillColibri(ls);
-    el.olDiagShort.textContent = ls.perf?.tokensPerSecond ? t('{n} Tokens/s gemessen', { n: ls.perf.tokensPerSecond }) : '';
-    if (el.olDiagBox.open) loadOllamaDiag();
-  }
-
-
-  // ---------- Colibrì (grosse Modelle) ----------
-
-  const COL_REASON = () => ({
-    fits_memory: t('Mit Ollama schneller: passt ganz in den Speicher'),
-    colibri_streams: t('Teile kommen laufend von der SSD: langsam, aber es läuft'),
-    colibri_faster: t('Mit Colibrì schneller: Ollama liefe hier nur auf dem Prozessor'),
-    colibri_preferred: t('Läuft mit Colibrì (deine Wahl)'),
-    colibri_expert_cache: t('Passt nicht ganz in den Speicher: Colibrì lädt Teile bei Bedarf nach'),
-    colibri_not_installed: t('Läuft hier nur mit Colibrì'),
-    needs_ram: t('Zu wenig Arbeitsspeicher'),
-    needs_disk: t('Zu wenig Platz auf dem Laufwerk'),
-  });
-  let colConfirm = null; // { kind: 'install'|'model', id, bytes }
-  let colCatalogAsked = false;
-
-  function colibriWorthShowing(ls) {
-    const c = ls?.colibri;
-    if (!c) return false;
-    if (c.installed || ls.colibriOffer || ls.colibriAuto) return true;
-    const h = ls.hardware;
-    // Nur anbieten, wo es sinnvoll laufen kann: genug Arbeitsspeicher und Platz für ein 19-GB-Modell
-    return Boolean(h && h.ramGB >= 16 && (h.diskFreeGB === null || h.diskFreeGB >= 25));
-  }
-
-  // Angebot «automatisch schneller mit Colibrì» und der Fortschritt der Ein-Klick-Einrichtung
-  let colAutoConfirm = null;
-  function fillColibriOffer(ls) {
-    const o = ls.colibriOffer;
-    const a = ls.colibriAuto;
-    el.colOffer.hidden = !o && !a;
-    if (el.colOffer.hidden) return;
-    if (a) {
-      const steps = { install: t('Installiere Colibrì …'), import: t('Übernimmt die Datei von Ollama (kein neuer Download) …'), setup: t('Richtet Colibrì ein …'), download: t('Lädt das Modell für Colibrì …'), start: t('Startet Colibrì …') };
-      el.colOfferLine.textContent = t('{name} wird auf Colibrì umgestellt', { name: a.name });
-      el.colOfferSub.textContent = a.step === 'error' ? olError(a.error || {}) : steps[a.step] || '';
-      el.colOfferSub.classList.toggle('err', a.step === 'error');
-      el.colOfferBtn.hidden = a.step !== 'error';
-      el.colOfferBtn.textContent = t('Nochmals versuchen');
-      el.colOfferBtn.dataset.id = a.id;
-      return;
-    }
-    el.colOfferSub.classList.remove('err');
-    el.colOfferBtn.hidden = false;
-    el.colOfferBtn.dataset.id = o.id;
-    el.colOfferLine.textContent = t('{name} mit Colibrì', { name: o.name });
-    const program = ls.colibri?.installed ? '' : t('Colibrì-Programm (rund 18 MB)');
-    const model = o.fromOllama ? t('kein neuer Download, Buddy nimmt die Datei von Ollama') : t('{gb} GB Download', { gb: o.downloadGB });
-    el.colOfferSub.textContent = [
-      t('Buddy nutzt für lokale Modelle immer Colibrì, wo es geht. Im Test auf einem PC ohne passende Grafikkarte lud Colibrì dasselbe Modell in 11 statt 91 Sekunden und antwortete gut anderthalbmal so schnell.'),
-      o.note === 'hdd_slow' ? t('Achtung: Der Speicherort liegt auf einer Festplatte (HDD). Colibrì wird damit sehr langsam.') : '',
-      ls.colibri?.python === false || ls.colibri?.plan?.python === false ? t('Für Colibrì braucht es zuerst Python 3.10 oder neuer (python.org oder Microsoft Store).') : '',
-    ].filter(Boolean).join(' ');
-    const confirming = colAutoConfirm === o.id;
-    el.colOfferBtn.classList.toggle('primary', confirming);
-    el.colOfferBtn.textContent = confirming ? t('Ja, einrichten · {what}', { what: [program, model].filter(Boolean).join(' + ') }) : t('Automatisch einrichten …');
-    el.colOfferBtn.disabled = ['downloading', 'loading', 'installing_runtime'].includes(ls.phase);
-  }
-
-  function fillColibri(ls) {
-    const c = ls?.colibri;
-    el.colBox.hidden = !colibriWorthShowing(ls);
-    if (el.colBox.hidden) return;
-    fillColibriOffer(ls);
-    el.colAutoRow.hidden = false;
-    el.colAutoToggle.checked = ls.config?.alwaysColibri !== false && ls.config?.autoRuntime !== false;
-    const busy = c.busy === 'install' || ls.download?.runtime === 'colibri';
-    el.colAction.hidden = true;
-    el.colList.textContent = '';
-    // Fortschritt (Installation oder Modell-Download)
-    const prog = c.busy === 'install' && c.progress ? c.progress : null;
-    el.colProgressRow.hidden = !prog;
-    if (prog) {
-      el.colProgressText.textContent = prog.phase === 'verify' ? t('Prüfe die Prüfsumme …') : prog.phase === 'install' ? t('Entpacke Colibrì …') : t('Lade Colibrì herunter …');
-      paintBar(el.colBarBox, el.colBar, prog.phase === 'download' ? prog.percent : null);
-    }
-    const h = ls.hardware || {};
-    const disk = h.diskMedia === 'hdd' ? t('Achtung: Der Speicherort liegt auf einer Festplatte (HDD). Colibrì wird damit sehr langsam.') : h.diskBus === 'nvme' ? t('Speicherort auf einer NVMe-SSD: gut für Colibrì.') : '';
-    if (!c.installed) {
-      el.colLine.textContent = t('Für Modelle, die nicht in den Speicher passen');
-      el.colSub.textContent = [t('Colibrì liest Teile des Modells bei Bedarf von der SSD. So laufen auch Modelle ab 19 GB, auf PCs ohne passende Grafikkarte sogar schneller als mit Ollama.'), disk].filter(Boolean).join(' ');
-      el.colAction.hidden = busy;
-      const plan = c.plan;
-      if (colConfirm?.kind === 'install' && plan) {
-        el.colAction.textContent = plan.automatic ? t('Ja, Colibrì installieren · {size}', { size: fmtBytes(plan.sizeBytes) }) : t('Anleitung von Colibrì öffnen …');
-        footer(el.colFoot, plan.python === false
-          ? t('Für Colibrì braucht es zuerst Python 3.10 oder neuer (python.org oder Microsoft Store). Danach hier nochmals versuchen.')
-          : plan.automatic ? t('Buddy lädt Colibrì {tag} von GitHub ({size}), prüft die Prüfsumme und entpackt es in Buddys Ordner. Modelle lädst du danach einzeln.', { tag: plan.tag, size: fmtBytes(plan.sizeBytes) })
-            : t('Auf diesem System bitte Colibrì nach der Anleitung installieren. Buddy erkennt es danach automatisch.'), plan.python === false ? 'err' : '');
-        if (plan.python === false) el.colAction.hidden = true;
-      } else {
-        el.colAction.textContent = t('Colibrì einrichten …');
-      }
-      el.colAction.dataset.action = colConfirm?.kind === 'install' && c.plan ? (c.plan.automatic ? 'install' : 'docs') : 'plan';
-      if (c.error) footer(el.colFoot, olError(c.error), 'err');
-      return;
-    }
-    el.colLine.textContent = `Colibrì ${c.version || ''}${c.model ? ` · ${c.model.name}` : ''}`.trim();
-    el.colSub.textContent = [
-      c.python === false ? t('Python 3.10 oder neuer fehlt: Colibrì kann so nicht starten.') : '',
-      c.running ? t('Läuft gerade.') : c.state === 'loading' ? t('Lädt gerade ein Modell.') : '',
-      disk,
-    ].filter(Boolean).join(' ');
-    if (!c.catalog && !colCatalogAsked) {
-      colCatalogAsked = true;
-      api.colibriCatalog().then((r) => { if (r?.state) { state.localState = r.state; fillOllama(); } });
-    }
-    const list = (c.catalog || []).filter((m) => m.fits || m.choice?.runtime === 'ollama');
-    if (!list.length) {
-      const row = document.createElement('div');
-      row.className = 'row';
-      row.textContent = c.catalog ? t('Kein Colibrì-Modell passt auf diesen PC.') : t('Frage Colibrì, welche Modelle hier laufen …');
-      el.colList.appendChild(row);
-    }
-    const current = ls.config?.model;
-    for (const m of list) {
-      const row = document.createElement('div');
-      row.className = `reco${m.id === current ? ' current' : ''}`;
-      const text = document.createElement('div');
-      text.className = 'reco-text';
-      const b = document.createElement('b');
-      if (m.id === current) { const tag = document.createElement('span'); tag.className = 'role'; tag.textContent = t('Aktiv'); b.appendChild(tag); }
-      b.appendChild(document.createTextNode(m.name));
-      const small = document.createElement('small');
-      small.textContent = [m.downloadGB ? `${m.downloadGB} GB ${t('Download')}` : '', m.ramGoodGB ? t('läuft gut ab {gb} GB Arbeitsspeicher', { gb: m.ramGoodGB }) : ''].filter(Boolean).join(' · ');
-      const why = document.createElement('small');
-      why.textContent = COL_REASON()[m.choice?.reason] || '';
-      text.append(b, small, why);
-      const actions = document.createElement('div');
-      actions.className = 'ol-actions';
-      const configured = c.model && `@colibri/${c.model.id}` === m.id;
-      if (m.id !== current) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'button small';
-        const confirming = colConfirm?.kind === 'model' && colConfirm.id === m.id;
-        btn.textContent = configured ? t('Verwenden') : confirming ? t('Ja, {size} laden', { size: `${m.downloadGB} GB` }) : t('Laden · {size}', { size: `${m.downloadGB} GB` });
-        if (confirming) btn.classList.add('primary');
-        btn.disabled = busy || ['downloading', 'loading', 'installing_runtime'].includes(ls.phase) || c.python === false;
-        btn.addEventListener('click', async () => {
-          if (configured) {
-            btn.disabled = true;
-            const r = await api.localSelect(m.id, true);
-            if (r?.state) state.localState = r.state;
-            if (r?.state?.error) footer(el.colFoot, olError(r.state.error), 'err');
-            state.settings = await api.getSettings();
-            renderLocalUi();
-            return;
-          }
-          if (!confirming) {
-            colConfirm = { kind: 'model', id: m.id };
-            footer(el.colFoot, t('{name} ist {size} gross und landet in {dir}. Colibrì lädt es von Hugging Face; ein abgebrochener Download geht beim nächsten Mal weiter.', { name: m.name, size: `${m.downloadGB} GB`, dir: ls.config?.colibriDir || t('Colibrìs Modellordner') }));
-            fillColibri(state.localState);
-            return;
-          }
-          colConfirm = null;
-          footer(el.colFoot, '');
-          const r = await api.colibriSetup(m.id, state.settings?.provider === 'local' || !state.settings?.hasKey);
-          if (r?.state) state.localState = r.state;
-          if (r?.state?.error) footer(el.colFoot, olError(r.state.error), 'err');
-          state.settings = await api.getSettings();
-          renderLocalUi();
-        });
-        actions.appendChild(btn);
-      }
-      row.append(text, actions);
-      el.colList.appendChild(row);
-    }
-    if (c.error) footer(el.colFoot, olError(c.error), 'err');
-  }
-
-  el.colAutoToggle.addEventListener('change', async () => {
-    const r = await api.localConfig({ alwaysColibri: el.colAutoToggle.checked, autoRuntime: el.colAutoToggle.checked });
-    if (r?.state) state.localState = r.state;
-  });
-  el.colOfferBtn.addEventListener('click', async () => {
-    const id = el.colOfferBtn.dataset.id;
-    if (!id) return;
-    const a = state.localState?.colibriAuto;
-    if (colAutoConfirm !== id && !(a && a.step === 'error')) {
-      colAutoConfirm = id; // erster Klick: Grösse zeigen, zweiter Klick: los
-      fillOllama();
-      return;
-    }
-    colAutoConfirm = null;
-    el.colOfferBtn.disabled = true;
-    const r = await api.colibriAuto(id);
-    if (r?.state) state.localState = r.state;
-    fillOllama();
-  });
-  el.colAction.addEventListener('click', async () => {
-    const action = el.colAction.dataset.action;
-    if (action === 'docs') { api.colibriOpenDocs(); return; }
-    if (action === 'plan') {
-      el.colAction.disabled = true;
-      colConfirm = { kind: 'install' };
-      const r = await api.colibriPlan();
-      el.colAction.disabled = false;
-      if (r?.state) state.localState = r.state;
-      fillColibri(state.localState);
-      return;
-    }
-    if (action === 'install') {
-      colConfirm = null;
-      footer(el.colFoot, '');
-      const r = await api.colibriInstall();
-      if (r?.state) state.localState = r.state;
-      colCatalogAsked = false;
-      fillColibri(state.localState);
-    }
-  });
-  el.colStop.addEventListener('click', () => api.colibriCancel());
-
-  function renderLocalUi() {
-    renderEmpty();
-    updateFootnote();
-    if (state.view === 'settings' && state.settings?.provider === 'local') fillOllama();
-  }
-
-  api.onLocalState((ls) => {
-    const before = state.localState?.phase;
-    state.localState = ls;
-    if (state.settings) state.settings.local = ls;
-    renderLocalUi();
-    // Fertig geladen: Status in der Fusszeile und Anbieter-Liste aktualisieren
-    if (before !== ls.phase && ['ready', 'idle', 'needs_model', 'error'].includes(ls.phase)) {
-      api.getSettings().then((s) => { state.settings = s; render(); });
-    }
-  });
-
-  el.olAction.addEventListener('click', async () => {
-    const action = el.olAction.dataset.action;
-    el.olAction.disabled = true;
-    footer(el.olMsg, '');
-    try {
-      if (action === 'install') await runLocalSetupRuntimeOnly();
-      else if (action === 'manual') api.localOpenDownload();
-      else if (action === 'restart') { const r = await api.localRestartRuntime(); if (r?.state) state.localState = r.state; }
-      else if (action === 'load') { const r = await api.localLoad(); if (r?.state) state.localState = r.state; }
-    } finally {
-      el.olAction.disabled = false;
-      renderLocalUi();
-    }
-  });
-  async function runLocalSetupRuntimeOnly() {
-    const r = await api.localInstallRuntime(false);
-    if (r?.state) state.localState = r.state;
-  }
-  el.olStop.addEventListener('click', () => {
-    if (state.localState?.download?.runtime === 'colibri' || String(state.localState?.install?.phase || '').startsWith('colibri_')) { api.colibriCancel(); return; }
-    if (state.localState?.phase === 'installing_runtime') api.localCancelInstall();
-    else api.localCancelPull();
-  });
-  el.olDirBtn.addEventListener('click', async () => {
-    const dir = await api.localPickStorage();
-    if (!dir) return;
-    const n = (state.localState?.installed || []).length;
-    let move = false;
-    if (n) {
-      // Vorhandene Modelle mitnehmen? (Kopieren kann bei grossen Modellen dauern)
-      move = window.confirm(t('{n} Modell(e) liegen am alten Ort. Sollen sie mit in den neuen Ordner? (Bei «Abbrechen» bleiben sie am alten Ort und sind in Buddy nicht mehr sichtbar.)', { n }));
-    }
-    footer(el.olMsg, move ? t('Verschiebe die Modelle …') : t('Speichere …'));
-    const r = await api.localSetStorage(dir, move);
-    if (r?.state) state.localState = r.state;
-    footer(el.olMsg, !r?.ok ? olError({ code: r?.code }) : r.needsRestart ? t('Gespeichert. Ollama läuft schon als eigene App: Starte es unter «Diagnose» neu, damit der neue Ordner gilt.') : t('Gespeichert.'), r?.ok ? 'ok' : 'err');
-    renderLocalUi();
-  });
-  const saveAdvanced = async () => {
-    const num = (node) => (node.value === '' ? null : Number(node.value));
-    const r = await api.localConfig({ advanced: { ctx: num(el.olCtx), gpu: el.olGpu.value, keepAlive: el.olKeep.value, temperature: num(el.olTemp), topP: num(el.olTopP), maxTokens: num(el.olMaxTok), threads: num(el.olThreads), batch: num(el.olBatch) } });
-    if (r?.state) state.localState = r.state;
-    footer(el.olMsg, r?.ok ? t('Gespeichert. Gilt ab der nächsten Nachricht.') : olError({ code: r?.code }), r?.ok ? 'ok' : 'err');
-  };
-  for (const node of [el.olCtx, el.olGpu, el.olKeep, el.olTemp, el.olTopP, el.olMaxTok, el.olThreads, el.olBatch]) node.addEventListener('change', saveAdvanced);
-  el.olTools.addEventListener('change', () => api.localConfig({ tools: el.olTools.checked }).then((r) => { if (r?.state) state.localState = r.state; }));
-  el.olUnload.addEventListener('change', () => api.localConfig({ unloadOnExit: el.olUnload.checked }));
-  el.olRisky.addEventListener('change', async () => {
-    await api.localConfig({ permissions: { high: el.olRisky.checked ? 'ask' : 'block' } });
-    state.settings = await api.getSettings();
-  });
-
-  function diagText(d) {
-    if (!d) return t('Keine Angaben.');
-    const hw = d.hardware || {};
-    const lines = [];
-    lines.push(`${t('System')}: ${hw.os?.name || ''} ${hw.os?.build || ''} (${hw.os?.arch || ''})`);
-    lines.push(`${t('Prozessor')}: ${hw.cpu?.name || '?'} · ${hw.cpu?.cores || '?'} ${t('Kerne')} / ${hw.cpu?.threads || '?'} Threads · AVX2 ${hw.cpu?.avx2 === null ? '?' : hw.cpu?.avx2 ? t('ja') : t('nein')}`);
-    lines.push(`${t('Arbeitsspeicher')}: ${hw.ram?.totalGB} GB, ${hw.ram?.freeGB} GB ${t('frei')}`);
-    for (const g of hw.gpus || []) lines.push(`${t('Grafik')}: ${g.name} · ${g.integrated ? t('integriert') : `${g.vramGB ?? '?'} GB`} · ${t('Treiber')} ${g.driver || '?'} · ${g.backends.join('/') || '–'}${g.notes.length ? ` · ${g.notes.join(', ')}` : ''}`);
-    if (!(hw.gpus || []).length) lines.push(`${t('Grafik')}: ${t('keine erkannt')}`);
-    if (hw.disk) lines.push(`${t('Speicherort')}: ${hw.disk.path} · ${hw.disk.freeGB ?? '?'} GB ${t('frei')}`);
-    if (hw.errors?.length) lines.push(`${t('Erkennung unvollständig')}: ${hw.errors.join(', ')}`);
-    const rt = d.runtime || {};
-    lines.push(`Ollama: ${rt.running ? `${t('läuft')}, ${t('Version')} ${rt.version}` : rt.installed ? t('installiert, läuft nicht') : t('nicht installiert')}${rt.managed ? ` · ${t('von Buddy gestartet')}` : rt.running ? ` · ${t('eigener Dienst')}` : ''} · ${rt.host || ''}`);
-    for (const dev of d.devices || []) lines.push(`${t('Beschleuniger laut Ollama')}: ${dev.library} · ${dev.name}${dev.totalGB ? ` · ${dev.totalGB} GB` : ''}`);
-    for (const m of d.loaded || []) {
-      const share = m.sizeBytes ? Math.round((m.vramBytes / m.sizeBytes) * 100) : 0;
-      lines.push(`${t('Geladen')}: ${m.id} · ${fmtBytes(m.sizeBytes)} · ${share} % ${t('auf der Grafikkarte')}${m.ctx ? ` · ${t('Kontext')} ${m.ctx}` : ''}`);
-    }
-    if (!(d.loaded || []).length) lines.push(`${t('Geladen')}: –`);
-    const p = d.perf;
-    if (p) lines.push(`${t('Gemessen')}: ${[p.loadMs ? `${t('Laden')} ${(p.loadMs / 1000).toFixed(1)} s` : '', p.firstTokenMs ? `${t('erstes Wort')} ${(p.firstTokenMs / 1000).toFixed(2)} s` : '', p.tokensPerSecond ? `${p.tokensPerSecond} Tokens/s` : ''].filter(Boolean).join(' · ') || '–'}`);
-    if (d.error) lines.push(`${t('Letzter Fehler')}: ${d.error.code}${d.error.detail ? ` (${d.error.detail})` : ''}`);
-    lines.push(`${t('Katalog')}: ${d.catalog?.source === 'remote' ? t('aktualisiert') : t('eingebaut')} ${d.catalog?.updated || ''}${d.registryChecked ? ` · ${t('Registry geprüft')} ${new Date(d.registryChecked).toLocaleString(I18N.locale)}` : ''}`);
-    return lines.join('\n');
-  }
-  let lastDiag = null;
-  async function loadOllamaDiag() {
-    try { lastDiag = await api.localDiagnostics(); } catch { lastDiag = null; }
-    el.olDiag.textContent = diagText(lastDiag);
-  }
-  el.olDiagBox.addEventListener('toggle', () => { if (el.olDiagBox.open) loadOllamaDiag(); });
-  el.olDiagCopy.addEventListener('click', async () => {
-    await loadOllamaDiag();
-    const tail = (lastDiag?.log || []).slice(-40).join('\n');
-    copyText(`${diagText(lastDiag)}\n\n--- Ollama-Protokoll (letzte Zeilen) ---\n${tail}`, el.olDiagCopy);
-  });
-  el.olBench.addEventListener('click', async () => {
-    el.olBench.disabled = true;
-    el.olBench.textContent = t('Misst …');
-    const r = await api.localBenchmark();
-    el.olBench.disabled = false;
-    el.olBench.textContent = t('Tempo messen');
-    if (r?.state) state.localState = r.state;
-    if (r?.ok) footer(el.olMsg, t('Gemessen: erstes Wort nach {a} s, {b} Tokens pro Sekunde.', { a: ((r.timings.firstTokenMs || 0) / 1000).toFixed(2), b: r.timings.tokensPerSecond ?? '?' }), 'ok');
-    else footer(el.olMsg, olError(r?.state?.error || { code: r?.code }), 'err');
-    loadOllamaDiag();
-    renderLocalUi();
-  });
-  el.olRestart.addEventListener('click', async () => {
-    const external = state.localState?.runtime?.running && !state.localState?.runtime?.managed;
-    if (external && !window.confirm(t('Ollama läuft als eigene App. Buddy beendet sie und startet Ollama neu. Programme, die gerade Ollama benutzen, werden dabei unterbrochen. Fortfahren?'))) return;
-    el.olRestart.disabled = true;
-    const r = await api.localRestartRuntime();
-    el.olRestart.disabled = false;
-    if (r?.state) state.localState = r.state;
-    footer(el.olMsg, r?.ok ? t('Ollama wurde neu gestartet.') : olError({ code: r?.code }), r?.ok ? 'ok' : 'err');
-    loadOllamaDiag();
-    renderLocalUi();
-  });
-
-  function fillTools() {
-    const d = state.settings?.discovery;
-    el.toolsList.textContent = '';
-    el.toolsList.dataset.empty = d ? t('Keine KI-Tools auf diesem PC gefunden.') : t('Suche läuft …');
-    for (const tool of d?.tools || []) {
-      const row = document.createElement('div');
-      row.className = 'tool-item';
-      const dot = document.createElement('i');
-      const name = document.createElement('span');
-      name.textContent = tool.name;
-      const detail = document.createElement('small');
-      detail.textContent = t(tool.detail || '') || tool.version || (tool.kind === 'app' ? t('App') : tool.kind === 'runtime' ? t('Laufzeit') : t('Kommandozeile'));
-      row.append(dot, name, detail);
-      el.toolsList.appendChild(row);
-    }
-    // Einstellungen für nicht installierte Tools gibt es gar nicht
-    el.usageLocalRow.hidden = !(d?.has?.claude_code || d?.has?.codex);
-    el.usageLocalSettingsToggle.checked = state.settings?.usageLocal !== false;
-  }
-
   function fillLanguage() {
     const s = state.settings;
     el.langSelect.textContent = '';
@@ -2970,11 +1695,8 @@
   }
 
   function fillSettings() {
-    if (typeof renderHealth === "function" && health.groups.size) renderHealth();
     const s = state.settings;
     if (!s) return;
-    fillProvider();
-    fillTools();
     fillLanguage();
     const auto = s.autoModel !== false;
     el.autoToggle.checked = auto;
@@ -2982,17 +1704,7 @@
     el.modelLabel.textContent = auto ? t('Modell (wird gewählt)') : t('Modell');
     el.routeToggle.checked = s.showRouting === true;
     el.fallbackToggle.checked = s.modelFallback !== false;
-    el.routeHint.textContent = auto
-      ? t('Haiku prüft jede Anfrage und nimmt das günstigste Modell, das reicht: Haiku für Einfaches, Sonnet für mehrstufige Aufgaben, Opus nur für sehr Schwieriges. Einzelne Schritte einer Aufgabe können verschiedene Modelle übernehmen. Hakt es, wechselt Buddy selbst auf ein stärkeres Modell.')
-      : t('Buddy nimmt immer das gewählte Modell und wechselt nicht selbst. «Auto» bei der Denktiefe lässt das Modell selbst entscheiden.');
-    el.limitSelect.value = [...el.limitSelect.options].some((o) => Number(o.value) === Number(s.monthlyLimit)) ? String(Number(s.monthlyLimit)) : '5';
-    if (![...el.limitSelect.options].some((o) => Number(o.value) === Number(s.monthlyLimit))) {
-      const opt = document.createElement('option');
-      opt.value = String(s.monthlyLimit);
-      opt.textContent = `$${s.monthlyLimit}`;
-      el.limitSelect.appendChild(opt);
-      el.limitSelect.value = String(s.monthlyLimit);
-    }
+    el.modelShort.textContent = auto ? t('Automatisch') : modelLabel(s.model);
     el.permMedium.value = s.permissions?.medium || 'ask';
     el.permHigh.value = s.permissions?.high || 'ask';
     el.historyToggle.checked = s.historyEnabled !== false;
@@ -3001,7 +1713,6 @@
     el.rollbackBtn.hidden = !s.rollbackVersion;
     if (s.rollbackVersion) el.rollbackBtn.textContent = t('Vorherige Version {v} wiederherstellen', { v: s.rollbackVersion });
     renderStats();
-    el.workspaceInput.value = s.workspaceId || '';
     el.nameInput.value = s.name || '';
     if (document.activeElement !== el.promptInput) el.promptInput.value = s.promptPrefs?.notes || '';
     el.prefLength.value = s.promptPrefs?.length || 'normal';
@@ -3087,161 +1798,6 @@
     }
   }
 
-  // ---------- KI-Nutzung (Dashboard) ----------
-
-  const USAGE_STATUS = { ok: t('Daten'), empty: t('Keine Daten'), unavailable: t('Nicht verfügbar'), setup: t('Einrichten'), error: t('Fehler'), off: t('Aus') };
-  let usageLoading = false;
-
-  async function loadUsage(force) {
-    if (usageLoading) return;
-    usageLoading = true;
-    el.usageRefresh.disabled = true;
-    el.usageUpdated.textContent = t('Lädt …');
-    try {
-      renderUsage(await api.getAiUsage(force));
-    } catch {
-      el.usageUpdated.textContent = t('Konnte nicht geladen werden');
-    } finally {
-      usageLoading = false;
-      el.usageRefresh.disabled = false;
-    }
-    fillUsageConnections();
-  }
-
-  function fillUsageConnections() {
-    const s = state.settings || {};
-    el.adminAnthStatus.textContent = s.hasAnthropicAdmin ? t('Verbunden') : t('Nicht verbunden');
-    el.adminAnthStatus.classList.toggle('ok', Boolean(s.hasAnthropicAdmin));
-    el.adminOaiStatus.textContent = s.hasOpenaiAdmin ? t('Verbunden') : t('Nicht verbunden');
-    el.adminOaiStatus.classList.toggle('ok', Boolean(s.hasOpenaiAdmin));
-    el.usageLocalToggle.checked = s.usageLocal !== false;
-    // Nur zeigen, was es auf diesem PC gibt (nicht installierte Tools komplett ausblenden)
-    const has = s.discovery?.has || {};
-    const keyOf = (id) => Boolean((s.providers || []).find((p) => p.id === id)?.hasKey);
-    $('adminAnthRows').hidden = !(keyOf('anthropic') || s.hasAnthropicAdmin);
-    $('adminOaiRows').hidden = !(keyOf('openai') || s.hasOpenaiAdmin || has.chatgpt_app || has.codex);
-    $('usageLocalUsageRow').hidden = !(has.claude_code || has.codex);
-  }
-
-  const ago = (ts) => {
-    const secs = Math.round((Date.now() - ts) / 1000);
-    if (secs < 60) return t('gerade eben');
-    if (secs < 3600) return t('vor {n} min', { n: Math.round(secs / 60) });
-    if (secs < 86400) return t('vor {n} h', { n: Math.round(secs / 3600) });
-    return new Date(ts).toLocaleDateString(I18N.locale);
-  };
-  const dur = (ms) => (ms < 60000 ? `${Math.max(1, Math.round(ms / 1000))} s` : ms < 3600e3 ? `${Math.round(ms / 60000)} min` : `${(ms / 3600e3).toFixed(1)} h`);
-  const when = (ts) => new Date(ts).toLocaleString(I18N.locale, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-
-  function node(tag, cls, text) {
-    const n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (text !== undefined) n.textContent = text;
-    return n;
-  }
-
-  function renderUsage(report) {
-    el.usageUpdated.textContent = report.cached
-      ? t('Zwischengespeichert, Stand {time}', { time: clock(report.updatedAt) })
-      : t('Live abgefragt: {time}', { time: clock(report.updatedAt) });
-    el.usageCards.textContent = '';
-
-    // Laufende KI-Programme zuerst
-    const live = node('div', 'ucard');
-    const lh = node('div', 'ucard-head');
-    lh.append(node('b', '', t('Läuft gerade')), node('span', `tag ${report.programsError ? 'error' : 'ok'}`, report.programsError ? t('Fehler') : t('Live')));
-    live.appendChild(lh);
-    const items = [...report.programs.map((p) => ({ title: p.name, sub: t('Programm läuft') })), ...report.running.map((r) => ({ title: r.name, sub: r.detail, running: true }))];
-    const box = node('div', 'uact');
-    if (report.programsError) box.appendChild(node('div', 'unote', t('Nicht prüfbar: {e}', { e: report.programsError })));
-    else if (!items.length) box.appendChild(node('div', 'uact-item', t('Keine bekannten KI-Programme oder Agents aktiv.')));
-    for (const it of items) {
-      const i = node('div', `uact-item${it.running ? ' running' : ''}`);
-      i.append(node('b', '', it.title), node('div', '', it.sub));
-      box.appendChild(i);
-    }
-    live.appendChild(box);
-    el.usageCards.appendChild(live);
-
-    // Getrennt nach Art: Abo, API und lokal werden nie zusammengezählt
-    const GROUPS = [
-      ['subscription', t('Abo-Nutzung'), t('Nutzung über deine Abos (Claude, ChatGPT, Grok …), soweit die Anbieter sie herausgeben.')],
-      ['api', t('API-Nutzung'), t('Anfragen, Tokens und Kosten über API-Keys.')],
-      ['local', t('Lokal auf diesem PC'), t('Was lokale Modelle auf deinem PC belegen.')],
-    ];
-    const ordered = [];
-    for (const [cat, title, sub] of GROUPS) {
-      const list = report.providers.filter((p) => (p.category || 'api') === cat);
-      if (!list.length) continue;
-      ordered.push({ header: title, sub }, ...list);
-    }
-    for (const p of ordered) {
-      if (p.header) {
-        const h = node('div', 'ugroup');
-        h.append(node('b', '', p.header), node('small', '', p.sub));
-        el.usageCards.appendChild(h);
-        continue;
-      }
-      const card = node('div', 'ucard');
-      const head = node('div', 'ucard-head');
-      head.append(node('b', '', p.name), node('span', `tag ${p.status}`, t(USAGE_STATUS[p.status] || p.status)));
-      card.appendChild(head);
-      if (p.source) card.appendChild(node('div', 'ucard-src', t('Quelle: {s}', { s: t(p.source) })));
-      if (p.status === 'error') card.appendChild(node('div', 'unote', p.error || t('Fehler beim Abrufen')));
-      for (const m of p.metrics || []) {
-        const row = node('div', `urow ${m.kind}`);
-        row.title = m.hint || (m.kind === 'estimate' ? t('Schätzung') : m.kind === 'measured' ? t('Gemessen') : '');
-        row.append(node('span', '', t(m.label)), node('span', '', t(m.value)));
-        card.appendChild(row);
-      }
-      for (const l of p.limits || []) {
-        const lim = node('div', 'ulimit');
-        const top = node('div', 'ulimit-top');
-        top.append(node('span', '', t(l.label)), node('span', '', l.usedPercent === null ? t('zurückgesetzt') : t('{a} % genutzt · {b} % übrig', { a: l.usedPercent, b: 100 - l.usedPercent })));
-        const bar = node('div', 'budget-bar');
-        const fill = node('i');
-        fill.style.width = `${Math.min(100, l.usedPercent || 0)}%`;
-        if ((l.usedPercent || 0) >= 90) fill.className = 'bad';
-        else if ((l.usedPercent || 0) >= 70) fill.className = 'warn';
-        bar.appendChild(fill);
-        const meta = [l.detail, l.resetsAt ? t('setzt zurück {time}', { time: when(l.resetsAt) }) : null, l.asOf ? t('Stand {time}', { time: ago(l.asOf) }) : null, l.note].filter(Boolean).join(' · ');
-        lim.append(top, bar, node('small', '', meta));
-        card.appendChild(lim);
-      }
-      const notes = [p.note ? t(p.note) : null, p.limitsNote ? `${t('Limits')}: ${t(p.limitsNote)}` : null].filter(Boolean);
-      for (const n of notes) card.appendChild(node('div', 'unote', n));
-      const acts = (p.activity || []).slice(0, 5);
-      if (acts.length) {
-        const list = node('div', 'uact');
-        for (const a of acts) {
-          const i = node('div', `uact-item${a.running ? ' running' : ''}`);
-          i.appendChild(node('b', '', a.title));
-          const meta = [a.project, when(a.end), a.durationMs ? dur(a.durationMs) : null, a.tools?.length ? a.tools.join(', ') : null, a.errors ? t('{n} Fehler', { n: a.errors }) : null].filter(Boolean).join(' · ');
-          i.appendChild(node('div', '', meta));
-          list.appendChild(i);
-        }
-        card.appendChild(list);
-      }
-      card.appendChild(node('div', 'ucard-foot', t('Aktualisiert {time}', { time: clock(p.updatedAt) })));
-      el.usageCards.appendChild(card);
-    }
-  }
-
-  async function saveUsageKey(provider, input) {
-    footer(el.adminMsg, t('Prüfe …'));
-    const result = await api.setUsageKey(provider, input.value);
-    if (!result.ok) { footer(el.adminMsg, result.error, 'err'); return; }
-    input.value = '';
-    state.settings = result.settings;
-    footer(el.adminMsg, 'Gespeichert.', 'ok');
-    if (result.report) renderUsage(result.report);
-    fillUsageConnections();
-  }
-  el.adminAnthSave.addEventListener('click', () => saveUsageKey('anthropicAdmin', el.adminAnthInput));
-  el.adminOaiSave.addEventListener('click', () => saveUsageKey('openaiAdmin', el.adminOaiInput));
-  el.usageRefresh.addEventListener('click', () => loadUsage(true));
-  el.usageLocalToggle.addEventListener('change', async () => { await save({ usageLocal: el.usageLocalToggle.checked }); loadUsage(true); });
-
   // ---------- Kosten und Verlauf ----------
 
   async function loadAiStats() {
@@ -3254,46 +1810,7 @@
   }
 
   function renderStats() {
-    const st = state.stats;
-    if (!st || !st.usage) return;
-    const u = st.usage;
-    const b = u.budget;
-    el.costMonth.textContent = usd(u.totals.cost);
-    const box = el.costBar.closest('.budget');
-    box.classList.remove('ok', 'warn', 'tight', 'blocked', 'none');
-    box.classList.add(b.level);
-    el.costBar.style.width = b.limit ? `${Math.min(100, Math.round(b.ratio * 100))}%` : '0%';
-    el.costNote.textContent = b.limit
-      ? (b.level === 'blocked' ? t('Limit von ${l} erreicht', { l: b.limit.toFixed(2) }) : t('{p} % von ${l} · noch {left}', { p: Math.round(b.ratio * 100), l: b.limit.toFixed(2), left: usd(b.left) }))
-      : t('Kein Limit gesetzt');
-    el.costEstimate.textContent = u.estimate ? `≈ ${usd(u.estimate)}` : '–';
-    el.costSession.textContent = `${usd(u.session.cost)} · ${u.session.requests} ${u.session.requests === 1 ? t('Anfrage') : t('Anfragen')}`;
-    el.costTokens.textContent = t('{a} ein · {b} aus', { a: tokens(u.totals.input + u.totals.cacheWrite + u.totals.cacheRead), b: tokens(u.totals.output) });
-    el.modelUsage.textContent = '';
-    for (const m of u.models) {
-      const row = document.createElement('div');
-      row.className = 'usage-row';
-      const name = document.createElement('span');
-      name.className = 'row-label';
-      name.textContent = m.name;
-      const value = document.createElement('span');
-      value.className = 'row-value';
-      value.textContent = `${m.requests}× · ${usd(m.cost)}`;
-      row.append(name, value);
-      el.modelUsage.appendChild(row);
-    }
-    el.recentCount.textContent = u.recent.length ? String(u.recent.length) : '';
-    el.recentList.textContent = '';
-    for (const r of u.recent) {
-      const row = document.createElement('div');
-      const left = document.createElement('span');
-      left.textContent = `${clock(r.time)} · ${r.purpose} · ${(r.model || '').replace(/^claude-/, '')}`;
-      const right = document.createElement('span');
-      right.textContent = `${tokens(r.input)}/${tokens(r.output)} · ${usd(r.cost)}`;
-      row.append(left, right);
-      el.recentList.appendChild(row);
-    }
-    renderHistoryList(st.history || []);
+    renderHistoryList(state.stats?.history || []);
   }
 
   const TASK_STATUS = { done: t('Erledigt'), partial: t('Teilweise'), error: t('Fehler'), aborted: t('Gestoppt'), stopped: t('Angehalten'), limit: t('Limit erreicht'), running: t('Läuft'), interrupted: t('Unterbrochen') };
@@ -3382,94 +1899,10 @@
     node.textContent = text || '';
   }
 
-  el.keySave.addEventListener('click', async () => {
-    footer(el.keyMsg, t('Prüfe Key …'));
-    el.keySave.disabled = true;
-    const result = await api.setProviderKey(el.providerSelect.value, el.keyInput.value, el.workspaceInput.value);
-    el.keySave.disabled = false;
-    if (!result.ok) {
-      footer(el.keyMsg, result.error, 'err');
-      return;
-    }
-    el.keyInput.value = '';
-    state.settings = result.settings;
-    if (result.models?.length) state.models = result.models;
-    footer(el.keyMsg, `${t('Verbunden. Buddy nutzt jetzt {name}.', { name: (state.settings.providers || []).find((x) => x.id === state.settings.provider)?.name || '' })}${result.notice ? ` ${result.notice}` : ''}`, 'ok');
-    fillSettings();
-    loadModels();
-    renderEmpty();
-  });
-  el.keyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') el.keySave.click(); });
-  el.keyRemove.addEventListener('click', async () => {
-    state.settings = await api.clearProviderKey(el.providerSelect.value);
-    footer(el.keyMsg, '');
-    fillSettings();
-    renderEmpty();
-  });
-
-  el.keyRevoke.addEventListener('click', () => confirmTwice(el.keyRevoke, t('Wirklich? Key wird hier gelöscht'), async () => {
-    state.settings = await api.revokeProviderKey(el.providerSelect.value);
-    footer(el.keyMsg, t('Key gelöscht. Sperre ihn jetzt in der Console des Anbieters (dort beim Key auf «Delete»).'), 'ok');
-    fillSettings();
-    renderEmpty();
-  }));
-  el.providerSelect.addEventListener('change', async () => {
-    footer(el.keyMsg, '');
-    await save({ provider: el.providerSelect.value });
-    state.models = [];
-    fillSettings();
-    loadModels();
-    renderEmpty();
-  });
-
-  // Lokales Modell
-  el.hfSave.addEventListener('click', async () => {
-    footer(el.keyMsg, t('Speichere …'));
-    const token = el.hfTokenInput.value.trim();
-    const result = await api.setLocalModel(el.hfModelInput.value, token ? token : undefined);
-    if (!result.ok) { footer(el.keyMsg, result.error, 'err'); return; }
-    el.hfTokenInput.value = '';
-    state.settings = result.settings;
-    footer(el.keyMsg, t('Gespeichert. Buddy lädt das Modell im Hintergrund.'), 'ok');
-    fillSettings();
-    renderEmpty();
-  });
-  el.hfModelInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') el.hfSave.click(); });
-  el.hfTest.addEventListener('click', async () => {
-    el.hfTest.disabled = true;
-    footer(el.keyMsg, t('Lade und teste das Modell … (beim ersten Mal mit Download, das kann dauern)'));
-    const r = await api.testLocalModel();
-    el.hfTest.disabled = false;
-    if (!r.ok) { footer(el.keyMsg, r.error, 'err'); return; }
-    footer(el.keyMsg, t('Antwort in {s} s ({n} Tokens): «{text}»', { s: r.seconds, n: r.tokens, text: r.text }), 'ok');
-  });
-  async function startSetup() {
-    state.setup = { state: 'running', text: t('Richte die lokale KI ein …') };
-    fillSetup();
-    renderEmpty();
-    const r = await api.setupLocal();
-    if (r && r.ok) state.settings = await api.getSettings();
-    fillSettings();
-    renderEmpty();
-  }
-  el.setupBtn.addEventListener('click', startSetup);
-  el.localBtn.addEventListener('click', startSetup);
-  api.onLocalSetup((st) => {
-    state.setup = st;
-    if (state.view === 'settings') fillSetup();
-    renderEmpty();
-  });
-  api.onLocalStatus((st) => {
-    state.local = st;
-    if (state.settings) state.settings.hfStatus = st;
-    if (state.view === 'settings' && el.localBlock && !el.localBlock.hidden) fillProvider();
-    updateFootnote();
-    if (state.open && !state.history.length) renderEmpty();
-  });
   // ---------- Buddy Cloud: Konto, Guthaben, Käufe ----------
   // Die Oberfläche sieht nie Tokens, nur den Status vom Hauptprozess (window.buddy.cloud).
   const cloudEl = {
-    off: $('cloudOff'), out: $('cloudSignedOut'), in: $('cloudSignedIn'), msg: $('cloudMsg'),
+    off: $('cloudOff'), out: $('cloudSignedOut'), in: $('cloudSignedIn'), msg: $('cloudMsg'), msgIn: $('cloudMsgIn'), googleText: $('cloudGoogleText'),
     google: $('cloudGoogle'), email: $('cloudEmail'), name: $('cloudName'), nameRow: $('cloudNameRow'),
     code: $('cloudCode'), codeRow: $('cloudCodeRow'), password: $('cloudPassword'), passwordRow: $('cloudPasswordRow'),
     submit: $('cloudSubmit'), switchBtn: $('cloudSwitch'), forgot: $('cloudForgot'),
@@ -3504,18 +1937,18 @@
     cloudEl.forgot.hidden = m !== 'login';
     cloudEl.submit.textContent = { login: t('Anmelden'), signup: t('Konto erstellen'), verify: t('Bestätigen'), reset: t('Code senden'), 'reset-confirm': t('Passwort setzen') }[m];
     cloudEl.switchBtn.textContent = m === 'login' ? t('Konto erstellen') : t('Zurück zur Anmeldung');
-    // Bei «verify» und «reset» gibt es nur einen Knopf in der Code-/E-Mail-Zeile
-    if (m === 'verify' || m === 'reset') {
-      const host = m === 'verify' ? cloudEl.codeRow : $('cloudEmailRow');
-      host.appendChild(cloudEl.submit);
-    } else {
-      cloudEl.passwordRow.appendChild(cloudEl.submit);
-    }
+  }
+
+  // Meldungen erscheinen dort, wo man gerade ist (Anmeldeformular oder Kontoübersicht)
+  function cloudFooter(text, kind) {
+    footer(cloud.state?.signedIn ? cloudEl.msgIn : cloudEl.msg, text, kind);
   }
 
   function renderCloud() {
     const s = cloud.state;
     if (!s) return;
+    const wasIn = Boolean(state.cloud?.signedIn);
+    state.cloud = s;
     cloudEl.off.hidden = s.configured;
     cloudEl.out.hidden = !s.configured || s.signedIn;
     cloudEl.in.hidden = !s.signedIn;
@@ -3523,7 +1956,7 @@
     cloudEl.planBox.hidden = !s.signedIn || !cloud.plans.length;
     cloudEl.historyBox.hidden = !s.signedIn;
     cloudEl.google.disabled = cloud.busy;
-    cloudEl.google.textContent = s.googleRunning ? t('Anmeldung im Browser läuft … (abbrechen)') : t('Mit Google fortfahren');
+    cloudEl.googleText.textContent = s.googleRunning ? t('Anmeldung läuft … (abbrechen)') : t('Mit Google anmelden');
     cloudEl.submit.disabled = cloud.busy;
     if (s.signedIn) {
       cloudEl.who.firstChild.nodeValue = s.displayName || s.email || t('Konto');
@@ -3539,7 +1972,9 @@
     } else {
       cloud.loadedFor = null;
     }
-    if (s.error && !cloud.busy) footer(cloudEl.msg, s.error, 'err');
+    if (s.error && !cloud.busy) cloudFooter(s.error, 'err');
+    if (wasIn !== Boolean(s.signedIn)) renderEmpty();
+    if (state.view === 'onboarding') renderOnboarding();
   }
 
   // Abo: Plan anbieten oder laufendes Abo zeigen (verwalten im Stripe-Kundenportal)
@@ -3584,7 +2019,7 @@
       b.append(l, v);
       b.addEventListener('click', async () => {
         b.disabled = true;
-        footer(cloudEl.msg, t('Öffne das Abo im Browser …'));
+        cloudFooter(t('Öffne das Abo im Browser …'));
         await cloudRun(() => api.cloud.subscribe(plan.id), t('Abo im Browser geöffnet. Das Guthaben erscheint, sobald Stripe die erste Zahlung bestätigt hat.'));
         b.disabled = false;
       });
@@ -3608,15 +2043,15 @@
   cloudEl.amount.addEventListener('keydown', (e) => { if (e.key === 'Enter') cloudEl.amountBuy.click(); });
   cloudEl.amountBuy.addEventListener('click', async () => {
     const amount = amountPreview();
-    if (!amount) { footer(cloudEl.msg, t('Bitte gib einen gültigen Betrag ein.'), 'err'); return; }
+    if (!amount) { cloudFooter(t('Bitte gib einen gültigen Betrag ein.'), 'err'); return; }
     cloudEl.amountBuy.disabled = true;
-    footer(cloudEl.msg, t('Öffne die Zahlung im Browser …'));
+    cloudFooter(t('Öffne die Zahlung im Browser …'));
     const r = await api.cloud.buyAmount(amount);
     cloudEl.amountBuy.disabled = false;
-    if (!r.ok) { footer(cloudEl.msg, r.error, 'err'); return; }
+    if (!r.ok) { cloudFooter(r.error, 'err'); return; }
     cloudEl.amount.value = '';
     amountPreview();
-    footer(cloudEl.msg, t('Zahlung für {bc} ({usd}) im Browser geöffnet. Das Guthaben erscheint nach der Bestätigung durch Stripe.', { bc: fmtBc(r.checkout.credits), usd: fmtUsd(r.checkout.amount) }), 'ok');
+    cloudFooter(t('Zahlung für {bc} ({usd}) im Browser geöffnet. Das Guthaben erscheint nach der Bestätigung durch Stripe.', { bc: fmtBc(r.checkout.credits), usd: fmtUsd(r.checkout.amount) }), 'ok');
   });
 
   async function loadCloudExtras() {
@@ -3644,7 +2079,7 @@
       }
       renderCloud();
     } else {
-      footer(cloudEl.msg, o.error, 'err');
+      cloudFooter(o.error, 'err');
     }
     const list = (node, rows, empty, line) => {
       node.textContent = '';
@@ -3672,7 +2107,7 @@
         node.appendChild(r);
       }
     };
-    if (!h.ok) { footer(cloudEl.msg, h.error, 'err'); return; }
+    if (!h.ok) { cloudFooter(h.error, 'err'); return; }
     const usageStatus = { settled: '', partial: t('teilweise'), released: t('abgebrochen'), failed: t('fehlgeschlagen') };
     list(cloudEl.usage, h.history.usage, t('Noch keine Cloud-Anfragen.'), (u) => [
       String(u.model || '').replace(/^gpt-/, 'GPT-').replace(/-/g, ' '),
@@ -3689,11 +2124,11 @@
 
   async function buyPackage(pkg, button) {
     button.disabled = true;
-    footer(cloudEl.msg, t('Öffne die Zahlung im Browser …'));
+    cloudFooter(t('Öffne die Zahlung im Browser …'));
     const r = await api.cloud.buy(pkg.id);
     button.disabled = false;
-    if (!r.ok) { footer(cloudEl.msg, r.error, 'err'); return; }
-    footer(cloudEl.msg, t('Zahlung für {bc} ({usd}) im Browser geöffnet. Das Guthaben erscheint nach der Bestätigung durch Stripe.', { bc: fmtBc(r.checkout.credits), usd: fmtUsd(r.checkout.amount) }), 'ok');
+    if (!r.ok) { cloudFooter(r.error, 'err'); return; }
+    cloudFooter(t('Zahlung für {bc} ({usd}) im Browser geöffnet. Das Guthaben erscheint nach der Bestätigung durch Stripe.', { bc: fmtBc(r.checkout.credits), usd: fmtUsd(r.checkout.amount) }), 'ok');
   }
 
   async function cloudRun(fn, okText) {
@@ -3703,29 +2138,29 @@
     cloud.busy = false;
     if (r?.state) cloud.state = r.state;
     renderCloud();
-    if (!r?.ok) { footer(cloudEl.msg, r?.error || t('Unbekannter Fehler.'), 'err'); return r; }
-    footer(cloudEl.msg, typeof okText === 'function' ? okText(r) : okText || '', okText ? 'ok' : undefined);
+    if (!r?.ok) { cloudFooter(r?.error || t('Unbekannter Fehler.'), 'err'); return r; }
+    cloudFooter(typeof okText === 'function' ? okText(r) : okText || '', okText ? 'ok' : undefined);
     return r;
   }
 
-  cloudEl.switchBtn.addEventListener('click', () => { footer(cloudEl.msg, ''); cloudMode(cloud.mode === 'login' ? 'signup' : 'login'); });
-  cloudEl.forgot.addEventListener('click', () => { footer(cloudEl.msg, t('Gib deine E-Mail ein. Du bekommst einen Code.')); cloudMode('reset'); cloudEl.email.focus(); });
+  cloudEl.switchBtn.addEventListener('click', () => { cloudFooter(''); cloudMode(cloud.mode === 'login' ? 'signup' : 'login'); });
+  cloudEl.forgot.addEventListener('click', () => { cloudFooter(t('Gib deine E-Mail ein. Du bekommst einen Code.')); cloudMode('reset'); cloudEl.email.focus(); });
   cloudEl.google.addEventListener('click', async () => {
     if (cloud.state?.googleRunning) { api.cloud.cancelGoogle(); return; }
-    footer(cloudEl.msg, t('Der Browser öffnet sich. Melde dich dort bei Google an.'));
+    cloudFooter(t('Der Browser öffnet sich. Melde dich dort bei Google an.'));
     await cloudRun(() => api.cloud.google(), t('Angemeldet.'));
   });
   cloudEl.submit.addEventListener('click', async () => {
     const email = cloudEl.email.value.trim();
     const password = cloudEl.password.value;
     const code = cloudEl.code.value.replace(/\s/g, '');
-    if (!email) { footer(cloudEl.msg, t('Bitte gib deine E-Mail ein.'), 'err'); return; }
+    if (!email) { cloudFooter(t('Bitte gib deine E-Mail ein.'), 'err'); return; }
     const m = cloud.mode;
     if (m === 'login') {
       const r = await cloudRun(() => api.cloud.login(email, password), t('Angemeldet.'));
-      if (r?.code === 'email_not_confirmed') { cloudMode('verify'); footer(cloudEl.msg, t('Gib den Code aus der Bestätigungs-Mail ein.')); }
+      if (r?.code === 'email_not_confirmed') { cloudMode('verify'); cloudFooter(t('Gib den Code aus der Bestätigungs-Mail ein.')); }
     } else if (m === 'signup') {
-      if (password.length < 8) { footer(cloudEl.msg, t('Das Passwort braucht mindestens 8 Zeichen.'), 'err'); return; }
+      if (password.length < 8) { cloudFooter(t('Das Passwort braucht mindestens 8 Zeichen.'), 'err'); return; }
       const r = await cloudRun(() => api.cloud.signup(email, password, cloudEl.name.value), (x) => (x.confirmationRequired ? t('Wir haben dir einen Code geschickt. Gib ihn hier ein.') : t('Konto erstellt.')));
       if (r?.ok && r.confirmationRequired) cloudMode('verify');
     } else if (m === 'verify') {
@@ -3735,7 +2170,7 @@
       const r = await cloudRun(() => api.cloud.requestPasswordReset(email), t('Falls es ein Konto gibt, ist ein Code unterwegs. Gib ihn mit dem neuen Passwort ein.'));
       if (r?.ok) cloudMode('reset-confirm');
     } else if (m === 'reset-confirm') {
-      if (password.length < 8) { footer(cloudEl.msg, t('Das Passwort braucht mindestens 8 Zeichen.'), 'err'); return; }
+      if (password.length < 8) { cloudFooter(t('Das Passwort braucht mindestens 8 Zeichen.'), 'err'); return; }
       const r = await cloudRun(() => api.cloud.confirmPasswordReset(email, code, password), t('Neues Passwort gesetzt. Du bist angemeldet.'));
       if (r?.ok) cloudMode('login');
     }
@@ -3743,7 +2178,7 @@
   });
   cloudEl.password.addEventListener('keydown', (e) => { if (e.key === 'Enter') cloudEl.submit.click(); });
   cloudEl.code.addEventListener('keydown', (e) => { if (e.key === 'Enter') cloudEl.submit.click(); });
-  cloudEl.logout.addEventListener('click', () => cloudRun(() => api.cloud.logout(), t('Abgemeldet. Lokale KI funktioniert weiter.')));
+  cloudEl.logout.addEventListener('click', () => cloudRun(() => api.cloud.logout(), t('Abgemeldet.')));
   api.onCloudState((s) => { cloud.state = s; renderCloud(); });
   cloudMode('login');
   api.cloud.state().then((r) => { if (r?.state) { cloud.state = r.state; renderCloud(); } });
@@ -3756,22 +2191,6 @@
     renderEmpty();
     updateFootnote();
   });
-  api.onDiscovery((d) => {
-    if (!state.settings) return;
-    state.settings.discovery = d;
-    if (state.view === 'settings') fillSettings();
-    if (state.view === 'usage') loadUsage(false);
-    renderEmpty();
-  });
-  el.toolsRescan.addEventListener('click', async () => {
-    el.toolsRescan.disabled = true;
-    const d = await api.getDiscovery(true);
-    el.toolsRescan.disabled = false;
-    state.settings.discovery = d;
-    state.specs = null;
-    fillSettings();
-  });
-  el.usageLocalSettingsToggle.addEventListener('change', () => save({ usageLocal: el.usageLocalSettingsToggle.checked }));
   el.langSelect.addEventListener('change', async () => {
     await save({ language: el.langSelect.value });
     // Neu aufbauen, damit alle Texte in der neuen Sprache erscheinen (Chat bleibt erhalten)
@@ -3779,33 +2198,36 @@
   });
   el.visualizerToggle.addEventListener('change', async () => { await save({ visualizer: el.visualizerToggle.checked }); syncVisualizer(); });
 
-  // Bereichs-Navigation in den Einstellungen
-  const catNav = document.querySelector('.cat-nav');
-  let catPinnedUntil = 0;
-  const markCat = (id) => { for (const b of catNav.querySelectorAll('button')) b.classList.toggle('on', b.dataset.cat === id); };
-  catNav?.addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-cat]');
-    if (!b) return;
-    // Gewählten Bereich sofort markieren (der letzte Bereich erreicht beim Scrollen nie ganz den oberen Rand)
-    markCat(b.dataset.cat);
-    catPinnedUntil = performance.now() + 900;
-    document.getElementById(b.dataset.cat)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-  const catObserver = new IntersectionObserver((entries) => {
-    if (performance.now() < catPinnedUntil) return;
-    for (const en of entries) {
-      if (!en.isIntersecting) continue;
-      for (const b of catNav.querySelectorAll('button')) b.classList.toggle('on', b.dataset.cat === en.target.id);
+  // Reiter in den Einstellungen: immer nur ein Bereich sichtbar
+  const tabNav = $('tabNav');
+  function showTab(id) {
+    state.tab = id;
+    for (const b of tabNav.querySelectorAll('button')) {
+      const on = b.dataset.tab === id;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', String(on));
     }
-  }, { root: el.settingsView.querySelector('.settings-scroll'), rootMargin: '0px 0px -75% 0px' });
-  for (const h of el.settingsView.querySelectorAll('.category')) catObserver.observe(h);
+    for (const pane of el.settingsView.querySelectorAll('.pane')) pane.hidden = pane.dataset.pane !== id;
+    $('settingsScroll').scrollTop = 0;
+  }
+  tabNav.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-tab]');
+    if (b) showTab(b.dataset.tab);
+  });
+  showTab('general');
   el.autoToggle.addEventListener('change', async () => { await save({ autoModel: el.autoToggle.checked }); fillSettings(); });
   el.routeToggle.addEventListener('change', async () => { await save({ showRouting: el.routeToggle.checked }); renderHistory(); });
   el.fallbackToggle.addEventListener('change', () => save({ modelFallback: el.fallbackToggle.checked }));
-  el.limitSelect.addEventListener('change', async () => { await save({ monthlyLimit: Number(el.limitSelect.value) }); loadAiStats(); });
   el.permMedium.addEventListener('change', () => save({ permissions: { medium: el.permMedium.value } }));
   el.permHigh.addEventListener('change', () => save({ permissions: { high: el.permHigh.value } }));
   el.historyToggle.addEventListener('change', () => save({ historyEnabled: el.historyToggle.checked }));
+
+  function node(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
 
   // ---------- Gedächtnis ----------
   function renderMemory(list) {
@@ -3844,17 +2266,12 @@
     await api.clearHistory();
     loadAiStats();
   }));
-  el.usageReset.addEventListener('click', () => confirmTwice(el.usageReset, t('Wirklich zurücksetzen?'), async () => {
-    await api.resetUsage();
-    loadAiStats();
-  }));
   el.rollbackBtn.addEventListener('click', () => confirmTwice(el.rollbackBtn, t('Buddy startet danach neu. Nochmals klicken'), async () => {
     el.rollbackBtn.disabled = true;
     const result = await api.rollbackUpdate();
     el.rollbackBtn.disabled = false;
     if (result && !result.ok) el.updateStatus.textContent = result.error || t('Ging nicht');
   }));
-  el.workspaceInput.addEventListener('change', () => save({ workspaceId: el.workspaceInput.value.trim() }));
   el.modelSelect.addEventListener('change', () => save({ model: el.modelSelect.value }));
   el.effortSeg.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
@@ -3936,7 +2353,7 @@
     if (state.open) renderAgenda();
   });
   el.quitBtn.addEventListener('click', () => api.quit());
-  el.connectBtn.addEventListener('click', () => open('settings'));
+  el.connectBtn.addEventListener('click', () => open('account'));
 
   // Tastenkürzel aufnehmen
   const KEY_NAMES = {
@@ -4121,7 +2538,7 @@
   // Kurzbefehle von überall: Auftrag direkt an Buddy schicken
   api.onShortcutPrompt(({ prompt, open: shouldOpen }) => {
     if (!prompt) return;
-    if (!state.settings?.hasKey) { open('settings'); return; }
+    if (!state.settings?.hasKey) { open('account'); return; }
     if (state.stream) { pop(); return; } // Buddy arbeitet schon
     if (shouldOpen && !state.open) open('chat');
     if (state.view !== 'chat') showView('chat');
@@ -4215,7 +2632,7 @@
   el.island.addEventListener('lostpointercapture', () => { if (drag.active) endDrag(null); });
   el.newBtn.addEventListener('click', newChat);
   el.settingsBtn.addEventListener('click', () => showView(state.view === 'settings' ? 'chat' : 'settings'));
-  el.usageBtn.addEventListener('click', () => showView(state.view === 'usage' ? 'chat' : 'usage'));
+  el.accountBtn.addEventListener('click', () => showView(state.view === 'account' ? 'chat' : 'account'));
   el.closeBtn.addEventListener('click', close);
 
   document.addEventListener('keydown', (event) => {
@@ -4243,6 +2660,122 @@
     if (!state.recordingHotkey && !el.messages.querySelector('.confirm')) close();
   });
 
+  // ---------- Einführung (erster Start, unter System › Über Buddy erneut startbar) ----------
+  // Fünf Schritte: Sprache, Anmelden, Tastenkürzel, Berechtigungen, Beispiel-Frage. Jederzeit
+  // überspringbar, nichts ist Pflicht. Das Anmeldeformular ist dasselbe wie in der Kontoansicht:
+  // es wird für die Einführung in den Schritt verschoben und danach zurückgelegt.
+  const OB_STEPS = 5;
+  const OB_KEY = 'buddy.onboarding.step';
+  const ob = {
+    steps: [...el.onboardingView.querySelectorAll('.ob-step')],
+    dots: [...$('obDots').children],
+    host: $('obSigninHost'),
+    home: { parent: cloudEl.out.parentNode, next: cloudEl.out.nextSibling },
+    back: $('obBack'), next: $('obNext'), skip: $('obSkip'),
+  };
+
+  function renderOnboarding() {
+    const i = Math.max(0, Math.min(OB_STEPS - 1, state.onboardingStep || 0));
+    const s = state.settings || {};
+    ob.steps.forEach((step, n) => { step.hidden = n !== i; });
+    ob.dots.forEach((dot, n) => { dot.className = n === i ? 'on' : n < i ? 'done' : ''; });
+    ob.back.hidden = i === 0;
+    ob.skip.hidden = i === OB_STEPS - 1;
+    const signedIn = Boolean(state.cloud?.signedIn);
+    // Beim Anmelden ist «Anmelden» der Hauptknopf; weiter geht es dann auch ohne Konto
+    const later = i === 1 && !signedIn;
+    ob.next.textContent = i === OB_STEPS - 1 ? t('Los geht’s') : later ? t('Später') : t('Weiter');
+    ob.next.classList.toggle('primary', !later);
+    // Letzter Schritt: ohne Konto erst anmelden, sonst Beispiel-Fragen
+    $('obChips').hidden = !signedIn;
+    $('obSigninLater').hidden = signedIn;
+    $('obTryLead').textContent = signedIn ? t('Probier es gleich aus:') : t('Melde dich noch an, dann kann es losgehen.');
+    $('obHello').textContent = t('Hoi, ich bin {name}.', { name: s.name || t('Buddy') });
+    for (const b of $('obLang').querySelectorAll('button')) {
+      const on = b.dataset.value === I18N.lang;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', String(on));
+    }
+    // Schritt 2: Anmelden (das Formular wandert hierher)
+    if (i === 1 && !signedIn) {
+      if (cloudEl.out.parentNode !== ob.host) ob.host.appendChild(cloudEl.out);
+      $('cloudIntro').hidden = true;
+    } else if (cloudEl.out.parentNode === ob.host) {
+      returnSignin();
+    }
+    $('obSignedIn').hidden = !signedIn;
+    if (signedIn) {
+      const who = state.cloud.displayName || state.cloud.email || '';
+      $('obSignedInText').textContent = who ? t('Angemeldet als {who}.', { who }) : t('Angemeldet.');
+    }
+    // Schritt 3: Tastenkürzel als Tastenkappen
+    const keys = $('obHotkey');
+    keys.textContent = '';
+    for (const k of prettyHotkey(s.hotkey || '').split(' + ').filter(Boolean)) keys.appendChild(node('kbd', '', k));
+    const wake = $('obWake');
+    wake.checked = Boolean(s.voiceWake);
+    wake.disabled = s.canControl === false;
+  }
+
+  function returnSignin() {
+    ob.home.parent.insertBefore(cloudEl.out, ob.home.next);
+    $('cloudIntro').hidden = false;
+  }
+
+  function leaveOnboarding() {
+    if (cloudEl.out.parentNode === ob.host) returnSignin();
+    el.island.classList.remove('onboarding');
+  }
+
+  function goOnboarding(step) {
+    state.onboardingStep = Math.max(0, Math.min(OB_STEPS - 1, step));
+    try { localStorage.setItem(OB_KEY, String(state.onboardingStep)); } catch { /* egal */ }
+    renderOnboarding();
+  }
+
+  async function finishOnboarding(prompt) {
+    try { localStorage.removeItem(OB_KEY); } catch { /* egal */ }
+    state.onboardingStep = 0;
+    if (!state.settings?.onboarded || state.settings?.cloudNotice) await save({ onboarded: true, cloudNotice: null });
+    showView('chat');
+    renderEmpty();
+    if (prompt && state.settings?.hasKey) send(prompt);
+  }
+
+  function startOnboarding() {
+    let step = 0;
+    try { step = Number(localStorage.getItem(OB_KEY)) || 0; } catch { step = 0; }
+    state.onboardingStep = step;
+    open('onboarding');
+  }
+
+  ob.next.addEventListener('click', () => {
+    if (state.onboardingStep >= OB_STEPS - 1) finishOnboarding();
+    else goOnboarding(state.onboardingStep + 1);
+  });
+  ob.back.addEventListener('click', () => goOnboarding(state.onboardingStep - 1));
+  ob.skip.addEventListener('click', () => finishOnboarding());
+  $('obLang').addEventListener('click', async (e) => {
+    const b = e.target.closest('button[data-value]');
+    if (!b || b.dataset.value === I18N.lang) return;
+    try { localStorage.setItem(OB_KEY, '0'); } catch { /* egal */ }
+    await save({ language: b.dataset.value });
+    location.reload(); // alle Texte in der neuen Sprache; die Einführung geht beim selben Schritt weiter
+  });
+  $('obWake').addEventListener('change', () => save({ voiceWake: $('obWake').checked }));
+  $('obChips').addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
+    if (chip?.dataset.send) finishOnboarding(chip.dataset.send);
+  });
+  $('obToAccount').addEventListener('click', async () => { await finishOnboarding(); showView('account'); });
+  el.onboardingBtn.addEventListener('click', () => { goOnboarding(0); showView('onboarding'); });
+
+  // Hinweis «Neu: Buddy Cloud» im Chat
+  el.cloudHintDismiss.addEventListener('click', async () => {
+    await save({ cloudNotice: null });
+    renderCloudHint();
+  });
+
   // ---------- Start ----------
 
   (async function init() {
@@ -4262,7 +2795,7 @@
     renderNowPlaying();
     render();
     if (state.settings.hasKey) loadModels();
-    state.localState = state.settings.local || null;
-    api.localGet().then((r) => { if (r?.state) { state.localState = r.state; renderLocalUi(); } }).catch(() => {});
+    renderEmpty();
+    if (!state.settings.onboarded) startOnboarding();
   })();
 })();

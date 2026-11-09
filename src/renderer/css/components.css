@@ -132,7 +132,7 @@
 [data-tip][data-tip-align="end"]:hover::after, [data-tip][data-tip-align="end"]:focus-visible::after { transform: none; }
 
 /* ---------- Eingabefelder ---------- */
-input[type="text"], input[type="password"], input[type="number"], input[type="search"], input[type="url"],
+input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="search"], input[type="url"],
 .settings textarea, .textarea {
   width: 100%;
   min-height: var(--control-md);
@@ -145,9 +145,9 @@ input[type="text"], input[type="password"], input[type="number"], input[type="se
   user-select: text;
   transition: border-color var(--dur-fast) var(--ease-standard), background-color var(--dur-fast) var(--ease-standard);
 }
-input[type="text"]:hover, input[type="password"]:hover, input[type="number"]:hover, input[type="search"]:hover,
+input[type="text"]:hover, input[type="password"]:hover, input[type="email"]:hover, input[type="number"]:hover, input[type="search"]:hover,
 .settings textarea:hover { background: var(--fill-2); }
-input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus, input[type="search"]:focus,
+input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus, input[type="number"]:focus, input[type="search"]:focus,
 .settings textarea:focus, .textarea:focus {
   outline: none;
   border-color: var(--focus-ring);
@@ -700,6 +700,10 @@ input[type="range"]:disabled { opacity: 0.4; }
 /* ---------- Tastenkürzel (Tastenkappe als Knopf) ---------- */
 .hotkey {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
   min-width: 96px;
   min-height: var(--control-sm);
   padding: 0 var(--space-3);
