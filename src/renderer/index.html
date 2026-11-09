@@ -98,7 +98,7 @@
               <button type="button" class="chip" data-send="Stell einen Timer auf 10 Minuten für die Pizza">Timer 10 Min. für die Pizza</button>
               <button type="button" class="chip" data-send="Mach die Musik etwas leiser">Musik leiser</button>
               <button type="button" class="chip" data-send="Öffne den Rechner">Rechner öffnen</button>
-              <button type="button" class="chip" data-send="Öffne den Editor und schreib eine Einkaufsliste für Spaghetti Bolognese hinein">Einkaufsliste im Editor schreiben</button>
+              <button type="button" class="chip" data-send="Schreib mir eine Einkaufsliste für Spaghetti Bolognese">Einkaufsliste schreiben</button>
               <button type="button" class="chip" data-send="Was steht heute in meinem Kalender?">Was steht heute an?</button>
             </div>
             <div class="empty-actions">
@@ -363,21 +363,8 @@
             <!-- Sicherheit -->
             <div class="pane" data-pane="safety" role="tabpanel" hidden>
               <div class="group">
-                <label class="row">
-                  <span class="row-label">Buddy darf den PC steuern</span>
-                  <span class="switch"><input type="checkbox" id="computerToggle"><span></span></span>
-                </label>
-                <label class="row">
-                  <span class="row-label">Vor jeder Aufgabe fragen</span>
-                  <span class="switch"><input type="checkbox" id="confirmToggle"><span></span></span>
-                </label>
-              </div>
-              <p class="footer">Buddy sieht dabei deinen Bildschirm, ein Leuchtrand zeigt das an. Stoppen geht jederzeit mit dem Stopp-Knopf im Island.</p>
-
-              <h3 class="section">Berechtigungen</h3>
-              <div class="group">
                 <div class="row">
-                  <span class="row-label two">Niedriges Risiko<small>Lesen, Programme öffnen, Bildschirmfotos</small></span>
+                  <span class="row-label two">Niedriges Risiko<small>Lesen, Programme öffnen</small></span>
                   <span class="row-value">Erlaubt</span>
                 </div>
                 <label class="row">
@@ -395,7 +382,7 @@
                   </select>
                 </label>
               </div>
-              <p class="footer">Buddy läuft ohne Administratorrechte, löscht nur in den Papierkorb und schaltet Windows-Sicherheitsfunktionen nie ab.</p>
+              <p class="footer">Buddy läuft ohne Administratorrechte, löscht nur in den Papierkorb und schaltet Windows-Sicherheitsfunktionen nie ab. Stoppen geht jederzeit mit dem Stopp-Knopf im Island.</p>
 
               <h3 class="section">Ausführungsverlauf</h3>
               <div class="group">
@@ -473,7 +460,7 @@
                   <summary><span class="row-label">Datenschutz</span></summary>
                   <div class="privacy">
                     <p>Buddy hat keine Werbung und keine Statistiken.</p>
-                    <p><b>An Buddy Cloud</b> geht, was du Buddy schreibst oder sagst, und bei der PC-Steuerung Bildschirmfotos. Buddy Cloud leitet das an OpenAI weiter, um die Antwort zu erzeugen. Abgerechnet wird über dein Konto.</p>
+                    <p><b>An Buddy Cloud</b> geht, was du Buddy schreibst oder sagst. Buddy Cloud leitet das an OpenAI weiter, um die Antwort zu erzeugen. Abgerechnet wird über dein Konto.</p>
                     <p><b>Nur auf deinem PC</b> bleiben: Chatverlauf, Gedächtnis, Mitteilungen, Musik-Infos, Kalender-Link (verschlüsselt) und das Protokoll.</p>
                     <p><b>Updates</b> installiert Buddy nur mit gültiger Signatur.</p>
                   </div>
@@ -566,8 +553,8 @@
             <div class="ob-step" data-step="3" hidden>
               <h2 class="ob-title">Du behältst die Kontrolle</h2>
               <ul class="ob-points">
-                <li><b>PC-Steuerung nur mit Freigabe.</b> Bevor Buddy klickt oder tippt, fragt er dich.</li>
-                <li><b>Leuchtrand.</b> Sieht Buddy deinen Bildschirm, leuchtet der Rand. Sonst nie.</li>
+                <li><b>Riskantes nur mit Freigabe.</b> Bevor Buddy Dateien verschiebt oder etwas löscht, fragt er dich.</li>
+                <li><b>Dein Verlauf bleibt bei dir.</b> Chat, Gedächtnis und Einstellungen liegen auf deinem PC.</li>
                 <li><b>Jederzeit stoppen.</b> Mit dem Stopp-Knopf im Island.</li>
               </ul>
               <p class="footer">Alles lässt sich unter Einstellungen › Sicherheit ändern.</p>

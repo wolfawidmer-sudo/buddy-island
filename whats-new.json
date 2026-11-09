@@ -2,6 +2,27 @@
   "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Für Kundinnen und Kunden geschrieben: Nutzen statt Technik, keine Fachbegriffe.",
   "versions": [
     {
+      "version": "0.13.0",
+      "highlights": [
+        {
+          "title": "Buddy Cloud",
+          "text": "Melde dich mit Google oder E-Mail an und leg los. Bezahlt wird mit Buddy Credits: ab $5 oder mit Buddy Plus für $10 im Monat."
+        },
+        {
+          "title": "Aufgeräumte Einstellungen",
+          "text": "Fünf klare Bereiche statt einer langen Liste. Konto und Guthaben haben einen eigenen Platz oben in der Insel."
+        },
+        {
+          "title": "Einführung beim ersten Start",
+          "text": "Sprache, Anmeldung, Tastenkürzel: Buddy zeigt dir in wenigen Schritten, wie alles geht."
+        },
+        {
+          "title": "Nur noch Buddy Cloud",
+          "text": "Eigene API-Keys und die lokale KI gibt es nicht mehr, gespeicherte Keys werden gelöscht. Die PC-Steuerung mit Maus und Tastatur ist vorerst nicht verfügbar."
+        }
+      ]
+    },
+    {
       "version": "0.12.0",
       "highlights": [
         {

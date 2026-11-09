@@ -713,8 +713,7 @@ function createAgent(deps) {
       if (withComputer && !caps.computerUse) withComputer = false;
       const toolsAllowed = caps.tools;
       if (!caps.computerUse && SCREEN_REQUEST.test(userText) && isComputerAvailable()) {
-        const why = caps.vision ? t('Die PC-Steuerung mit Maus und Tastatur gibt es nur mit Claude.') : t('Dieses Modell kann keine Bildschirmfotos ansehen.');
-        send('chat:notice', { id, text: t('{why} Wechsle in den Einstellungen zu Anthropic Claude, damit Buddy deinen Bildschirm sehen und bedienen kann.', { why }) });
+        send('chat:notice', { id, text: caps.vision ? t('Die PC-Steuerung mit Maus und Tastatur gibt es mit Buddy Cloud noch nicht.') : t('Dieses Modell kann keine Bildschirmfotos ansehen.') });
       }
       task = history.start({ id, title: userText, route: { model: decision.model, effort: decision.effort, reason: decision.reason, source: decision.source } });
       if (decision.routerCost) {

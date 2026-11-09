@@ -64,8 +64,6 @@
     modelSelect: $('modelSelect'),
     effortSeg: $('effortSeg'),
     themeSeg: $('themeSeg'),
-    computerToggle: $('computerToggle'),
-    confirmToggle: $('confirmToggle'),
     notifyToggle: $('notifyToggle'),
     notifyStatus: $('notifyStatus'),
     dndBtn: $('dndBtn'),
@@ -1719,10 +1717,6 @@
     el.prefStyle.value = s.promptPrefs?.style || 'friendly';
     el.soundToggle.checked = Boolean(s.sound);
     el.autostartToggle.checked = Boolean(s.autostart);
-    el.computerToggle.checked = Boolean(s.computerUse);
-    el.computerToggle.disabled = !s.canControl;
-    el.confirmToggle.checked = Boolean(s.confirmControl);
-    el.confirmToggle.disabled = !s.computerUse;
     el.notifyToggle.checked = Boolean(s.notifications);
     const status = s.notifications ? s.notifyStatus : 'Off';
     el.notifyStatus.textContent = NOTIFY_STATUS[status] || status || '–';
@@ -2306,8 +2300,6 @@
     if (el.soundToggle.checked) chime();
   });
   el.autostartToggle.addEventListener('change', () => save({ autostart: el.autostartToggle.checked }));
-  el.computerToggle.addEventListener('change', async () => { await save({ computerUse: el.computerToggle.checked }); fillSettings(); });
-  el.confirmToggle.addEventListener('change', () => save({ confirmControl: el.confirmToggle.checked }));
   el.notifyToggle.addEventListener('change', async () => { await save({ notifications: el.notifyToggle.checked }); fillSettings(); });
   // Direkt zu den Windows-Einstellungen, um die Banner unten rechts auszuschalten
   el.bannerOpen.addEventListener('click', (event) => {

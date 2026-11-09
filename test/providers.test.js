@@ -146,7 +146,7 @@ function sse(chunks, status = 200) {
   assert.ok(client.seen[0].tools.includes('set_timer'));
   assert.ok(!client.seen[0].tools.includes('computer_toolset_20260801'), 'kein Computer-Use-Toolset an OpenAI');
   assert.match(client.seen[0].system, /withComputer=false/);
-  assert.match(a.events.find((e) => e.c === 'chat:notice').p.text, /nur mit Claude/);
+  assert.match(a.events.find((e) => e.c === 'chat:notice').p.text, /PC-Steuerung .* noch nicht/);
 
   // Lokales Modell: keine Werkzeuge, kein Router-Aufruf, Hinweis zur Bildverarbeitung
   client = scripted([[{ type: 'text', text: 'Hallo!' }]]);

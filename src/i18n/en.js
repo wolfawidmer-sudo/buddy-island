@@ -1218,4 +1218,13 @@ module.exports = {
   "Bitte einen Moment warten.": "Please wait a moment.",
   "Buddy läuft nur noch über Buddy Cloud.": "Buddy now runs only on Buddy Cloud.",
   "Nicht angemeldet": "Not signed in",
+  "Lesen, Programme öffnen": "Read, open programs",
+  "Buddy läuft ohne Administratorrechte, löscht nur in den Papierkorb und schaltet Windows-Sicherheitsfunktionen nie ab. Stoppen geht jederzeit mit dem Stopp-Knopf im Island.": "Buddy runs without admin rights, only deletes to the Recycle Bin and never turns off Windows security features. You can stop at any time with the stop button in the island.",
+  "geht, was du Buddy schreibst oder sagst. Buddy Cloud leitet das an OpenAI weiter, um die Antwort zu erzeugen. Abgerechnet wird über dein Konto.": "is what you write or say to Buddy. Buddy Cloud passes this on to OpenAI to create the answer. Billing runs through your account.",
+  "Riskantes nur mit Freigabe.": "Risky things only with your OK.",
+  "Bevor Buddy Dateien verschiebt oder etwas löscht, fragt er dich.": "Buddy asks you before it moves files or deletes anything.",
+  "Dein Verlauf bleibt bei dir.": "Your history stays with you.",
+  "Chat, Gedächtnis und Einstellungen liegen auf deinem PC.": "Chat, memory and settings are stored on your PC.",
+  "Die PC-Steuerung mit Maus und Tastatur gibt es mit Buddy Cloud noch nicht.": "PC control with mouse and keyboard isn't available with Buddy Cloud yet.",
+  "Einkaufsliste schreiben": "Write a shopping list",
 };

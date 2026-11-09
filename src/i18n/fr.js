@@ -1225,4 +1225,13 @@ module.exports = {
   "Bitte einen Moment warten.": "Un instant, s’il te plaît.",
   "Buddy läuft nur noch über Buddy Cloud.": "Buddy fonctionne désormais uniquement avec Buddy Cloud.",
   "Nicht angemeldet": "Non connecté",
+  "Lesen, Programme öffnen": "Lire, ouvrir des programmes",
+  "Buddy läuft ohne Administratorrechte, löscht nur in den Papierkorb und schaltet Windows-Sicherheitsfunktionen nie ab. Stoppen geht jederzeit mit dem Stopp-Knopf im Island.": "Buddy fonctionne sans droits d’administrateur, ne supprime que vers la corbeille et ne désactive jamais les protections de Windows. Tu peux arrêter à tout moment avec le bouton stop de l’island.",
+  "geht, was du Buddy schreibst oder sagst. Buddy Cloud leitet das an OpenAI weiter, um die Antwort zu erzeugen. Abgerechnet wird über dein Konto.": ": ce que tu écris ou dis à Buddy. Buddy Cloud le transmet à OpenAI pour créer la réponse. La facturation passe par ton compte.",
+  "Riskantes nur mit Freigabe.": "Rien de risqué sans ton accord.",
+  "Bevor Buddy Dateien verschiebt oder etwas löscht, fragt er dich.": "Buddy te demande avant de déplacer des fichiers ou de supprimer quoi que ce soit.",
+  "Dein Verlauf bleibt bei dir.": "Ton historique reste chez toi.",
+  "Chat, Gedächtnis und Einstellungen liegen auf deinem PC.": "Le chat, la mémoire et les réglages restent sur ton PC.",
+  "Die PC-Steuerung mit Maus und Tastatur gibt es mit Buddy Cloud noch nicht.": "Le contrôle du PC avec la souris et le clavier n’est pas encore disponible avec Buddy Cloud.",
+  "Einkaufsliste schreiben": "Écrire une liste de courses",
 };
