@@ -25,7 +25,7 @@ Die App läuft auf deinem Windows-PC. Die Antworten kommen über **Buddy Cloud**
 
 ## Sprache
 
-«Hey Buddy» wird auf dem PC erkannt. Fürs Diktat nutzt Buddy die Spracherkennung von Windows; ist dort die Online-Erkennung an, verarbeitet Microsoft das Gesprochene. Vorlesen läuft mit den Windows-Stimmen.
+Das Wakeword («Hey Buddy» oder ein eigenes) wird nur auf dem PC erkannt, mit Vosk (Apache 2.0). Dafür lädt Buddy beim ersten Einschalten einmal die Vosk-Laufzeit von files.pythonhosted.org und ein Sprachmodell von alphacephei.com (beide mit fester Prüfsumme); diese Server sehen dabei nur deine IP-Adresse. Es geht dabei kein Ton aus dem PC. Fürs Diktat nutzt Buddy die Spracherkennung von Windows; ist dort die Online-Erkennung an, verarbeitet Microsoft das Gesprochene. Vorlesen läuft mit den Windows-Stimmen.
 
 ## Kalender
 

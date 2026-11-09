@@ -106,4 +106,63 @@ test('ruhige Bewegung: kein Atmen', () => {
   assert.ok(!island.classList.contains('breath'));
 });
 
-console.log(`\n${n} Tests grün`);
+// ---------- Vosk ----------
+const vosk = require('../src/vosk');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
+
+test('Sprache → Modell', () => {
+  assert.strictEqual(vosk.langFor('de-CH'), 'de');
+  assert.strictEqual(vosk.langFor('en'), 'en');
+  assert.strictEqual(vosk.langFor('fr'), 'fr');
+  assert.strictEqual(vosk.langFor('it'), 'de');
+  for (const m of Object.values(vosk.MODELS)) assert.match(m.sha256, /^[0-9a-f]{64}$/);
+  assert.match(vosk.RUNTIME.sha256, /^[0-9a-f]{64}$/);
+  assert.ok(vosk.RUNTIME.url.startsWith('https://files.pythonhosted.org/'));
+});
+test('Wortliste: Wakeword + Füllwörter, nur sichere Zeichen', () => {
+  for (const lang of ['de', 'en', 'fr']) {
+    const g = vosk.grammarWords(lang, ww.wakePhrases('Hey Kiwi'));
+    assert.ok(g.includes('kiwi') && g.includes('hey'), lang);
+    assert.ok(g.length > 150, `${lang}: genug Füllwörter (${g.length})`);
+    for (const w of g) assert.ok(!/["\\\[\]{}]/.test(w), `kein Sonderzeichen: ${w}`);
+  }
+});
+test('unbekannte Wörter aus der Vosk-Ausgabe', () => {
+  const err = "WARNING (VoskAPI:UpdateGrammarFst():recognizer.cc:308) Ignoring word missing in vocabulary: 'jarvis'\nLOG (x)\n...missing in vocabulary: 'jarvis'";
+  assert.deepStrictEqual(vosk.missingWords(err), ['jarvis']);
+  assert.deepStrictEqual(vosk.missingWords(''), []);
+});
+test('Sprach-Helfer: Vosk-Teil vorhanden, Mikrofon wird fürs Diktat freigegeben', () => {
+  for (const x of ['[string]$grammar', 'BuddyVosk', '[BuddyVosk]::StopMic()', 'StartsWith', 'waveInOpen', 'GetShortPathName']) assert.ok(SCRIPT.includes(x), x);
+});
+
+async function asyncTests() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vosk-'));
+  const body = (buf) => ({ getReader() { let done = false; return { read: async () => (done ? { done: true } : ((done = true), { value: buf, done: false })) }; } });
+  // Falsche Datei: Prüfsumme stimmt nicht → abgelehnt, nichts installiert
+  let unzipped = 0;
+  await assert.rejects(vosk.ensure({ root, lang: 'de', fetchImpl: async () => ({ ok: true, body: body(Buffer.from('gefälscht')) }), unzip: async () => { unzipped++; } }), /Prüfsumme/);
+  assert.strictEqual(unzipped, 0);
+  assert.strictEqual(vosk.installed(root, 'de'), null);
+  n++; console.log('✓ falscher Download wird abgelehnt');
+  // HTTP-Fehler
+  await assert.rejects(vosk.ensure({ root, lang: 'de', fetchImpl: async () => ({ ok: false, status: 404 }), unzip: async () => {} }), /HTTP 404/);
+  n++; console.log('✓ HTTP-Fehler wird gemeldet');
+  // Schon installiert: kein Download
+  const p = vosk.paths(root, 'de');
+  fs.mkdirSync(p.dllDir, { recursive: true }); fs.writeFileSync(path.join(p.dllDir, 'libvosk.dll'), '');
+  fs.mkdirSync(path.join(p.modelDir, 'am'), { recursive: true }); fs.writeFileSync(path.join(p.modelDir, 'am', 'final.mdl'), '');
+  fs.writeFileSync(path.join(root, vosk.RUNTIME.id, '.ok'), ''); fs.writeFileSync(path.join(root, 'model-de', '.ok'), '');
+  let fetched = 0;
+  const got = await vosk.ensure({ root, lang: 'de', fetchImpl: async () => { fetched++; }, unzip: async () => {} });
+  assert.strictEqual(fetched, 0);
+  assert.strictEqual(got.modelDir, p.modelDir);
+  n++; console.log('✓ vorhandenes Modell wird nicht neu geladen');
+  fs.rmSync(root, { recursive: true, force: true });
+  void crypto;
+}
+
+asyncTests().then(() => console.log(`\n${n} Tests grün`)).catch((err) => { console.error(err); process.exit(1); });

@@ -95,6 +95,8 @@
     wakeWordSave: $('wakeWordSave'),
     wakeWordMsg: $('wakeWordMsg'),
     eyesToggle: $('eyesToggle'),
+    wakeEngine: $('wakeEngine'),
+    wakeEngineRow: $('wakeEngineRow'),
     speakToggle: $('speakToggle'),
     voiceStatus: $('voiceStatus'),
     mediaToggle: $('mediaToggle'),
@@ -1440,12 +1442,16 @@
 
   api.onVoice((msg) => {
     switch (msg.kind) {
+      case 'engine':
+        if (state.settings) { state.settings.wakeEngine = { state: msg.state, percent: msg.percent, error: msg.error }; fillWakeEngine(); }
+        return;
       case 'starting':
         voiceCancelled = false;
         setListening(state.listening || 'starting');
         break;
       case 'wake':
         if (state.game.active) return;
+        eyes?.wake();
         voiceCancelled = false;
         pop();
         setListening('listening');
@@ -1747,6 +1753,7 @@
     if (document.activeElement !== el.wakeWordInput) el.wakeWordInput.value = word;
     el.wakeWordInput.disabled = el.wakeWordSave.disabled = !s.canControl;
     el.eyesToggle.checked = s.eyesAlive !== false;
+    fillWakeEngine();
     el.speakToggle.checked = s.speak !== false;
     const v = s.voiceInfo;
     el.voiceStatus.textContent = !s.canControl ? t('Nur unter Windows')
@@ -2339,6 +2346,18 @@
     else api.openNotificationSettings();
   });
   el.wakeToggle.addEventListener('change', () => save({ voiceWake: el.wakeToggle.checked }));
+  // Welche Erkennung hört aufs Wakeword (Vosk offline, Download läuft, Windows als Rückfall)
+  function fillWakeEngine() {
+    const e = state.settings?.wakeEngine;
+    if (!el.wakeEngine) return;
+    el.wakeEngineRow.hidden = !state.settings?.voiceWake || !e;
+    if (!e) return;
+    el.wakeEngine.textContent = e.state === 'vosk' ? t('Vosk · offline')
+      : e.state === 'downloading' ? t('Lädt Sprachmodell … {p} %', { p: e.percent ?? 0 })
+        : e.state === 'fallback' ? [t('Windows-Erkennung'), e.error].filter(Boolean).join(' · ')
+          : t('Windows-Erkennung');
+  }
+
   async function saveWakeWord() {
     const result = await save({ wakeWord: el.wakeWordInput.value });
     if (result.ok) footer(el.wakeWordMsg, t('Gespeichert. Buddy hört jetzt auf «{word}».', { word: result.settings.wakeWord }), 'ok');

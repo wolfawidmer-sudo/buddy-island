@@ -34,6 +34,7 @@ const { createSystemWatcher } = require('./notifications');
 const { createCalendar } = require('./calendar');
 const { createVoice } = require('./voice');
 const wakeword = require('./wakeword');
+const vosk = require('./vosk');
 const { createPerception } = require('./perception');
 const prompt = require('./prompt');
 const authSpecs = require('./llm/auth');
@@ -434,6 +435,7 @@ function publicSettings() {
     mediaOk,
     game,
     voiceInfo: voice?.info() || null,
+    wakeEngine,
     displays: displayList(),
     version: app.getVersion(),
     updateState,
@@ -765,6 +767,7 @@ function applyLanguage() {
   // übersetzte Oberfläche gibt (dann ist die Oberfläche englisch)
   answerLanguage = wanted ? lang : (preferred[0] || lang);
   liveWin()?.webContents.send('i18n', i18n.dictionary());
+  applyWakeEngine(); // Wakeword-Modell passend zur Sprache
   return lang;
 }
 
@@ -1538,6 +1541,53 @@ function setGame(focus) {
   }
 }
 
+// ---------- Wakeword-Erkennung: Vosk (offline) mit Windows-Erkennung als Rückfall ----------
+let wakeEngine = { state: 'windows', percent: null, error: null }; // windows | downloading | vosk | fallback
+let wakeEngineJob = null;
+let voskBlocked = ''; // Wakeword, das Vosk nicht kennt: dafür Windows-Erkennung
+
+function sendWakeEngine(patch) {
+  wakeEngine = { ...wakeEngine, ...patch };
+  liveWin()?.webContents.send('voice', { kind: 'engine', ...wakeEngine });
+}
+
+function unzipWindows(zip, dest) {
+  const { execFile } = require('child_process');
+  const q = (x) => `'${String(x).replace(/'/g, "''")}'`;
+  return new Promise((resolve, reject) => execFile('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command',
+    `Expand-Archive -LiteralPath ${q(zip)} -DestinationPath ${q(dest)} -Force`], { windowsHide: true, timeout: 10 * 60 * 1000 },
+  (err, _o, e) => (err ? reject(new Error(t('Entpacken fehlgeschlagen: {msg}', { msg: String(e || err.message).slice(-200) }))) : resolve())));
+}
+
+// Vosk für die aktuelle Sprache bereitstellen (lädt beim ersten Mal ~60 MB) und einschalten
+function applyWakeEngine() {
+  if (!voice || process.platform !== 'win32' || !settings.voiceWake) return;
+  const word = wakeword.wakeWordOf(settings);
+  if (voskBlocked === word) { voice.setEngine(null); return; }
+  const lang = vosk.langFor(i18n.language());
+  const root = path.join(app.getPath('userData'), 'vosk');
+  const have = vosk.installed(root, lang);
+  if (have) {
+    voice.setEngine({ ...have, lang });
+    sendWakeEngine({ state: 'vosk', percent: null, error: null });
+    return;
+  }
+  if (wakeEngineJob) return;
+  voice.setEngine(null); // bis Vosk bereit ist, hört die Windows-Erkennung
+  sendWakeEngine({ state: 'downloading', percent: 0, error: null });
+  wakeEngineJob = vosk.ensure({
+    root, lang, fetchImpl: (url, init) => net.fetch(url, init), unzip: unzipWindows,
+    onProgress: (pr) => { if (pr.phase === 'download') sendWakeEngine({ state: 'downloading', percent: pr.percent }); },
+  }).then((p) => {
+    log(`Wakeword: Vosk (${lang}) installiert`);
+    if (settings.voiceWake) voice.setEngine({ ...p, lang });
+    sendWakeEngine({ state: 'vosk', percent: null });
+  }).catch((err) => {
+    log(`Wakeword: Vosk nicht verfügbar: ${err.message}`);
+    sendWakeEngine({ state: 'fallback', percent: null, error: err.message });
+  }).finally(() => { wakeEngineJob = null; });
+}
+
 function startListening() {
   if (!voice) return;
   if (process.platform !== 'win32') {
@@ -2132,9 +2182,11 @@ function setupIpc() {
       if (res.ok) {
         settings.wakeWord = res.value;
         voice?.setWakeWord(res.value);
+        if (voskBlocked && voskBlocked !== res.value) { voskBlocked = ''; }
+        applyWakeEngine();
       } else wakeWordError = t(res.error);
     }
-    if ('voiceWake' in patch) voice?.setWake(settings.voiceWake && !game.active);
+    if ('voiceWake' in patch) { voice?.setWake(settings.voiceWake && !game.active); applyWakeEngine(); }
     if ('displayId' in patch) {
       placeWindow();
       fitGlow();
@@ -2788,10 +2840,20 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       log,
       wakeWord: wakeword.wakeWordOf(settings),
       onEvent: (msg) => {
+        if (msg.kind === 'wake-oov') {
+          // Das Sprachmodell kennt ein Wort nicht: für dieses Wakeword die Windows-Erkennung
+          log(`Wakeword: Vosk kennt ${msg.words.join(', ')} nicht, Windows-Erkennung übernimmt`);
+          const word = wakeword.wakeWordOf(settings).toLowerCase();
+          if (msg.words.some((w) => word.split(' ').includes(w))) {
+            voskBlocked = wakeword.wakeWordOf(settings);
+            voice.setEngine(null);
+            sendWakeEngine({ state: 'fallback', error: t('Das Sprachmodell kennt «{words}» nicht.', { words: msg.words.join(', ') }) });
+          }
+        }
         liveWin()?.webContents.send('voice', msg);
       },
     });
-    if (settings.voiceWake) voice.setWake(true);
+    if (settings.voiceWake) { voice.setWake(true); applyWakeEngine(); }
 
     checkUpdateHealth();
     updater = setupUpdater();
