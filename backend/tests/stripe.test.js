@@ -45,13 +45,14 @@ function setup({ paymentStatus = 'paid', existingSub = null, invoiceStatus = 'pa
       supabaseSelect: (table, query) => {
         if (table === 'subscription_plans') return json(200, query.includes(PLAN) ? [{ id: PLAN, name: 'Buddy Plus', price: '10.00', currency: 'usd', monthly_credits: '1000.000000' }] : []);
         if (table === 'subscriptions') return json(200, existingSub ? [existingSub] : []);
+        if (table === 'purchases') return json(200, query.includes('pi_1') ? [{ amount: '10.00' }] : []);
         return json(200, []);
       },
       stripe: (method, path, form, headers) => {
         stripeCalls.push({ method, path, form: Object.fromEntries(form), headers });
         if (method === 'POST' && path === '/v1/checkout/sessions') return json(200, { id: form.get('mode') === 'subscription' ? 'cs_sub_1' : 'cs_test_1', url: 'https://checkout.stripe.com/c/pay/cs_test_1' });
         if (method === 'GET' && path === '/v1/checkout/sessions/cs_test_1') {
-          return json(200, { id: 'cs_test_1', mode: 'payment', payment_status: paymentStatus, amount_total: 1000, currency: 'usd', payment_intent: 'pi_1', metadata: { purchase_id: PURCHASE }, client_reference_id: PURCHASE });
+          return json(200, { id: 'cs_test_1', mode: 'payment', payment_status: paymentStatus, amount_subtotal: 1000, amount_total: 1081, currency: 'usd', payment_intent: 'pi_1', metadata: { purchase_id: PURCHASE }, client_reference_id: PURCHASE });
         }
         if (method === 'GET' && path === '/v1/checkout/sessions/cs_sub_1') return json(200, { id: 'cs_sub_1', mode: 'subscription', subscription: 'sub_1', payment_status: 'paid' });
         if (method === 'GET' && path === '/v1/subscriptions/sub_1') {
@@ -103,7 +104,9 @@ test.describe('Stripe: Pay as you go (USD)', () => {
       assert.equal(s.stripeCalls[0].form['line_items[0][price_data][unit_amount]'], '1234');
       assert.equal(s.stripeCalls[0].form['line_items[0][price_data][product_data][name]'], '1234 Buddy Credits');
       assert.equal(s.stripeCalls[0].form['consent_collection[terms_of_service]'], 'required');
-      assert.match(s.stripeCalls[0].form['custom_text[terms_of_service_acceptance][message]'], /agb\.html.*Widerrufsrecht/s);
+      assert.equal(s.stripeCalls[0].form['managed_payments[enabled]'], 'true');
+      assert.equal(s.stripeCalls[0].form['line_items[0][price_data][product_data][tax_code]'], 'txcd_10105003');
+      assert.equal(Object.keys(s.stripeCalls[0].form).some((k) => k.startsWith('custom_text')), false);
       // zu klein → Meldung aus der Datenbank
       const small = await app.call('POST', '/v1/purchases/checkout', { token: signToken(), body: { amount: '4.99' } });
       assert.equal(small.status, 400);
@@ -156,8 +159,16 @@ test.describe('Stripe: Pay as you go (USD)', () => {
     const s = setup();
     const app = await startApp({ handlers: s.handlers });
     try {
-      await post(app, { id: 'evt_2', type: 'charge.refunded', livemode: false, data: { object: { currency: 'usd', amount_refunded: 450, payment_intent: 'pi_1' } } });
-      assert.deepEqual(s.rpc.at(-1), { name: 'refund_payment', a: { p_payment_id: 'pi_1', p_refunded_total: '4.50' } });
+      // Teil-Rückerstattung inkl. MWST (Brutto $10.81): netto anteilig
+      await post(app, { id: 'evt_2', type: 'charge.refunded', livemode: false, data: { object: { currency: 'usd', amount: 1081, amount_refunded: 540, payment_intent: 'pi_1' } } });
+      assert.deepEqual(s.rpc.at(-1), { name: 'refund_payment', a: { p_payment_id: 'pi_1', p_refunded_total: '5.00' } });
+      // Voll zurück: genau der Nettopreis
+      await post(app, { id: 'evt_2b', type: 'charge.refunded', livemode: false, data: { object: { currency: 'usd', amount: 1081, amount_refunded: 1081, payment_intent: 'pi_1' } } });
+      assert.deepEqual(s.rpc.at(-1), { name: 'refund_payment', a: { p_payment_id: 'pi_1', p_refunded_total: '10.00' } });
+      // Abo-Rechnung (kein Einzelkauf) → ignoriert, nichts abgezogen
+      const before = s.rpc.length;
+      await post(app, { id: 'evt_2c', type: 'charge.refunded', livemode: false, data: { object: { currency: 'usd', amount: 1081, amount_refunded: 1081, payment_intent: 'pi_sub' } } });
+      assert.equal(s.rpc.length, before);
       await post(app, { id: 'evt_3', type: 'checkout.session.expired', livemode: false, data: { object: { id: 'cs_test_1', mode: 'payment' } } });
       assert.deepEqual(s.rpc.at(-1), { name: 'mark_purchase', a: { p_checkout_id: 'cs_test_1', p_status: 'expired' } });
     } finally { await app.close(); }
@@ -179,7 +190,8 @@ test.describe('Stripe: Abo mit Monats-Credits', () => {
       assert.equal(f['subscription_data[metadata][user_id]'], USER_A);
       assert.equal(f['subscription_data[metadata][plan_id]'], PLAN);
       assert.equal(f['consent_collection[terms_of_service]'], 'required');
-      assert.match(f['custom_text[terms_of_service_acceptance][message]'], /agb\.html.*Widerrufsrecht/s);
+      assert.equal(f['managed_payments[enabled]'], 'true');
+      assert.equal(f['line_items[0][price_data][product_data][tax_code]'], 'txcd_10105003');
       assert.equal(r.data.plan.monthlyCredits, '1000.000000');
       // unbekannter Plan
       assert.equal((await app.call('POST', '/v1/subscription/checkout', { token: signToken(), body: { planId: PACKAGE } })).status, 404);

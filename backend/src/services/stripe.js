@@ -80,16 +80,14 @@ function createStripeService({ config, supabase, logger, fetchImpl = globalThis.
     return data;
   }
 
-  // AGB-Häkchen im Checkout. Die AGB-URL ist im Stripe-Dashboard hinterlegt (Öffentliche Daten).
-  // Der Text deckt den Verzicht auf das EU-Widerrufsrecht bei digitalen Inhalten ab.
-  const TERMS = {
+  // Managed Payments: Stripe ist rechtlicher Verkäufer und rechnet die MWST weltweit ab.
+  // Steuer-Code: KI-Dienst aus der Cloud mit installierter App, private Nutzung.
+  // Stripe erlaubt dabei keinen eigenen Checkout-Text (custom_text). Das AGB-Häkchen bleibt;
+  // die AGB-URL ist im Stripe-Dashboard hinterlegt (Öffentliche Daten).
+  const TAX_CODE = 'txcd_10105003';
+  const SELLING = {
+    managed_payments: { enabled: true },
     consent_collection: { terms_of_service: 'required' },
-    custom_text: {
-      terms_of_service_acceptance: {
-        message: 'Ich akzeptiere die [AGB](https://buddy-island.top/agb.html) und die [Datenschutzerklärung](https://buddy-island.top/privacy.html). '
-          + 'Ich will, dass Buddy Island sofort liefert, und weiss, dass ich damit mein Widerrufsrecht verliere. Es gibt keine Rückerstattung.',
-      },
-    },
   };
 
   // ---------------- Pay as you go ----------------
@@ -113,12 +111,12 @@ function createStripeService({ config, supabase, logger, fetchImpl = globalThis.
         price_data: {
           currency: CURRENCY,
           unit_amount: dollarsToCents(purchase.amount),
-          product_data: { name: `${trimCredits(purchase.credits_purchased)} Buddy Credits` },
+          product_data: { name: `${trimCredits(purchase.credits_purchased)} Buddy Credits`, tax_code: TAX_CODE },
         },
       }],
       metadata: { purchase_id: purchase.id, kind: 'credits' },
       payment_intent_data: { metadata: { purchase_id: purchase.id } },
-      ...TERMS,
+      ...SELLING,
       success_url: sc.successUrl,
       cancel_url: sc.cancelUrl,
     }, `checkout-${purchase.id}`);
@@ -137,7 +135,8 @@ function createStripeService({ config, supabase, logger, fetchImpl = globalThis.
       p_purchase_id: purchaseId,
       p_checkout_id: s.id,
       p_payment_id: idOf(s.payment_intent),
-      p_amount: centsToDollars(s.amount_total),
+      // Ohne MWST: Credits gibt es für den Nettopreis. Die Steuer behält Stripe für die Behörden.
+      p_amount: centsToDollars(s.amount_subtotal ?? s.amount_total),
       p_currency: s.currency,
     });
     logger.info('purchase_completed', { purchaseId: p.id, status: p.status });
@@ -175,12 +174,12 @@ function createStripeService({ config, supabase, logger, fetchImpl = globalThis.
           currency: CURRENCY,
           unit_amount: dollarsToCents(p.price),
           recurring: { interval: 'month' },
-          product_data: { name: `${p.name} (${trimCredits(p.monthly_credits)} Buddy Credits pro Monat)` },
+          product_data: { name: `${p.name} (${trimCredits(p.monthly_credits)} Buddy Credits pro Monat)`, tax_code: TAX_CODE },
         },
       }],
       metadata: { kind: 'subscription', user_id: user.id, plan_id: p.id },
       subscription_data: { metadata: { user_id: user.id, plan_id: p.id } },
-      ...TERMS,
+      ...SELLING,
       success_url: sc.successUrl,
       cancel_url: sc.cancelUrl,
     });
@@ -279,7 +278,14 @@ function createStripeService({ config, supabase, logger, fetchImpl = globalThis.
       case 'charge.refunded': {
         if (String(obj.currency).toLowerCase() !== CURRENCY || !obj.payment_intent) return 'ignored';
         try {
-          const p = await supabase.rpc('refund_payment', { p_payment_id: idOf(obj.payment_intent), p_refunded_total: centsToDollars(obj.amount_refunded) });
+          const paymentId = idOf(obj.payment_intent);
+          const rows = await supabase.select('purchases', `provider_payment_id=eq.${encodeURIComponent(paymentId)}&select=amount`);
+          if (!rows[0]) return 'ignored'; // Abo-Rechnung: Abo-Credits laufen mit der Periode aus
+          // Stripe erstattet inkl. MWST. Den Nettoanteil rechnen wir im gleichen Verhältnis zurück.
+          const net = dollarsToCents(rows[0].amount);
+          const gross = Number(obj.amount) > 0 ? Number(obj.amount) : net;
+          const refundedNet = Math.min(net, Math.round((net * Number(obj.amount_refunded)) / gross));
+          const p = await supabase.rpc('refund_payment', { p_payment_id: paymentId, p_refunded_total: centsToDollars(refundedNet) });
           logger.info('purchase_refunded', { purchaseId: p.id, status: p.status });
           return p.status;
         } catch (err) {
