@@ -29,7 +29,8 @@ const DB_CODES = {
   purchase_not_found: [404, 'Kauf nicht gefunden.'],
   package_not_found: [404, 'Dieses Paket gibt es nicht.'],
   amount_mismatch: [400, 'Betrag stimmt nicht.'],
-  invalid_amount: [400, 'Ungültiger Betrag.'],
+  invalid_amount: [400, 'Ungültiger Betrag. Möglich sind $5 bis $500, auf den Cent genau.'],
+  invalid_subscription: [400, 'Ungültiges Abo.'],
   invalid_status: [400, 'Ungültiger Status.'],
   immutable_record: [409, 'Buchungen können nicht geändert werden.'],
 };
