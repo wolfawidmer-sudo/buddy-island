@@ -20,4 +20,4 @@ jobs:
       - run: npm ci
       - run: npm test
       - name: Syntax prüfen
-        run: for f in src/*.js src/renderer/*.js src/glow/*.js scripts/*.js; do node --check "$f"; done
+        run: for f in src/*.js src/renderer/*.js src/glow/*.js scripts/*.js scripts/lib/*.js; do node --check "$f"; done
