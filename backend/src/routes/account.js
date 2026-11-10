@@ -5,10 +5,11 @@ const { sendJson } = require('../lib/http');
 const { body, limitParam } = require('../middleware/validation');
 const { rateLimit, byUser } = require('../middleware/rate-limit');
 
-/** @param {{ router: any, wallet: any, stripe: any, requireAuth: any }} deps */
-function accountRoutes({ router, wallet, stripe, requireAuth }) {
+/** @param {{ router: any, wallet: any, welcome: any, stripe: any, requireAuth: any }} deps */
+function accountRoutes({ router, wallet, welcome, stripe, requireAuth }) {
   const read = rateLimit({ name: 'read', capacity: 60, refillPerSec: 1, key: byUser });
   const checkout = rateLimit({ name: 'checkout', capacity: 5, refillPerSec: 5 / 60, key: byUser });
+  const welcomeLimit = rateLimit({ name: 'welcome', capacity: 3, refillPerSec: 3 / 3600, key: byUser });
 
   // Profil + Guthaben in einem Aufruf (Start der App)
   router.get('/v1/me', requireAuth, read, async (req, res) => {
@@ -34,6 +35,13 @@ function accountRoutes({ router, wallet, stripe, requireAuth }) {
 
   router.get('/v1/purchases', requireAuth, read, async (req, res) => {
     sendJson(res, 200, { purchases: await wallet.purchases(req.user.id, limitParam(req)) });
+  });
+
+  // Startguthaben (einmal pro Konto, E-Mail und PC). Die App fragt nach der Anmeldung einmal nach.
+  router.post('/v1/welcome-credits', requireAuth, welcomeLimit, body({
+    deviceId: { type: 'string', required: true, pattern: /^[a-f0-9]{64}$/i },
+  }), async (req, res) => {
+    sendJson(res, 200, { welcome: await welcome.claim(req.user, req.body.deviceId, req.ip), wallet: await wallet.wallet(req.user.id) });
   });
 
   // Pakete sind öffentlich (Preis in CHF und Credits sichtbar vor dem Kauf)
@@ -68,7 +76,7 @@ function accountRoutes({ router, wallet, stripe, requireAuth }) {
     sendJson(res, 201, await stripe.createPortal(req.user));
   });
 
-  return { limits: [read, checkout] };
+  return { limits: [read, checkout, welcomeLimit] };
 }
 
 module.exports = { accountRoutes };

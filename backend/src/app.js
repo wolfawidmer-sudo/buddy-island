@@ -8,6 +8,7 @@ const { createTokenVerifier, requireAuth } = require('./middleware/authenticatio
 const { createSupabase } = require('./services/supabase');
 const { createAuthService } = require('./services/authentication');
 const { createWalletService } = require('./services/wallet');
+const { createWelcomeService } = require('./services/welcome');
 const { createBillingService } = require('./services/billing');
 const { createOpenAiGateway } = require('./services/openai');
 const { createStripeService } = require('./services/stripe');
@@ -25,6 +26,7 @@ function createApp({ config, logger, fetchImpl = globalThis.fetch, now = Date.no
   const verifier = createTokenVerifier({ supabaseUrl: config.supabase.url, jwtSecret: config.supabase.jwtSecret, fetchImpl, now });
   const auth = createAuthService({ supabase, google: config.google, fetchImpl, logger, now });
   const wallet = createWalletService({ supabase });
+  const welcome = createWelcomeService({ supabase, config, logger });
   const billing = createBillingService({ supabase, logger, now });
   const gateway = createOpenAiGateway({ config, billing, logger, fetchImpl });
   const stripe = createStripeService({ config, supabase, logger, fetchImpl });
@@ -37,7 +39,7 @@ function createApp({ config, logger, fetchImpl = globalThis.fetch, now = Date.no
 
   const limits = [
     ...authRoutes({ router, auth, requireAuth: authMw }).limits,
-    ...accountRoutes({ router, wallet, stripe, requireAuth: authMw }).limits,
+    ...accountRoutes({ router, wallet, welcome, stripe, requireAuth: authMw }).limits,
     ...cloudRoutes({ router, gateway, billing, requireAuth: authMw }).limits,
   ];
   webhookRoutes({ router, stripe, logger });

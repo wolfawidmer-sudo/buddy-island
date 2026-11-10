@@ -59,6 +59,15 @@ function load() {
       cancelUrl: str('STRIPE_CANCEL_URL', 'https://buddy-island.top/kauf/abgebrochen'),
     },
 
+    // Startguthaben für neue Konten (einmal pro Person/PC). 0 = aus.
+    welcome: {
+      credits: int('WELCOME_CREDITS', 50),
+      // Höchstens so viele Startguthaben pro IP-Adresse und Tag
+      ipDailyLimit: int('WELCOME_IP_DAILY_LIMIT', 3),
+      // Schlüssel für die HMAC-Werte; leer = abgeleitet vom Supabase-Secret
+      hashSecret: str('WELCOME_HASH_SECRET', ''),
+    },
+
     limits: {
       bodyBytes: int('MAX_BODY_BYTES', 20 * 1024 * 1024),
     },
