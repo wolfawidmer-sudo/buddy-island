@@ -1,16 +1,22 @@
 name: Store-Paket
 
-# Baut das MSIX/AppX-Paket für den Microsoft Store. Veröffentlicht nichts:
-# Die Datei liegt danach im Lauf unter «Artifacts» und wird von Hand in Partner Center hochgeladen.
-# Nicht signiert – Partner Center signiert das Paket beim Einreichen selbst.
+# Baut das MSIX/AppX-Paket für den Microsoft Store und prüft es auf echtem Windows:
+# installieren, starten, Autostart-Aufgabe abfragen, Windows App Certification Kit (WACK).
+# Veröffentlicht nichts. Das Paket für Partner Center liegt unter «Artifacts» (BuddyIsland-Store),
+# NICHT signiert – Partner Center signiert beim Einreichen selbst.
+# Für den Test wird eine Kopie mit einem Wegwerf-Zertifikat signiert und nur auf dem Runner installiert.
 #
-# Einmalig einrichten (Settings › Secrets and variables › Actions › Variables):
-#   STORE_IDENTITY_NAME   = Package/Identity/Name            (Partner Center › Product identity)
+# Einrichten (Settings › Secrets and variables › Actions › Variables), Werte aus
+# Partner Center › Product management › Product identity:
+#   STORE_IDENTITY_NAME   = Package/Identity/Name
 #   STORE_PUBLISHER       = Package/Identity/Publisher        (beginnt mit CN=)
 #   STORE_PUBLISHER_NAME  = Package/Properties/PublisherDisplayName
+# Ohne diese Werte baut der Lauf mit Test-Werten (nur zum Prüfen, nicht hochladbar).
 
 on:
   workflow_dispatch:
+  push:
+    branches: [microsoft-store]
 
 permissions:
   contents: read
@@ -18,6 +24,11 @@ permissions:
 jobs:
   appx:
     runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME || 'BuddyIsland.Test' }}
+      STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER || 'CN=BuddyIslandTest' }}
+      STORE_PUBLISHER_NAME: ${{ vars.STORE_PUBLISHER_NAME || 'Buddy Island Test' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,32 +37,122 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Hinweis Test-Identität
+        if: ${{ !vars.STORE_IDENTITY_NAME }}
+        run: echo "::warning::Repo-Variablen STORE_* fehlen – gebaut mit Test-Identität. Dieses Paket kann nicht in Partner Center hochgeladen werden."
       - name: Store-Paket bauen
-        env:
-          STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
-          STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER }}
-          STORE_PUBLISHER_NAME: ${{ vars.STORE_PUBLISHER_NAME }}
         run: npm run dist:store
-      - name: Manifest anzeigen und prüfen
+
+      - name: Paketinhalt prüfen
         shell: pwsh
         run: |
           $appx = Get-ChildItem dist -Filter *.appx | Select-Object -First 1
           if (-not $appx) { throw 'Kein .appx gebaut' }
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::OpenRead($appx.FullName)
+          $names = @($zip.Entries.FullName)
           $entry = $zip.Entries | Where-Object FullName -eq 'AppxManifest.xml'
           $xml = (New-Object System.IO.StreamReader($entry.Open())).ReadToEnd()
-          $names = $zip.Entries.FullName
           $zip.Dispose()
           Write-Output $xml
-          if ($xml -notmatch 'BuddyIslandStartup') { throw 'StartupTask fehlt im Manifest' }
-          if ($xml -notmatch 'microphone') { throw 'Mikrofon fehlt im Manifest' }
-          if (-not ($names -match 'resources\\vosk\\libvosk.dll|resources/vosk/libvosk.dll')) { throw 'libvosk.dll fehlt im Paket' }
-          if ($names -match 'app-update.yml') { throw 'app-update.yml darf nicht im Store-Paket sein' }
-          "{0:N1} MB" -f ($appx.Length / 1MB)
+          foreach ($need in 'BuddyIslandStartup', 'microphone', 'userNotificationListener', 'runFullTrust') {
+            if ($xml -notmatch $need) { throw "$need fehlt im Manifest" }
+          }
+          if (-not ($names | Where-Object { $_ -match 'resources[\\/]vosk[\\/]libvosk\.dll' })) { throw 'libvosk.dll fehlt im Paket' }
+          if ($names | Where-Object { $_ -match 'app-update\.yml' }) { throw 'app-update.yml darf nicht im Store-Paket sein' }
+          if ($names | Where-Object { $_ -match 'assets[\\/]appx' -and $_ -match 'app\.asar' }) { throw 'Kachelbilder in app.asar' }
+          "Paket: {0} ({1:N1} MB, {2} Dateien)" -f $appx.Name, ($appx.Length / 1MB), $names.Count
+          "APPX=$($appx.FullName)" >> $env:GITHUB_ENV
+
       - uses: actions/upload-artifact@v4
         with:
           name: BuddyIsland-Store
           path: dist/*.appx
           retention-days: 30
           if-no-files-found: error
+
+      - name: Testkopie signieren und installieren
+        shell: pwsh
+        run: |
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw 'signtool fehlt' }
+          $cert = New-SelfSignedCertificate -Type Custom -Subject $env:STORE_PUBLISHER -KeyUsage DigitalSignature -FriendlyName 'Buddy Store Test' `
+            -CertStoreLocation 'Cert:\CurrentUser\My' -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
+          $pw = ConvertTo-SecureString -String ([guid]::NewGuid().ToString()) -Force -AsPlainText
+          $pfx = Join-Path $env:RUNNER_TEMP 'test.pfx'
+          Export-PfxCertificate -Cert $cert -FilePath $pfx -Password $pw | Out-Null
+          Import-PfxCertificate -FilePath $pfx -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople' -Password $pw | Out-Null
+          $signed = Join-Path $env:RUNNER_TEMP 'BuddyIsland-test-signed.appx'
+          Copy-Item $env:APPX $signed
+          $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pw))
+          & $signtool.FullName sign /fd SHA256 /f $pfx /p $plain $signed
+          if ($LASTEXITCODE) { throw 'Signieren fehlgeschlagen' }
+          Add-AppxPackage -Path $signed
+          $pkg = Get-AppxPackage -Name $env:STORE_IDENTITY_NAME
+          if (-not $pkg) { throw 'Paket nicht installiert' }
+          "Installiert: $($pkg.PackageFullName) in $($pkg.InstallLocation)"
+          "PFN=$($pkg.PackageFamilyName)" >> $env:GITHUB_ENV
+          "SIGNED=$signed" >> $env:GITHUB_ENV
+
+      - name: Starten und Autostart-Aufgabe prüfen
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:PUBLIC 'buddy-store-check'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Start-Process "shell:AppsFolder\$($env:PFN)!BuddyIsland"
+          Start-Sleep -Seconds 30
+          $procs = Get-Process -Name 'Buddy Island' -ErrorAction SilentlyContinue
+          if (-not $procs) { throw 'Buddy Island läuft 30 s nach dem Start nicht' }
+          "Läuft: $($procs.Count) Prozesse"
+          # PowerShell im Paket-Kontext (wie Buddy selbst): StartupTask abfragen
+          $ps = @'
+          Add-Type -AssemblyName System.Runtime.WindowsRuntime
+          $asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
+          function Await($op, [Type]$type) { $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); $t.Wait(-1) | Out-Null; $t.Result }
+          try {
+            [Windows.ApplicationModel.StartupTask, Windows.ApplicationModel, ContentType = WindowsRuntime] | Out-Null
+            $task = Await ([Windows.ApplicationModel.StartupTask]::GetAsync('BuddyIslandStartup')) ([Windows.ApplicationModel.StartupTask])
+            $s1 = [string]$task.State
+            $s2 = [string](Await ($task.RequestEnableAsync()) ([Windows.ApplicationModel.StartupTaskState]))
+            $task.Disable(); $s3 = [string]$task.State
+            "vorher=$s1 eingeschaltet=$s2 danach=$s3" | Set-Content "$env:PUBLIC\buddy-store-check\startup.txt"
+          } catch { "Fehler: $($_.Exception.Message)" | Set-Content "$env:PUBLIC\buddy-store-check\startup.txt" }
+          '@
+          $script = Join-Path $out 'startup.ps1'
+          $ps | Set-Content $script
+          Invoke-CommandInDesktopPackage -PackageFamilyName $env:PFN -AppId 'BuddyIsland' -Command 'powershell.exe' -Args "-NoProfile -ExecutionPolicy Bypass -File `"$script`""
+          Start-Sleep -Seconds 15
+          $res = Get-Content (Join-Path $out 'startup.txt') -ErrorAction SilentlyContinue
+          "Autostart-Aufgabe: $res"
+          if ($res -notmatch 'eingeschaltet=Enabled') { Write-Output "::warning::Autostart-Aufgabe nicht wie erwartet: $res" }
+          # Log aus dem umgeleiteten AppData-Ordner des Pakets
+          $log = Join-Path $env:LOCALAPPDATA "Packages\$($env:PFN)\LocalCache\Roaming\Buddy Island\buddy.log"
+          if (Test-Path $log) { "--- buddy.log ---"; Get-Content $log -Tail 60 } else { Write-Output "::warning::Kein Log unter $log" }
+          Copy-Item $log $out -ErrorAction SilentlyContinue
+          Get-Process -Name 'Buddy Island' -ErrorAction SilentlyContinue | Stop-Process -Force
+
+      - name: Windows App Certification Kit
+        shell: pwsh
+        run: |
+          $appcert = "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\appcert.exe"
+          if (-not (Test-Path $appcert)) { Write-Output "::warning::WACK ist auf diesem Runner nicht installiert"; exit 0 }
+          $report = Join-Path $env:PUBLIC 'buddy-store-check\wack.xml'
+          & $appcert reset | Out-Null
+          & $appcert test -appxpackagepath $env:SIGNED -reportoutputpath $report
+          if (-not (Test-Path $report)) { Write-Output "::warning::WACK hat keinen Bericht geschrieben (Exit $LASTEXITCODE)"; exit 0 }
+          [xml]$r = Get-Content $report
+          "Gesamtergebnis: $($r.REPORT.OVERALL_RESULT)"
+          foreach ($t in $r.SelectNodes('//TEST')) {
+            $res = $t.RESULT.'#cdata-section'; if (-not $res) { $res = $t.RESULT.InnerText }
+            "{0,-8} {1}" -f $res, $t.NAME
+            if ($res -ne 'PASS') { foreach ($m in $t.SelectNodes('.//MESSAGE')) { "         - $($m.Text)" } }
+          }
+          if ($r.REPORT.OVERALL_RESULT -eq 'FAIL') { Write-Output "::warning::WACK meldet FAIL – siehe Bericht" }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Store-Pruefung
+          path: C:\Users\Public\buddy-store-check\
+          retention-days: 14
+          if-no-files-found: ignore

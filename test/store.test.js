@@ -103,3 +103,17 @@ assert.strictEqual(store.parseStartupTask('{"state":"Error","error":"x"}').error
 
   console.log('Store-Tests ok');
 })().catch((e) => { console.error(e); process.exit(1); });
+
+// Paket-Familienname und echter Daten-Ordner (AppData-Umleitung im Paket)
+{
+  const exe = 'C:\\Program Files\\WindowsApps\\12345WolfWidmer.BuddyIsland_0.14.3.0_x64__abc123xyz\\app\\Buddy Island.exe';
+  assert.strictEqual(store.packageFamilyName(exe), '12345WolfWidmer.BuddyIsland_abc123xyz');
+  assert.strictEqual(store.packageFamilyName('C:\\Users\\w\\AppData\\Local\\Programs\\buddy-island\\Buddy Island.exe'), null);
+  assert.strictEqual(store.packageFamilyName(''), null);
+  const o = { execPath: exe, userData: '/u/AppData/Roaming/Buddy Island', appData: '/u/AppData/Roaming', localAppData: '/u/AppData/Local' };
+  const want = '/u/AppData/Local/Packages/12345WolfWidmer.BuddyIsland_abc123xyz/LocalCache/Roaming/Buddy Island';
+  assert.strictEqual(store.realDataDir({ ...o, exists: (p) => p === want }), want);
+  assert.strictEqual(store.realDataDir({ ...o, exists: () => false }), o.userData, 'ohne umgeleiteten Ordner: normaler Pfad');
+  assert.strictEqual(store.realDataDir({ ...o, execPath: 'C:\\x\\Buddy Island.exe', exists: () => true }), o.userData);
+  console.log('Store-Pfade ok');
+}

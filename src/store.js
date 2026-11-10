@@ -90,4 +90,27 @@ function reportMailto({ question = '', answer, version, lang = 'de' }) {
   return `mailto:${REPORT_EMAIL}?subject=${encodeURIComponent(`Buddy Island: ${tx.subject}`)}&body=${encodeURIComponent(body)}`;
 }
 
-module.exports = { STARTUP_TASK_ID, REPORT_EMAIL, isStore, bundledVoskDir, startupTaskScript, parseStartupTask, reportMailto };
+// Paket-Familienname aus dem Programmpfad: …\WindowsApps\<Name>_<Version>_<Arch>_<Res>_<PublisherId>\app\Buddy Island.exe
+/** @param {string} execPath */
+function packageFamilyName(execPath) {
+  const m = /[\\/]WindowsApps[\\/]([^\\/]+)[\\/]/i.exec(String(execPath || ''));
+  if (!m) return null;
+  const parts = m[1].split('_');
+  if (parts.length < 5 || !parts[0] || !parts[parts.length - 1]) return null;
+  return `${parts[0]}_${parts[parts.length - 1]}`;
+}
+
+// Im Paket schreibt Windows AppData-Dateien in einen privaten Ordner um (LocalCache).
+// Der Explorer läuft ausserhalb des Pakets und sieht dort, wo Buddy «AppData\Roaming\Buddy Island»
+// meint, nichts. Für «Log-Ordner öffnen» darum den echten Ordner nehmen.
+/** @param {{ execPath: string, userData: string, appData: string, localAppData: string, exists?: (p: string) => boolean }} o */
+function realDataDir({ execPath, userData, appData, localAppData, exists = fs.existsSync }) {
+  const pfn = packageFamilyName(execPath);
+  if (!pfn || !localAppData || !appData) return userData;
+  const rel = path.relative(appData, userData);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return userData;
+  const redirected = path.join(localAppData, 'Packages', pfn, 'LocalCache', 'Roaming', rel);
+  return exists(redirected) ? redirected : userData;
+}
+
+module.exports = { packageFamilyName, realDataDir, STARTUP_TASK_ID, REPORT_EMAIL, isStore, bundledVoskDir, startupTaskScript, parseStartupTask, reportMailto };

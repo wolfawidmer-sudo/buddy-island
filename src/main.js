@@ -2657,7 +2657,9 @@ function setupIpc() {
   ipcMain.handle('update:rollback', () => updater?.rollback(t('Vom Nutzer gewünscht')) || { ok: false, error: t('Nur mit dem Installer') });
 
   ipcMain.handle('diag:run', () => runDiagnostics());
-  ipcMain.on('logs:open', () => shell.openPath(app.getPath('userData')));
+  ipcMain.on('logs:open', () => shell.openPath(IS_STORE
+    ? store.realDataDir({ execPath: process.execPath, userData: app.getPath('userData'), appData: app.getPath('appData'), localAppData: process.env.LOCALAPPDATA || '' })
+    : app.getPath('userData')));
 
   ipcMain.on('link:open', (_e, url) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
