@@ -2,6 +2,19 @@
   "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Für Kundinnen und Kunden geschrieben: Nutzen statt Technik, keine Fachbegriffe.",
   "versions": [
     {
+      "version": "0.14.0",
+      "highlights": [
+        {
+          "title": "Dein eigenes Wakeword",
+          "text": "Ruf Buddy, wie du willst: «Hey Kiwi», «Jarvis» oder bei «Hey Buddy» bleiben. Das Wakeword wird direkt auf deinem PC erkannt, ohne dass Ton ins Internet geht."
+        },
+        {
+          "title": "Lebendige Augen",
+          "text": "Buddy wird müde, wenn du ihn eine Weile nicht brauchst, und schläft dann mit leicht geschlossenen Augen. Ein Blick oder dein Wakeword weckt ihn wieder."
+        }
+      ]
+    },
+    {
       "version": "0.13.0",
       "highlights": [
         {
