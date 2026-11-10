@@ -15,8 +15,8 @@ Manifest-Zusatz: `build/appx-extensions.xml`, Kachelbilder: `assets/appx/`.
 
 ## Paket bauen
 1. Partner Center › Apps and games › Buddy Island › **Product management › Product identity**: drei Werte abschreiben.
-2. GitHub › buddy-island › Settings › Secrets and variables › Actions › **Variables**: anlegen
-   `STORE_IDENTITY_NAME`, `STORE_PUBLISHER` (beginnt mit `CN=`), `STORE_PUBLISHER_NAME`.
+2. Die Werte stehen in `.github/workflows/store.yml` (Name `BuddyIsland.BuddyIsland`, Publisher
+   `CN=81672690-3189-4A3E-B8DB-F39590B0AC4B`, Anzeigename `Buddy Island`). Repo-Variablen `STORE_*` würden sie überschreiben.
 3. Actions › **Store-Paket** › Run workflow (Branch wählen). Ergebnis: `BuddyIsland-Store-<version>.appx` unter Artifacts.
 4. Partner Center › Submission › **Packages**: die .appx hochladen.
 

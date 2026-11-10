@@ -11,7 +11,7 @@ name: Store-Paket
 #   STORE_IDENTITY_NAME   = Package/Identity/Name
 #   STORE_PUBLISHER       = Package/Identity/Publisher        (beginnt mit CN=)
 #   STORE_PUBLISHER_NAME  = Package/Properties/PublisherDisplayName
-# Ohne diese Werte baut der Lauf mit Test-Werten (nur zum Prüfen, nicht hochladbar).
+# Ohne Variablen gelten die Werte von «Buddy Island» aus Partner Center (unten eingetragen, nicht geheim).
 
 on:
   workflow_dispatch:
@@ -26,9 +26,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     env:
-      STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME || 'BuddyIsland.Test' }}
-      STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER || 'CN=BuddyIslandTest' }}
-      STORE_PUBLISHER_NAME: ${{ vars.STORE_PUBLISHER_NAME || 'Buddy Island Test' }}
+      STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME || 'BuddyIsland.BuddyIsland' }}
+      STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER || 'CN=81672690-3189-4A3E-B8DB-F39590B0AC4B' }}
+      STORE_PUBLISHER_NAME: ${{ vars.STORE_PUBLISHER_NAME || 'Buddy Island' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,9 +37,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - name: Hinweis Test-Identität
-        if: ${{ !vars.STORE_IDENTITY_NAME }}
-        run: echo "::warning::Repo-Variablen STORE_* fehlen – gebaut mit Test-Identität. Dieses Paket kann nicht in Partner Center hochgeladen werden."
       - name: Store-Paket bauen
         run: npm run dist:store
 
