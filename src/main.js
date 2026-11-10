@@ -35,6 +35,7 @@ const { createCalendar } = require('./calendar');
 const { createVoice } = require('./voice');
 const wakeword = require('./wakeword');
 const vosk = require('./vosk');
+const store = require('./store');
 const { createPerception } = require('./perception');
 const prompt = require('./prompt');
 const authSpecs = require('./llm/auth');
@@ -440,6 +441,8 @@ function publicSettings() {
     version: app.getVersion(),
     updateState,
     canUpdate: Boolean(updater),
+    storeBuild: IS_STORE,
+    storeAutostart: IS_STORE ? storeAutostart : null,
     rollbackVersion: updater?.rollbackTarget?.() || null,
     updateHealth,
     signingKeys: Object.keys(updateSecurity.PUBLIC_KEYS),
@@ -1278,7 +1281,21 @@ function findDuplicate(source) {
   return null;
 }
 
+// Store-Version: Autostart über die StartupTask des Pakets (Manifest), nicht über die Registry
+let storeAutostart = null; // { state, enabled, blocked, error }
+function applyStoreAutostart() {
+  const { execFile } = require('child_process');
+  const action = settings.autostart ? 'enable' : 'disable';
+  execFile('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', store.startupTaskScript(action)], { windowsHide: true, timeout: 15000 }, (err, out) => {
+    storeAutostart = err ? { state: 'Error', enabled: false, blocked: false, error: err.message } : store.parseStartupTask(String(out));
+    if (storeAutostart.error) log(`Autostart (Store): ${storeAutostart.error}`);
+    else if (storeAutostart.blocked && settings.autostart) log(`Autostart (Store): in Windows ausgeschaltet (${storeAutostart.state})`);
+    liveWin()?.webContents.send('settings:changed', publicSettings());
+  });
+}
+
 function applyAutostart() {
+  if (IS_STORE) { applyStoreAutostart(); return; }
   const options = { openAtLogin: Boolean(settings.autostart) };
   if (!app.isPackaged) {
     options.path = process.execPath;
@@ -1292,11 +1309,13 @@ function applyAutostart() {
 }
 
 // Beim ersten Start: Verknüpfung im Startmenü und auf dem Desktop
-const installedWithSetup = () => app.isPackaged && fs.existsSync(path.join(process.resourcesPath, 'app-update.yml'));
+// Store-Version: nie «mit Installer» (Updates, Rollback und Verknüpfungen macht Windows/der Store)
+const IS_STORE = store.isStore();
+const installedWithSetup = () => !IS_STORE && app.isPackaged && fs.existsSync(path.join(process.resourcesPath, 'app-update.yml'));
 
 function createShortcuts() {
   // Mit dem Installer legt Windows die Verknüpfungen selbst an.
-  if (process.platform !== 'win32' || !app.isPackaged || settings.shortcutsCreated || installedWithSetup()) return;
+  if (process.platform !== 'win32' || !app.isPackaged || IS_STORE || settings.shortcutsCreated || installedWithSetup()) return;
   const options = {
     target: process.execPath,
     cwd: path.dirname(process.execPath),
@@ -1566,7 +1585,8 @@ function applyWakeEngine() {
   if (voskBlocked === word) { voice.setEngine(null); return; }
   const lang = vosk.langFor(i18n.language());
   const root = path.join(app.getPath('userData'), 'vosk');
-  const have = vosk.installed(root, lang);
+  const bundled = store.bundledVoskDir(process.resourcesPath); // Store: Laufzeit liegt im Paket
+  const have = vosk.installed(root, lang, bundled);
   if (have) {
     voice.setEngine({ ...have, lang });
     sendWakeEngine({ state: 'vosk', percent: null, error: null });
@@ -1576,7 +1596,7 @@ function applyWakeEngine() {
   voice.setEngine(null); // bis Vosk bereit ist, hört die Windows-Erkennung
   sendWakeEngine({ state: 'downloading', percent: 0, error: null });
   wakeEngineJob = vosk.ensure({
-    root, lang, fetchImpl: (url, init) => net.fetch(url, init), unzip: unzipWindows,
+    root, lang, bundled, fetchImpl: (url, init) => net.fetch(url, init), unzip: unzipWindows,
     onProgress: (pr) => { if (pr.phase === 'download') sendWakeEngine({ state: 'downloading', percent: pr.percent }); },
   }).then((p) => {
     log(`Wakeword: Vosk (${lang}) installiert`);
@@ -1687,7 +1707,7 @@ async function downloadVerified(url, dest, maxBytes = 400 * 1024 * 1024) {
 }
 
 function setupUpdater() {
-  if (!installedWithSetup()) return null;
+  if (IS_STORE || !installedWithSetup()) return null; // Store: Updates nur über den Microsoft Store
   let autoUpdater;
   try {
     ({ autoUpdater } = require('electron-updater'));
@@ -1911,7 +1931,7 @@ function onRenderCrash(details) {
 async function runDiagnostics() {
   const results = [];
   const add = (name, ok, detail) => results.push({ name, ok: ok === null ? null : Boolean(ok), detail: String(detail || '') });
-  add(t('Version'), true, `${app.getVersion()} · Electron ${process.versions.electron} · ${os.type()} ${os.release()}${installedWithSetup() ? t(' · mit Installer') : ''}`);
+  add(t('Version'), true, `${app.getVersion()} · Electron ${process.versions.electron} · ${os.type()} ${os.release()}${IS_STORE ? t(' · Microsoft Store') : installedWithSetup() ? t(' · mit Installer') : ''}`);
   const d = targetDisplay();
   add(t('Bildschirm'), true, `${Math.round(d.size.width * d.scaleFactor)}×${Math.round(d.size.height * d.scaleFactor)}, Skalierung ${Math.round(d.scaleFactor * 100)} %, ${screen.getAllDisplays().length} Bildschirm(e)`);
 
@@ -2590,6 +2610,12 @@ function setupIpc() {
   ipcMain.handle('notify:list', () => watcher?.recent() || []);
   ipcMain.on('notify:clear', () => watcher?.clear());
   ipcMain.on('notify:settings', () => shell.openExternal('ms-settings:notifications'));
+  ipcMain.on('chat:report', (_e, o) => {
+    const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+    const answer = str(o?.answer, 20000);
+    if (!answer) return;
+    shell.openExternal(store.reportMailto({ question: str(o?.question, 20000), answer, version: app.getVersion(), lang: i18n.language() })).catch((err) => log(`Melden: ${err.message}`));
+  });
   ipcMain.on('notify:privacy', () => shell.openExternal('ms-settings:privacy-notifications'));
 
   ipcMain.on('media:command', (_e, cmd) => {

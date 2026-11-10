@@ -14,3 +14,6 @@ test-results/
 
 # Vorlagen ohne Werte dürfen ins Repo
 !.env.example
+
+# Vosk-Laufzeit für das Store-Paket (scripts/fetch-vosk-runtime.js)
+vendor/

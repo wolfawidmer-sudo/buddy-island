@@ -1,0 +1,4 @@
+        <!-- Autostart der Store-Version. Aus bis der Nutzer «Mit Windows starten» einschaltet (src/store.js). -->
+        <desktop:Extension Category="windows.startupTask" Executable="app\Buddy Island.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="BuddyIslandStartup" Enabled="false" DisplayName="Buddy Island" />
+        </desktop:Extension>

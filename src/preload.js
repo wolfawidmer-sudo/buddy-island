@@ -117,6 +117,7 @@ contextBridge.exposeInMainWorld('buddy', {
   voiceCancel: () => ipcRenderer.send('voice:cancel'),
   voiceState: (on) => ipcRenderer.send('voice:state', Boolean(on)),
   checkUpdates: () => ipcRenderer.send('update:check'),
+  reportAnswer: (o) => ipcRenderer.send('chat:report', o),
   installUpdate: () => ipcRenderer.send('update:install'),
   rollbackUpdate: () => ipcRenderer.invoke('update:rollback'),
   runDiagnostics: () => ipcRenderer.invoke('diag:run'),

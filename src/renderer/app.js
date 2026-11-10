@@ -79,6 +79,8 @@
     hotkeyMsg: $('hotkeyMsg'),
     soundToggle: $('soundToggle'),
     autostartToggle: $('autostartToggle'),
+    autostartLabel: $('autostartLabel'),
+    autostartSub: $('autostartSub'),
     quitBtn: $('quitBtn'),
     pillCover: $('pillCover'),
     nowPlaying: $('nowPlaying'),
@@ -688,6 +690,17 @@
     copy.textContent = t('Kopieren');
     copy.addEventListener('click', () => copyText(text, copy));
     tools.appendChild(copy);
+    // Unpassende KI-Antwort melden (Microsoft-Store-Richtlinie 11.16): öffnet einen E-Mail-Entwurf
+    const report = document.createElement('button');
+    report.type = 'button';
+    report.textContent = t('Melden');
+    report.title = t('Unpassende Antwort melden');
+    report.addEventListener('click', () => {
+      let prev = node.previousElementSibling;
+      while (prev && !prev.classList.contains('user')) prev = prev.previousElementSibling;
+      api.reportAnswer({ question: prev?.textContent || '', answer: text });
+    });
+    tools.appendChild(report);
     placePart(node, tools);
     return node;
   }
@@ -1560,7 +1573,7 @@
       case 'skipped': return u.error || t('Version {v} übersprungen', { v: u.version });
       case 'rollback': return t('Stellt Version {v} wieder her …', { v: u.version });
       case 'error': return u.error || t('Fehler');
-      default: return state.settings?.canUpdate ? t('Noch nicht geprüft') : t('Nur mit dem Installer');
+      default: return state.settings?.storeBuild ? t('Über den Microsoft Store') : state.settings?.canUpdate ? t('Noch nicht geprüft') : t('Nur mit dem Installer');
     }
   }
 
@@ -1741,6 +1754,11 @@
     el.prefStyle.value = s.promptPrefs?.style || 'friendly';
     el.soundToggle.checked = Boolean(s.sound);
     el.autostartToggle.checked = Boolean(s.autostart);
+    // Store-Version: hat der Nutzer Buddy in Windows aus dem Autostart genommen, kann nur Windows das ändern
+    const autoBlocked = Boolean(s.storeBuild && s.autostart && s.storeAutostart?.blocked);
+    el.autostartSub.hidden = !autoBlocked;
+    el.autostartSub.textContent = autoBlocked ? t('In Windows ausgeschaltet: Einstellungen › Apps › Autostart') : '';
+    el.autostartLabel.classList.toggle('two', autoBlocked);
     el.notifyToggle.checked = Boolean(s.notifications);
     const status = s.notifications ? s.notifyStatus : 'Off';
     el.notifyStatus.textContent = NOTIFY_STATUS[status] || status || '–';

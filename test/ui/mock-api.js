@@ -45,6 +45,8 @@
     listModels: () => Promise.resolve({ models: [{ id: 'cloud:gpt-6-luna', name: 'GPT-6 Luna' }, { id: 'cloud:gpt-6.1-terra', name: 'GPT-6.1 Terra' }] }),
     getAiStats: () => Promise.resolve({ usage: null, history: [] }),
     getTimers: () => Promise.resolve([]), listNotifications: () => Promise.resolve([]), getMedia: () => Promise.resolve(null),
+    // Chat: antwortet sofort mit M.reply (für Screenshots von Antworten)
+    sendChat: (id) => { setTimeout(() => { window.__emit('onDelta', { id, text: M.reply || 'Okay.' }); window.__emit('onDone', { id, stopReason: 'end_turn' }); }, 30); },
     listMemory: () => Promise.resolve([]), upcomingEvents: () => Promise.resolve([]), runDiagnostics: () => Promise.resolve([]),
   };
   window.buddy = new Proxy(base, {

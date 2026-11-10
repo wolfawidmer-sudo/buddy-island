@@ -1252,4 +1252,9 @@ module.exports = {
   "Windows-Erkennung": "Reconnaissance Windows",
   "Entpacken fehlgeschlagen: {msg}": "Échec de la décompression : {msg}",
   "Das Sprachmodell kennt «{words}» nicht.": "Le modèle vocal ne connaît pas « {words} ».",
+  "Über den Microsoft Store": "Via le Microsoft Store",
+  " · Microsoft Store": " · Microsoft Store",
+  "Melden": "Signaler",
+  "Unpassende Antwort melden": "Signaler une réponse inappropriée",
+  "In Windows ausgeschaltet: Einstellungen › Apps › Autostart": "Désactivé dans Windows : Paramètres › Applications › Démarrage",
 };

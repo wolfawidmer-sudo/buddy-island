@@ -1,0 +1,57 @@
+name: Store-Paket
+
+# Baut das MSIX/AppX-Paket für den Microsoft Store. Veröffentlicht nichts:
+# Die Datei liegt danach im Lauf unter «Artifacts» und wird von Hand in Partner Center hochgeladen.
+# Nicht signiert – Partner Center signiert das Paket beim Einreichen selbst.
+#
+# Einmalig einrichten (Settings › Secrets and variables › Actions › Variables):
+#   STORE_IDENTITY_NAME   = Package/Identity/Name            (Partner Center › Product identity)
+#   STORE_PUBLISHER       = Package/Identity/Publisher        (beginnt mit CN=)
+#   STORE_PUBLISHER_NAME  = Package/Properties/PublisherDisplayName
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  appx:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Store-Paket bauen
+        env:
+          STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
+          STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+          STORE_PUBLISHER_NAME: ${{ vars.STORE_PUBLISHER_NAME }}
+        run: npm run dist:store
+      - name: Manifest anzeigen und prüfen
+        shell: pwsh
+        run: |
+          $appx = Get-ChildItem dist -Filter *.appx | Select-Object -First 1
+          if (-not $appx) { throw 'Kein .appx gebaut' }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($appx.FullName)
+          $entry = $zip.Entries | Where-Object FullName -eq 'AppxManifest.xml'
+          $xml = (New-Object System.IO.StreamReader($entry.Open())).ReadToEnd()
+          $names = $zip.Entries.FullName
+          $zip.Dispose()
+          Write-Output $xml
+          if ($xml -notmatch 'BuddyIslandStartup') { throw 'StartupTask fehlt im Manifest' }
+          if ($xml -notmatch 'microphone') { throw 'Mikrofon fehlt im Manifest' }
+          if (-not ($names -match 'resources\\vosk\\libvosk.dll|resources/vosk/libvosk.dll')) { throw 'libvosk.dll fehlt im Paket' }
+          if ($names -match 'app-update.yml') { throw 'app-update.yml darf nicht im Store-Paket sein' }
+          "{0:N1} MB" -f ($appx.Length / 1MB)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BuddyIsland-Store
+          path: dist/*.appx
+          retention-days: 30
+          if-no-files-found: error

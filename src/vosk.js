@@ -1,6 +1,7 @@
 // Vosk (Kaldi) für das Wakeword: offline, Apache 2.0, beliebiges Wort ohne Training.
 // Laufzeit (libvosk.dll) und ein kleines Sprachmodell werden erst geladen, wenn das
 // Wakeword eingeschaltet wird, und nur mit fester SHA-256-Prüfsumme installiert.
+// Store-Version: die Laufzeit liegt schon im Paket («bundled»), geladen wird nur das Modell.
 //
 // Quellen (geprüft am 10.11.2026):
 //   Laufzeit: PyPI vosk 0.3.45, Windows-Wheel (enthält libvosk.dll + MinGW-Laufzeit)
@@ -30,21 +31,21 @@ function langFor(appLang) {
   return MODELS[l] ? l : 'de';
 }
 
-function paths(root, lang) {
+function paths(root, lang, bundled = null) {
   const m = MODELS[langFor(lang)];
   return {
-    dllDir: path.join(root, RUNTIME.id, 'vosk'),
+    dllDir: bundled || path.join(root, RUNTIME.id, 'vosk'),
     modelDir: path.join(root, `model-${langFor(lang)}`, m.name),
   };
 }
 
 // Schon installiert? (Dateien da und Markierung geschrieben)
-function installed(root, lang) {
-  const p = paths(root, lang);
+function installed(root, lang, bundled = null) {
+  const p = paths(root, lang, bundled);
   const ok = fs.existsSync(path.join(p.dllDir, 'libvosk.dll'))
     && fs.existsSync(path.join(p.modelDir, 'am', 'final.mdl'))
     && fs.existsSync(path.join(root, `model-${langFor(lang)}`, '.ok'))
-    && fs.existsSync(path.join(root, RUNTIME.id, '.ok'));
+    && (bundled ? true : fs.existsSync(path.join(root, RUNTIME.id, '.ok')));
   return ok ? p : null;
 }
 
@@ -79,15 +80,15 @@ async function download(fetchImpl, url, file, { sha256, size }, onBytes, signal)
 
 /**
  * Laufzeit und Modell sicherstellen. Lädt nur, was fehlt.
- * @param {{ root: string, lang: string, fetchImpl: Function, unzip: (zip: string, dest: string) => Promise<void>, onProgress?: Function, signal?: AbortSignal }} o
+ * @param {{ root: string, lang: string, bundled?: string|null, fetchImpl: Function, unzip: (zip: string, dest: string) => Promise<void>, onProgress?: Function, signal?: AbortSignal }} o
  * @returns {Promise<{ dllDir: string, modelDir: string }>}
  */
-async function ensure({ root, lang, fetchImpl, unzip, onProgress = () => {}, signal }) {
+async function ensure({ root, lang, bundled = null, fetchImpl, unzip, onProgress = () => {}, signal }) {
   const l = langFor(lang);
-  const have = installed(root, l);
+  const have = installed(root, l, bundled);
   if (have) return have;
   const model = MODELS[l];
-  const needRuntime = !fs.existsSync(path.join(root, RUNTIME.id, '.ok'));
+  const needRuntime = !bundled && !fs.existsSync(path.join(root, RUNTIME.id, '.ok'));
   const needModel = !fs.existsSync(path.join(root, `model-${l}`, '.ok'));
   const totalBytes = (needRuntime ? RUNTIME.size : 0) + (needModel ? model.size : 0);
   let done = 0;
@@ -124,7 +125,7 @@ async function ensure({ root, lang, fetchImpl, unzip, onProgress = () => {}, sig
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* egal */ }
   }
   onProgress({ phase: 'ready' });
-  return paths(root, l);
+  return paths(root, l, bundled);
 }
 
 // Wortliste für die Erkennung: Wakeword-Varianten plus häufige Wörter der Sprache.
