@@ -129,14 +129,39 @@ jobs:
           Start-Sleep -Seconds 15
           $res = Get-Content (Join-Path $out 'startup.txt') -ErrorAction SilentlyContinue
           "Autostart-Aufgabe: $res"
-          if ($res -notmatch 'vorher=Enabled') { throw "Buddy hat den Autostart nicht selbst eingeschaltet: $res" }
           if ($res -notmatch 'eingeschaltet=Enabled') { Write-Output "::warning::Autostart-Aufgabe nicht wie erwartet: $res" }
           # Log aus dem umgeleiteten AppData-Ordner des Pakets
           $log = Join-Path $env:LOCALAPPDATA "Packages\$($env:PFN)\LocalCache\Roaming\Buddy Island\buddy.log"
           if (Test-Path $log) { "--- buddy.log ---"; Get-Content $log -Tail 60 } else { Write-Output "::warning::Kein Log unter $log" }
-          if ((Test-Path $log) -and (Select-String -Path $log -Pattern 'Autostart \(Store\)' -Quiet)) { throw 'Buddy meldet einen Autostart-Fehler im Log' }
+          # Fehler erst am Schluss melden, damit Vosk und WACK trotzdem laufen
+          $problem = ''
+          if ($res -notmatch 'vorher=Enabled') { $problem += "Buddy hat den Autostart nicht selbst eingeschaltet ($res). " }
+          if ((Test-Path $log) -and (Select-String -Path $log -Pattern 'Autostart \(Store\)' -Quiet)) { $problem += 'Buddy meldet einen Autostart-Fehler im Log. ' }
+          if ($problem) { Write-Output "::error::$problem"; "STORE_PROBLEM=$problem" >> $env:GITHUB_ENV }
+          "--- Daten-Ordner ---"; Get-ChildItem $data -ErrorAction SilentlyContinue | Select-Object Name, Length | Format-Table | Out-String
           Copy-Item $log $out -ErrorAction SilentlyContinue
           Get-Process -Name 'Buddy Island' -ErrorAction SilentlyContinue | Stop-Process -Force
+
+      - name: Vosk-DLL aus dem Paketordner laden
+        shell: pwsh
+        run: |
+          $pkg = Get-AppxPackage -Name $env:STORE_IDENTITY_NAME
+          $dir = Join-Path $pkg.InstallLocation 'app\resources\vosk'
+          $ps = @"
+          Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class K { [DllImport("kernel32", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool SetDllDirectory(string p); [DllImport("kernel32", CharSet=CharSet.Unicode, SetLastError=true)] public static extern IntPtr LoadLibrary(string p); [DllImport("kernel32", CharSet=CharSet.Ansi)] public static extern IntPtr GetProcAddress(IntPtr h, string n); }'
+          [K]::SetDllDirectory('$dir') | Out-Null
+          `$h = [K]::LoadLibrary('$dir\libvosk.dll')
+          `$err = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+          `$f = if (`$h -ne [IntPtr]::Zero) { [K]::GetProcAddress(`$h, 'vosk_model_new') } else { [IntPtr]::Zero }
+          "geladen=`$(`$h -ne [IntPtr]::Zero) funktion=`$(`$f -ne [IntPtr]::Zero) fehler=`$err" | Set-Content "`$env:PUBLIC\buddy-store-check\vosk.txt"
+          "@
+          $script = Join-Path $env:PUBLIC 'buddy-store-check\vosk.ps1'
+          $ps | Set-Content $script
+          Invoke-CommandInDesktopPackage -PackageFamilyName $env:PFN -AppId 'BuddyIsland' -Command 'powershell.exe' -Args "-NoProfile -ExecutionPolicy Bypass -File `"$script`""
+          Start-Sleep -Seconds 10
+          $res = Get-Content (Join-Path $env:PUBLIC 'buddy-store-check\vosk.txt') -ErrorAction SilentlyContinue
+          "Vosk: $res"
+          if ($res -notmatch 'geladen=True funktion=True') { throw "libvosk.dll lässt sich im Paket nicht laden: $res" }
 
       - name: Windows App Certification Kit
         shell: pwsh
@@ -155,6 +180,12 @@ jobs:
             if ($res -ne 'PASS') { foreach ($m in $t.SelectNodes('.//MESSAGE')) { "         - $($m.Text)" } }
           }
           if ($r.REPORT.OVERALL_RESULT -eq 'FAIL') { Write-Output "::warning::WACK meldet FAIL – siehe Bericht" }
+
+      - name: Ergebnis
+        if: env.STORE_PROBLEM != ''
+        run: |
+          echo "${{ env.STORE_PROBLEM }}"
+          exit 1
 
       - uses: actions/upload-artifact@v4
         if: always()
