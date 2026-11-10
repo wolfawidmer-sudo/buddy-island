@@ -33,12 +33,18 @@ Der Workflow veröffentlicht nichts und löst kein Auto-Update bei bestehenden N
   (Sprache und Wakeword, nur wenn eingeschaltet), `userNotificationListener` (Windows-Mitteilungen im Island, nur wenn eingeschaltet).
 - **Screenshots:** mindestens einer, 1366×768 oder grösser.
 
+## Auf Windows geprüft (Workflow «Store-Paket», windows-latest)
+- Paket baut, Manifest gültig, installiert (mit Wegwerf-Zertifikat signierte Testkopie), Buddy startet im Paket.
+- Autostart: Buddy schaltet die StartupTask beim Start selbst ein; Ein/Aus im Paket-Kontext funktioniert.
+- Windows App Certification Kit: Gesamtergebnis PASS. «Blocked executables» meldet FAIL, weil WACK in allen
+  Dateien nach Wörtern wie «cmd», «reg», «bash» sucht (auch in Chromiums Sprachdateien). Das trifft jede
+  Electron-App und blockiert die Einreichung nicht; Buddy startet PowerShell für seine Helfer (Lautstärke,
+  Mitteilungen, Sprache) – das in den Prüfer-Hinweisen erwähnen, falls Microsoft nachfragt.
+
 ## Nicht auf echtem Windows geprüft
-- Autostart über die StartupTask (PowerShell-Kindprozess mit Paket-Identität).
 - Windows-Mitteilungen und Medien-Steuerung im Paket.
 - Vosk aus dem Paketordner (WindowsApps ist schreibgeschützt; libvosk wird nur gelesen).
 - Google-Anmeldung (lokaler Rückruf auf 127.0.0.1) im Paket.
-- Windows App Certification Kit (WACK) wurde noch nicht laufen gelassen.
 
 ## Texte für den Store-Eintrag (Partner Center › Store listings)
 
@@ -90,6 +96,7 @@ Englisch, weil die Prüfer international sind. Vorher ein Testkonto mit Guthaben
 > AI responses need a Buddy Cloud account with credits. Test account: <E-MAIL> / <PASSWORT> (credits are preloaded, no purchase needed). Sign in under the person icon → "Sign in with email".
 > Purchases of credits and the Buddy Plus subscription use Stripe Checkout in the browser (third-party payment for a non-game app, policy 10.8.1). No card data is entered inside the app.
 > Optional features that are off by default: wake word (microphone, on-device recognition with Vosk), Windows notifications in the island (requires the user to allow notification access).
+> The app starts PowerShell helper scripts bundled in the package for volume, media and notification display and on-device speech; it does not download or run other code.
 > Every AI response has a "Report" button that opens an e-mail draft to contact@buddy-island.top (policy 11.16).
 
 ## Bevor du einreichst

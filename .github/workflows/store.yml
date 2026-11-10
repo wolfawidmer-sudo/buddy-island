@@ -99,6 +99,11 @@ jobs:
         run: |
           $out = Join-Path $env:PUBLIC 'buddy-store-check'
           New-Item -ItemType Directory -Force $out | Out-Null
+          # Einstellungen vorab in den umgeleiteten AppData-Ordner des Pakets: Autostart an,
+          # damit Buddy beim Start selbst die StartupTask einschaltet (Buddys eigener Weg)
+          $data = Join-Path $env:LOCALAPPDATA "Packages\$($env:PFN)\LocalCache\Roaming\Buddy Island"
+          New-Item -ItemType Directory -Force $data | Out-Null
+          '{"autostart":true,"onboarded":true}' | Set-Content -Encoding utf8NoBOM (Join-Path $data 'settings.json')
           Start-Process "shell:AppsFolder\$($env:PFN)!BuddyIsland"
           Start-Sleep -Seconds 30
           $procs = Get-Process -Name 'Buddy Island' -ErrorAction SilentlyContinue
@@ -112,7 +117,7 @@ jobs:
           try {
             [Windows.ApplicationModel.StartupTask, Windows.ApplicationModel, ContentType = WindowsRuntime] | Out-Null
             $task = Await ([Windows.ApplicationModel.StartupTask]::GetAsync('BuddyIslandStartup')) ([Windows.ApplicationModel.StartupTask])
-            $s1 = [string]$task.State
+            $s1 = [string]$task.State   # von Buddy beim Start gesetzt (Autostart an)
             $s2 = [string](Await ($task.RequestEnableAsync()) ([Windows.ApplicationModel.StartupTaskState]))
             $task.Disable(); $s3 = [string]$task.State
             "vorher=$s1 eingeschaltet=$s2 danach=$s3" | Set-Content "$env:PUBLIC\buddy-store-check\startup.txt"
@@ -124,10 +129,12 @@ jobs:
           Start-Sleep -Seconds 15
           $res = Get-Content (Join-Path $out 'startup.txt') -ErrorAction SilentlyContinue
           "Autostart-Aufgabe: $res"
+          if ($res -notmatch 'vorher=Enabled') { throw "Buddy hat den Autostart nicht selbst eingeschaltet: $res" }
           if ($res -notmatch 'eingeschaltet=Enabled') { Write-Output "::warning::Autostart-Aufgabe nicht wie erwartet: $res" }
           # Log aus dem umgeleiteten AppData-Ordner des Pakets
           $log = Join-Path $env:LOCALAPPDATA "Packages\$($env:PFN)\LocalCache\Roaming\Buddy Island\buddy.log"
           if (Test-Path $log) { "--- buddy.log ---"; Get-Content $log -Tail 60 } else { Write-Output "::warning::Kein Log unter $log" }
+          if ((Test-Path $log) -and (Select-String -Path $log -Pattern 'Autostart \(Store\)' -Quiet)) { throw 'Buddy meldet einen Autostart-Fehler im Log' }
           Copy-Item $log $out -ErrorAction SilentlyContinue
           Get-Process -Name 'Buddy Island' -ErrorAction SilentlyContinue | Stop-Process -Force
 

@@ -2720,7 +2720,9 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
-    if (process.platform === 'win32') app.setAppUserModelId('ch.wolfwidmer.buddyisland');
+    // Store-Version: Windows nimmt die Kennung aus dem Paket. Eine eigene würde sie überschreiben,
+    // dann findet die StartupTask (Autostart) die App nicht mehr («Element not found», im Paket gemessen).
+    if (process.platform === 'win32' && !IS_STORE) app.setAppUserModelId('ch.wolfwidmer.buddyisland');
     loadSettings();
     applyTheme();
     applyLanguage();
