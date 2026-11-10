@@ -137,7 +137,7 @@ test('unbekannte Wörter aus der Vosk-Ausgabe', () => {
   assert.deepStrictEqual(vosk.missingWords(''), []);
 });
 test('Sprach-Helfer: Vosk-Teil vorhanden, Mikrofon wird fürs Diktat freigegeben', () => {
-  for (const x of ['[string]$grammar', 'BuddyVosk', 'vosk_recognizer_partial_result', "StartsWith('P')", '[BuddyVosk]::StopMic()', 'StartsWith', 'waveInOpen', 'GetShortPathName']) assert.ok(SCRIPT.includes(x), x);
+  for (const x of ['[string]$grammar', 'BuddyVosk', 'vosk_recognizer_partial_result', 'next = (next + 1) % N', "StartsWith('P')", '[BuddyVosk]::StopMic()', 'StartsWith', 'waveInOpen', 'GetShortPathName']) assert.ok(SCRIPT.includes(x), x);
 });
 
 async function asyncTests() {

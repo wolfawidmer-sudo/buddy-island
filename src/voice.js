@@ -129,10 +129,11 @@ public static class BuddyVosk {
   [DllImport("winmm")] static extern int waveInClose(IntPtr h);
 
   // WAVEHDR (x64): lpData 0, dwBufferLength 8, dwBytesRecorded 12, dwUser 16, dwFlags 24, dwLoops 28, lpNext 32, reserved 40
-  const int HDR = 48, N = 4, BUF = 3200; // 4 × 100 ms bei 16 kHz, 16 Bit, mono
+  const int HDR = 48, N = 8, BUF = 3200; // 8 × 100 ms bei 16 kHz, 16 Bit, mono (Reserve, falls PowerShell kurz hängt)
   static IntPtr model = IntPtr.Zero, rec = IntPtr.Zero, wave = IntPtr.Zero;
   static IntPtr[] hdrs = new IntPtr[N];
   static string lastPartial = "";
+  static int next = 0; // Puffer werden reihum gefüllt: immer in dieser Reihenfolge abholen
 
   static byte[] Z(string s, Encoding e) { byte[] b = e.GetBytes(s); byte[] z = new byte[b.Length + 1]; Array.Copy(b, z, b.Length); return z; }
   static string Str(IntPtr p) {
@@ -188,6 +189,7 @@ public static class BuddyVosk {
     }
     waveInClose(wave);
     wave = IntPtr.Zero;
+    next = 0;
     if (rec != IntPtr.Zero) vosk_recognizer_reset(rec);
     lastPartial = "";
   }
@@ -198,14 +200,17 @@ public static class BuddyVosk {
     byte[] buf = new byte[BUF];
     while (DateTime.UtcNow < end) {
       bool any = false;
-      for (int i = 0; i < N && wave != IntPtr.Zero; i++) {
-        IntPtr h = hdrs[i];
-        if ((Marshal.ReadInt32(h, 24) & 1) == 0) continue; // WHDR_DONE
+      // Nur den nächsten Puffer in der Reihe abholen. Sonst kommt bei Verzögerung ein neuerer Puffer
+      // vor einem älteren zu Vosk und die Sprache wird zerstückelt (Fehler bis 0.14.2).
+      while (wave != IntPtr.Zero) {
+        IntPtr h = hdrs[next];
+        if ((Marshal.ReadInt32(h, 24) & 1) == 0) break; // WHDR_DONE fehlt: noch nicht voll
         any = true;
         int n = Marshal.ReadInt32(h, 12);
         if (n > 0) Marshal.Copy(Marshal.ReadIntPtr(h, 0), buf, 0, n);
         Marshal.WriteInt32(h, 12, 0);
         waveInAddBuffer(wave, h, HDR);
+        next = (next + 1) % N;
         if (n <= 0) continue;
         if (vosk_recognizer_accept_waveform(rec, buf, n) == 1) { lastPartial = ""; return Str(vosk_recognizer_result(rec)); }
         // Zwischenstand: Wakeword sofort erkennen, ohne auf eine Sprechpause zu warten

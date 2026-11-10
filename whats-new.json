@@ -2,6 +2,15 @@
   "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Für Kundinnen und Kunden geschrieben: Nutzen statt Technik, keine Fachbegriffe.",
   "versions": [
     {
+      "version": "0.14.3",
+      "highlights": [
+        {
+          "title": "Wakeword zuverlässig",
+          "text": "Buddy hat Teile von dem, was du sagst, manchmal in falscher Reihenfolge gehört. Das ist behoben: Dein Wakeword klappt jetzt viel regelmässiger."
+        }
+      ]
+    },
+    {
       "version": "0.14.2",
       "highlights": [
         {
