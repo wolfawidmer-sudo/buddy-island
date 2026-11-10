@@ -1257,4 +1257,5 @@ module.exports = {
   "Melden": "Signaler",
   "Unpassende Antwort melden": "Signaler une réponse inappropriée",
   "In den Windows-Einstellungen": "Dans les paramètres Windows",
+  "Willkommen! Du hast {bc} Startguthaben bekommen.": "Bienvenue ! Tu as reçu {bc} de crédit de départ.",
 };

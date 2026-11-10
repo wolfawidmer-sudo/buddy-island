@@ -29,9 +29,10 @@ class CloudError extends Error {
  *   log?: (m: string) => void,
  *   onChange?: (state: any) => void,
  *   now?: () => number,
+ *   welcome?: { deviceId: () => Promise<string|null>, seen: (userId: string) => boolean, remember: (userId: string, reason: string) => void },
  * }} opts
  */
-function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, openExternal, t = (s) => s, log = () => {}, onChange = () => {}, now = Date.now }) {
+function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, openExternal, t = (s) => s, log = () => {}, onChange = () => {}, now = Date.now, welcome = undefined }) {
   /** @type {{ accessToken: string, refreshToken: string, expiresAt: number, user: { id: string, email?: string, provider?: string|null } } | null} */
   let session = null;
   /** @type {any} */
@@ -49,6 +50,10 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
   let refreshTimer;
   /** @type {AbortController|null} */
   let googleFlow = null;
+  /** Startguthaben gerade gutgeschrieben (für eine Meldung in der Oberfläche) @type {string|null} */
+  let welcomeGranted = null;
+  /** @type {Promise<void>|null} */
+  let welcomeRun = null;
 
   const configured = () => Boolean(apiUrl());
 
@@ -60,6 +65,7 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
       email: session?.user?.email || null,
       provider: session?.user?.provider || null,
       displayName: profile?.displayName || null,
+      welcomeGranted,
       wallet: wallet ? {
         available: wallet.available,
         purchased: wallet.purchased ?? wallet.available,
@@ -186,6 +192,7 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
         status = 'signed_in';
         schedule();
         await loadMe();
+        claimWelcome();
       }
     } catch (err) {
       const e = /** @type {any} */ (err);
@@ -209,7 +216,30 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
   function signedIn(data) {
     setSession(data.session);
     changed();
-    return loadMe().catch(() => publicState());
+    return loadMe().then((st) => { claimWelcome(); return st; }).catch(() => publicState());
+  }
+
+  // Startguthaben: einmal pro Konto nachfragen. Der Server entscheidet (einmal pro Konto, E-Mail, PC).
+  function claimWelcome() {
+    const uid = session?.user?.id;
+    if (!welcome || !uid || welcomeRun || welcome.seen(uid)) return welcomeRun || Promise.resolve();
+    welcomeRun = (async () => {
+      const deviceId = await welcome.deviceId();
+      if (!deviceId) { log('Cloud: Startguthaben: keine PC-Kennung'); return; }
+      const data = await request('POST', '/v1/welcome-credits', { auth: true, body: { deviceId } });
+      if (data.wallet) wallet = data.wallet;
+      const reason = String(data.welcome?.reason || 'unknown');
+      if (data.welcome?.granted) welcomeGranted = String(data.welcome.amount);
+      // Nur endgültige Antworten merken; bei Netzwerkfehlern beim nächsten Start nochmals
+      welcome.remember(uid, reason);
+      log(`Cloud: Startguthaben: ${reason}`);
+      changed();
+    })().catch((err) => {
+      const e = /** @type {any} */ (err);
+      // Fehler (offline, älteres Backend): nichts merken, beim nächsten Start nochmals
+      log(`Cloud: Startguthaben: ${e.code || e.message || 'Fehler'}`);
+    }).finally(() => { welcomeRun = null; });
+    return welcomeRun;
   }
 
   // ---- Aktionen für die Oberfläche ----
@@ -324,7 +354,7 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
   const refreshWallet = () => request('GET', '/v1/wallet', { auth: true }).then((d) => { wallet = d.wallet; changed(); }).catch(() => {});
 
   return {
-    publicState, restore, ensureFresh, accessToken, refresh, refreshWallet, loadMe,
+    publicState, restore, ensureFresh, claimWelcome, clearWelcome: () => { welcomeGranted = null; }, accessToken, refresh, refreshWallet, loadMe,
     signup, login, verifyEmail, resendConfirmation, requestPasswordReset, confirmPasswordReset,
     google, cancelGoogle, logout, updateProfile, history, packages, plans, billingConfig, buy, subscribe, portal, configured,
   };

@@ -404,7 +404,7 @@ function isDllError(text) {
 
 function publicSettings() {
   // Die feste Identität und der alte Persönlichkeits-Text gehen nie an die Oberfläche
-  const rest = Object.fromEntries(Object.entries(settings).filter(([k]) => !/(Encrypted|Plain)$/.test(k) && k !== 'systemPrompt'));
+  const rest = Object.fromEntries(Object.entries(settings).filter(([k]) => !/(Encrypted|Plain)$/.test(k) && k !== 'systemPrompt' && k !== 'deviceSeed'));
   return {
     ...rest,
     providers: providerList(),
@@ -2005,6 +2005,14 @@ function setupCloud() {
     openExternal: (url) => (/^https:\/\//.test(url) ? shell.openExternal(url) : Promise.reject(new Error('blocked'))),
     t,
     log,
+    welcome: {
+      deviceId: deviceIdForWelcome,
+      seen: (uid) => (settings.welcomeChecked || []).includes(uid),
+      remember: (uid) => {
+        settings.welcomeChecked = [...new Set([...(settings.welcomeChecked || []), uid])].slice(-20);
+        saveSettings();
+      },
+    },
     onChange: (state) => {
       modelCache.delete('buddy');
       liveWin()?.webContents.send('cloud:state', state);
@@ -2012,6 +2020,21 @@ function setupCloud() {
     },
   });
   if (cloud.configured()) cloud.restore();
+}
+
+// PC-Kennung für das Startguthaben: SHA-256 der Windows-MachineGuid (die Kennung selbst verlässt den PC nie).
+// Ohne MachineGuid: zufällige Kennung, einmal gespeichert.
+function deviceIdForWelcome() {
+  const hash = (v) => require('crypto').createHash('sha256').update(`buddy-island-device:${v}`).digest('hex');
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') return resolve(hash(settings.deviceSeed || (settings.deviceSeed = require('crypto').randomUUID())));
+    require('child_process').execFile('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'], { windowsHide: true, timeout: 5000 }, (err, out) => {
+      const m = !err && /MachineGuid\s+REG_SZ\s+([0-9a-f-]{36})/i.exec(String(out));
+      if (m) return resolve(hash(m[1].toLowerCase()));
+      if (!settings.deviceSeed) { settings.deviceSeed = require('crypto').randomUUID(); saveSettings(); }
+      resolve(hash(settings.deviceSeed));
+    });
+  });
 }
 
 function setupCloudIpc() {

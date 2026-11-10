@@ -265,9 +265,52 @@ async function testProvider() {
   assert.equal(models.PROVIDERS.local.needsKey, false);
 }
 
+// Startguthaben: nach dem Anmelden einmal nachfragen, Ergebnis merken, bei Fehler später nochmals
+async function testWelcome() {
+  const nowSec = () => Math.floor(Date.now() / 1000);
+  const me = [200, { profile: {}, wallet: { available: '0.000000', reserved: '0' } }];
+  const seen = new Map();
+  const welcome = { deviceId: async () => 'd'.repeat(64), seen: (u) => seen.has(u), remember: (u, r) => seen.set(u, r) };
+  let stored = null;
+  const storage = { load: () => stored, save: (x) => { stored = x; } };
+  let grant = [200, { welcome: { granted: true, reason: 'granted', amount: '50' }, wallet: { available: '50.000000', reserved: '0' } }];
+  const b = fakeBackend({
+    'POST /v1/auth/login': () => [200, { session: sessionFor(1, nowSec() + 3600) }],
+    'GET /v1/me': () => me,
+    'POST /v1/welcome-credits': () => grant,
+  });
+  const states = [];
+  const acc = createCloudAccount({ apiUrl: () => 'https://api.test', fetchImpl: b.fetchImpl, storage, openExternal: () => {}, welcome, onChange: (x) => states.push(x) });
+  await acc.login({ email: 'a@example.com', password: 'x' });
+  await acc.claimWelcome();
+  const call = b.calls.find((c) => c.path === '/v1/welcome-credits');
+  assert.deepEqual(call.body, { deviceId: 'd'.repeat(64) });
+  assert.equal(call.auth, 'Bearer access-1');
+  assert.equal(seen.get('u1'), 'granted');
+  assert.equal(acc.publicState().welcomeGranted, '50');
+  assert.equal(acc.publicState().wallet.available, '50.000000');
+  // nicht nochmals fragen
+  await acc.claimWelcome();
+  assert.equal(b.calls.filter((c) => c.path === '/v1/welcome-credits').length, 1);
+
+  // Fehler (z. B. offline): nichts merken
+  seen.clear();
+  grant = [503, { error: { code: 'unavailable', message: 'x' } }];
+  await acc.claimWelcome();
+  assert.equal(seen.has('u1'), false);
+  // Schon bekommen (anderes Konto auf demselben PC): merken, keine Meldung
+  grant = [200, { welcome: { granted: false, reason: 'device', amount: '0' } }];
+  acc.clearWelcome();
+  await acc.claimWelcome();
+  assert.equal(seen.get('u1'), 'device');
+  assert.equal(acc.publicState().welcomeGranted, null);
+  console.log('Startguthaben ok');
+}
+
 (async () => {
   await testGoogle();
   await testAccount();
+  await testWelcome();
   await testProvider();
   console.log('Cloud-Tests ok (Google-Loopback mit PKCE/state/nonce, Sitzung speichern/erneuern/ablaufen/offline, Kauf, Anbieter Buddy Cloud, lokale KI unberührt)');
 })().catch((err) => {

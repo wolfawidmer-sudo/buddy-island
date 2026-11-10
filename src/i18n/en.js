@@ -1250,4 +1250,5 @@ module.exports = {
   "Melden": "Report",
   "Unpassende Antwort melden": "Report an inappropriate response",
   "In den Windows-Einstellungen": "In the Windows settings",
+  "Willkommen! Du hast {bc} Startguthaben bekommen.": "Welcome! You got {bc} in starter credits.",
 };

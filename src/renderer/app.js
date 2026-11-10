@@ -1991,6 +1991,11 @@
     state.cloud = s;
     cloudEl.off.hidden = s.configured;
     cloudEl.out.hidden = !s.configured || s.signedIn;
+    // Startguthaben gerade gutgeschrieben: einmal melden
+    if (s.welcomeGranted && !state.welcomeShown) {
+      state.welcomeShown = true;
+      cloudFooter(t('Willkommen! Du hast {bc} Startguthaben bekommen.', { bc: fmtBc(s.welcomeGranted) }), 'ok');
+    }
     cloudEl.in.hidden = !s.signedIn;
     cloudEl.buyBox.hidden = !s.signedIn;
     cloudEl.planBox.hidden = !s.signedIn || !cloud.plans.length;
