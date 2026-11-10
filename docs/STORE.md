@@ -58,7 +58,7 @@ Buddy Island ist dein Assistent oben in der Mitte des Bildschirms. Ein kleines s
 
 Frag Buddy etwas, stell einen Timer, öffne Apps und Websites, steuere deine Musik oder lass dir sagen, was heute im Kalender steht. Windows-Mitteilungen erscheinen kurz im Island. Läuft ein Spiel oder ein Vollbild, hält Buddy sich zurück.
 
-Buddy antwortet mit KI über Buddy Cloud. Du meldest dich mit Google oder E-Mail an und lädst Guthaben auf (ab 5 USD) oder nimmst Buddy Plus. Bezahlt wird über Stripe.
+Buddy antwortet mit KI über Buddy Cloud. Du meldest dich mit Google oder E-Mail an und bekommst einmalig 50 BC Startguthaben. Danach lädst du Guthaben auf (ab 5 USD) oder nimmst Buddy Plus. Bezahlt wird über Stripe.
 
 Diese App verwendet generative KI. Antworten können falsch oder unpassend sein. Unter jeder Antwort kannst du sie mit «Melden» an uns schicken.
 
@@ -79,7 +79,7 @@ Buddy Island is your assistant at the top center of your screen. A small black i
 
 Ask Buddy anything, set a timer, open apps and websites, control your music or check what's on your calendar today. Windows notifications show up briefly in the island. When a game or full-screen app is running, Buddy holds back.
 
-Buddy answers with AI through Buddy Cloud. Sign in with Google or email and top up credits (from USD 5) or get Buddy Plus. Payments are handled by Stripe.
+Buddy answers with AI through Buddy Cloud. Sign in with Google or email and get 50 BC starter credits once. After that, top up credits (from USD 5) or get Buddy Plus. Payments are handled by Stripe.
 
 This app uses generative AI. Responses can be wrong or inappropriate. You can report any response with «Report» below it.
 
@@ -89,7 +89,7 @@ Buddy Island est ton assistant en haut au centre de l'écran. Une petite île no
 
 Pose une question à Buddy, lance un minuteur, ouvre des applis et des sites, contrôle ta musique ou regarde ce qui t'attend aujourd'hui dans ton agenda. Les notifications Windows apparaissent brièvement dans l'île. Pendant un jeu ou en plein écran, Buddy se fait discret.
 
-Buddy répond grâce à l'IA via Buddy Cloud. Connecte-toi avec Google ou un e-mail et recharge des crédits (dès 5 USD) ou prends Buddy Plus. Le paiement passe par Stripe.
+Buddy répond grâce à l'IA via Buddy Cloud. Connecte-toi avec Google ou un e-mail et reçois une fois 50 BC de crédit de départ. Ensuite, recharge des crédits (dès 5 USD) ou prends Buddy Plus. Le paiement passe par Stripe.
 
 Cette app utilise l'IA générative. Les réponses peuvent être fausses ou inappropriées. Tu peux signaler une réponse avec «Signaler» en dessous.
 
@@ -97,7 +97,7 @@ Cette app utilise l'IA générative. Les réponses peuvent être fausses ou inap
 Englisch, weil die Prüfer international sind. Vorher ein Testkonto mit Guthaben anlegen (z. B. 500 BC von Hand gutschreiben), Zugangsdaten nur hier eintragen, nie ins Repo.
 
 > Buddy Island is an AI assistant that lives at the top center of the screen. After install it starts in the tray and shows a small black "island" at the top of the primary display; click it or press Ctrl+Shift+Space to open it.
-> AI responses need a Buddy Cloud account with credits. Test account: <E-MAIL> / <PASSWORT> (credits are preloaded, no purchase needed). Sign in under the person icon → "Sign in with email".
+> AI responses need a Buddy Cloud account. Every new account gets 50 free starter credits once, so the app works without any purchase; buying more is optional. Test account: <E-MAIL> / <PASSWORT> (credits are preloaded, no purchase needed). Sign in under the person icon → "Sign in with email".
 > Purchases of credits and the Buddy Plus subscription use Stripe Checkout in the browser (third-party payment for a non-game app, policy 10.8.1). No card data is entered inside the app.
 > Optional features that are off by default: wake word (microphone, on-device recognition with Vosk), Windows notifications in the island (requires the user to allow notification access).
 > The app starts PowerShell helper scripts bundled in the package for volume, media and notification display and on-device speech; it does not download or run other code.
