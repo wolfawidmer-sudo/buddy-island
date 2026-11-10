@@ -41,7 +41,8 @@ test('Ungültiges fällt auf «Hey Buddy» zurück', () => {
 test('Übergabe an PowerShell nur als Base64', () => {
   const enc = ww.encodePhrases(ww.wakePhrases('Hey Kiwi'));
   assert.match(enc, /^[A-Za-z0-9+/=]+$/);
-  assert.deepStrictEqual(JSON.parse(Buffer.from(enc, 'base64').toString('utf8')), ww.wakePhrases('Hey Kiwi'));
+  assert.deepStrictEqual(Buffer.from(enc, 'base64').toString('utf8').split('\n'), ww.wakePhrases('Hey Kiwi'));
+  assert.ok(!SCRIPT.includes('| ConvertFrom-Json)'), 'keine JSON-Listen an PowerShell 5.1');
   assert.ok(SCRIPT.includes('[string]$words') && SCRIPT.includes('FromBase64String($words)') && SCRIPT.includes('$minconf'));
 });
 

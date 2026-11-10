@@ -46,9 +46,11 @@ if (-not $info) { $info = $infos | Select-Object -First 1 }
 
 $list = @('hey buddy', 'hallo buddy', 'hi buddy', 'he buddy', 'okay buddy')
 if ($words) {
-  try { $list = @([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($words)) | ConvertFrom-Json) } catch { }
+  # Eine Zeile pro Wakeword-Variante (kein JSON: Windows PowerShell 5.1 liefert JSON-Listen als ein einziges Objekt)
+  try { $list = @([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($words)) -split [char]10 | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } catch { }
 }
 $list = @($list | Where-Object { $_ -is [string] -and $_.Length -gt 0 -and $_.Length -le 48 })
+if ($list.Count -eq 0) { $list = @('hey buddy', 'hallo buddy', 'hi buddy', 'he buddy', 'okay buddy') }
 
 $rec = $null
 $wakeGrammar = $null
@@ -218,7 +220,8 @@ public static class BuddyVosk {
     
     Add-Type -TypeDefinition $voskCode -Language CSharp
     $gwords = @($list)
-    if ($grammar) { try { $gwords = @([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($grammar)) | ConvertFrom-Json) } catch { } }
+    if ($grammar) { try { $gwords = @([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($grammar)) -split [char]10 | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } catch { } }
+    if ($gwords.Count -eq 0) { $gwords = @($list) }
     $err = [BuddyVosk]::Init($dllDir, $modelDir, [string[]]$gwords)
     if (-not $err) { $err = [BuddyVosk]::StartMic() }
     if ($err) { Emit @{ kind = 'error'; error = 'Vosk: ' + $err } } else { $vosk = $true }
@@ -333,7 +336,7 @@ function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD }) 
       '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file, '-wake', wake ? '1' : '0',
       '-words', encodePhrases(wakePhrases(word)), '-minconf', String(minConfidence(word)),
       ...(engine ? ['-engine', 'vosk', '-voskdll', b64(engine.dllDir), '-voskmodel', b64(engine.modelDir),
-        '-grammar', b64(JSON.stringify(grammarWords(engine.lang, wakePhrases(word))))] : []),
+        '-grammar', b64(grammarWords(engine.lang, wakePhrases(word)).join('\n'))] : []),
     ], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     proc = p;
     info = { ...info, ready: false };

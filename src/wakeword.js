@@ -56,10 +56,11 @@ function minConfidence(word) {
   return w.includes(' ') ? 0.6 : 0.75;
 }
 
-// Für den PowerShell-Helfer: Liste als Base64-JSON (nur A–Z, a–z, 0–9, +, /, =), damit
-// nichts aus der Eingabe als Befehl gelesen werden kann
+// Für den PowerShell-Helfer: eine Variante pro Zeile, als Base64 (nur A–Z, a–z, 0–9, +, /, =),
+// damit nichts aus der Eingabe als Befehl gelesen werden kann. Bewusst kein JSON:
+// Windows PowerShell 5.1 gibt eine JSON-Liste als ein einziges Objekt weiter (Fehler in 0.14.0).
 function encodePhrases(phrases) {
-  return Buffer.from(JSON.stringify(phrases), 'utf8').toString('base64');
+  return Buffer.from(phrases.join('\n'), 'utf8').toString('base64');
 }
 
 module.exports = { DEFAULT_WAKE_WORD, cleanWakeWord, wakeWordOf, wakePhrases, minConfidence, encodePhrases };
