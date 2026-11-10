@@ -330,6 +330,32 @@ test.describe('Buddy Credits Datenbank', { skip }, () => {
     assert.match((await sql(`select public.grant_subscription_credits('${uid}', 'x', 99, now())`, { role: 'authenticated', sub: uid })).err, /permission denied/);
   });
 
+  test('Startguthaben: einmal pro Konto, E-Mail, PC; IP-Grenze; nur für das Backend', async () => {
+    const h = (c) => c.repeat(64);
+    const grant = (uid, email, device, ip = null, limit = 3) => must(`select public.grant_welcome_credits('${uid}', '${email}', '${device}', ${ip ? `'${ip}'` : 'null'}, 50, ${limit})->>'reason'`);
+    const u1 = await newUser('Willi1');
+    assert.equal(await grant(u1, h('1'), h('a'), h('9')), 'granted');
+    assert.equal((await wallet(u1)).available, '50.000000');
+    assert.equal(await must(`select transaction_type || '|' || amount || '|' || description from public.wallet_transactions where user_id = '${u1}'`), 'adjustment|50.000000|Startguthaben');
+    assert.equal(await grant(u1, h('2'), h('b')), 'account');
+    const u2 = await newUser('Willi2');
+    assert.equal(await grant(u2, h('1'), h('b')), 'email');
+    assert.equal(await grant(u2, h('2'), h('a')), 'device');
+    assert.equal((await wallet(u2)).available, '0.000000', 'nichts gebucht');
+    // IP-Grenze: höchstens 2 pro Tag (hier eingestellt)
+    const u3 = await newUser('Willi3');
+    assert.equal(await grant(u3, h('3'), h('c'), h('9'), 2), 'granted');
+    const u4 = await newUser('Willi4');
+    assert.equal(await grant(u4, h('4'), h('d'), h('9'), 2), 'ip');
+    // Neues Konto mit derselben E-Mail (z. B. nach Löschen): bleibt gesperrt
+    const u5 = await newUser('Willi5');
+    assert.equal(await grant(u5, h('1'), h('e')), 'email');
+    // App-Nutzer dürfen weder die Tabelle lesen noch die Funktion aufrufen
+    assert.match((await sql(`select * from public.welcome_grants`, { role: 'authenticated', sub: u5 })).err, /permission denied/);
+    assert.match((await sql(`select public.grant_welcome_credits('${u5}', '${h('5')}', '${h('f')}', null, 5000, 3)`, { role: 'authenticated', sub: u5 })).err, /permission denied/);
+    assert.match((await sql(`select public.grant_welcome_credits('${u5}', 'kurz', '${h('f')}', null, 50, 3)`)).err, /check constraint/);
+  });
+
   test('Alte CHF-Funktionen sind stillgelegt', async () => {
     assert.match((await sql(`select * from public.complete_purchase(gen_random_uuid(), 'x', 'y', 1, 'chf')`, { role: 'service_role' })).err, /permission denied/);
     assert.match((await sql(`select * from public.refund_purchase('x', 1)`, { role: 'service_role' })).err, /permission denied/);
