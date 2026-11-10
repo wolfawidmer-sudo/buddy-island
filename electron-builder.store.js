@@ -32,8 +32,9 @@ module.exports = {
     displayName: 'Buddy Island',
     backgroundColor: 'transparent',
     languages: ['de-DE', 'en-US', 'fr-FR'],
-    // Mikrofon (Sprache, Wakeword), Windows-Mitteilungen im Island
-    capabilities: ['runFullTrust', 'microphone', 'userNotificationListener'],
+    // Fähigkeiten (Mikrofon für Sprache/Wakeword, Windows-Mitteilungen im Island) stehen fest
+    // in build/appxmanifest.xml, weil electron-builder userNotificationListener falsch schreibt.
+    customManifestPath: path.join(__dirname, 'build', 'appxmanifest.xml'),
     addAutoLaunchExtension: false,
     customExtensionsPath: 'build/appx-extensions.xml',
     // Windows 10 1809 als Minimum, getestet bis Windows 11 24H2

@@ -86,8 +86,15 @@ assert.strictEqual(store.parseStartupTask('{"state":"Error","error":"x"}').error
     const cfg = require(cfgPath);
     assert.strictEqual(cfg.publish, null);
     assert.deepStrictEqual(cfg.win.target, [{ target: 'appx', arch: ['x64'] }]);
-    assert.ok(cfg.appx.capabilities.includes('microphone'));
-    assert.ok(cfg.appx.capabilities.includes('userNotificationListener'));
+    const man = fs.readFileSync(cfg.appx.customManifestPath, 'utf8');
+    assert.ok(/<uap3:Capability Name="userNotificationListener"/.test(man), 'uap3-Namensraum für Mitteilungen');
+    assert.ok(/xmlns:uap3=/.test(man));
+    assert.ok(/<DeviceCapability Name="microphone"/.test(man));
+    // Reihenfolge laut Schema: Capability vor DeviceCapability
+    assert.ok(man.indexOf('uap3:Capability') < man.indexOf('DeviceCapability'));
+    // alle Platzhalter, die electron-builder kennt (sonst bricht der Build ab)
+    const known = ['publisher', 'publisherDisplayName', 'version', 'applicationId', 'identityName', 'executable', 'displayName', 'description', 'backgroundColor', 'logo', 'square150x150Logo', 'square44x44Logo', 'lockScreen', 'defaultTile', 'splashScreen', 'arch', 'resourceLanguages', 'capabilities', 'extensions', 'minVersion', 'maxVersionTested'];
+    for (const [, k] of man.matchAll(/\$\{([a-zA-Z0-9]+)\}/g)) assert.ok(known.includes(k), `unbekannter Platzhalter ${k}`);
     assert.strictEqual(cfg.appx.addAutoLaunchExtension, false);
     assert.ok(fs.existsSync(path.join(__dirname, '..', cfg.appx.customExtensionsPath)));
   } else {
