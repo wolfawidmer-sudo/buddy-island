@@ -472,6 +472,9 @@ input[type="range"]:disabled { opacity: 0.4; }
 .row-button:active { opacity: 0.7; }
 .row-button.left { justify-content: flex-start; color: var(--accent-text); }
 .row-button.danger, .row-button.left.danger { color: var(--danger-text); }
+/* Zeile, die etwas ausserhalb öffnet (z. B. Windows-Einstellungen): wie eine normale Zeile, Pfeil rechts */
+.row-button.link { justify-content: space-between; text-align: left; }
+.row-button.link .row-value { color: var(--text-3); }
 .row-button:disabled { opacity: 0.4; pointer-events: none; }
 .row-button:focus-visible, .row:focus-visible, .disclosure summary:focus-visible { outline-offset: -2px; border-radius: var(--radius-md); }
 

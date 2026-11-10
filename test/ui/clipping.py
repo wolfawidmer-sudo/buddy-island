@@ -136,7 +136,7 @@ with sync_playwright() as p:
                 for tab in ['general', 'features', 'safety', 'keys', 'system']:
                     check(b, f'{k}-einst-{tab}', {**base, 'signedIn': True}, [OPEN('settings'), TAB(tab)], lang, size, scale)
                 check(b, f'{k}-einst-erweitert', {**base, 'signedIn': True}, [OPEN('settings'), TAB('system'), "document.getElementById('modelBox').open = true"], lang, size, scale)
-                check(b, f'{k}-einst-store', {**base, 'signedIn': True, 'settings': {'storeBuild': True, 'canUpdate': False, 'autostart': True, 'storeAutostart': {'state': 'DisabledByUser', 'blocked': True}, 'updateState': {'state': 'idle'}}}, [OPEN('settings'), TAB('system')], lang, size, scale, shot=(tag == '' and theme == 'dark'))
+                check(b, f'{k}-einst-store', {**base, 'signedIn': True, 'settings': {'storeBuild': True, 'canUpdate': False, 'updateState': {'state': 'idle'}}}, [OPEN('settings'), TAB('system')], lang, size, scale, shot=(tag == '' and theme == 'dark'))
     b.close()
 
 print(f'{count} Ansichten geprüft')

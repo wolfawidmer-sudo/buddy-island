@@ -79,8 +79,8 @@
     hotkeyMsg: $('hotkeyMsg'),
     soundToggle: $('soundToggle'),
     autostartToggle: $('autostartToggle'),
-    autostartLabel: $('autostartLabel'),
-    autostartSub: $('autostartSub'),
+    autostartRow: $('autostartRow'),
+    autostartStoreBtn: $('autostartStoreBtn'),
     quitBtn: $('quitBtn'),
     pillCover: $('pillCover'),
     nowPlaying: $('nowPlaying'),
@@ -1754,11 +1754,9 @@
     el.prefStyle.value = s.promptPrefs?.style || 'friendly';
     el.soundToggle.checked = Boolean(s.sound);
     el.autostartToggle.checked = Boolean(s.autostart);
-    // Store-Version: hat der Nutzer Buddy in Windows aus dem Autostart genommen, kann nur Windows das ändern
-    const autoBlocked = Boolean(s.storeBuild && s.autostart && s.storeAutostart?.blocked);
-    el.autostartSub.hidden = !autoBlocked;
-    el.autostartSub.textContent = autoBlocked ? t('In Windows ausgeschaltet: Einstellungen › Apps › Autostart') : '';
-    el.autostartLabel.classList.toggle('two', autoBlocked);
+    // Store-Version: Autostart schaltet nur Windows (Einstellungen › Apps › Autostart)
+    el.autostartRow.hidden = Boolean(s.storeBuild);
+    el.autostartStoreBtn.hidden = !s.storeBuild;
     el.notifyToggle.checked = Boolean(s.notifications);
     const status = s.notifications ? s.notifyStatus : 'Off';
     el.notifyStatus.textContent = NOTIFY_STATUS[status] || status || '–';
@@ -2347,6 +2345,7 @@
     save({ sound: el.soundToggle.checked });
     if (el.soundToggle.checked) chime();
   });
+  el.autostartStoreBtn.addEventListener('click', () => api.openStartupSettings());
   el.autostartToggle.addEventListener('change', () => save({ autostart: el.autostartToggle.checked }));
   el.notifyToggle.addEventListener('change', async () => { await save({ notifications: el.notifyToggle.checked }); fillSettings(); });
   // Direkt zu den Windows-Einstellungen, um die Banner unten rechts auszuschalten

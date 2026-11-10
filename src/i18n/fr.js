@@ -1256,5 +1256,5 @@ module.exports = {
   " · Microsoft Store": " · Microsoft Store",
   "Melden": "Signaler",
   "Unpassende Antwort melden": "Signaler une réponse inappropriée",
-  "In Windows ausgeschaltet: Einstellungen › Apps › Autostart": "Désactivé dans Windows : Paramètres › Applications › Démarrage",
+  "In den Windows-Einstellungen": "Dans les paramètres Windows",
 };

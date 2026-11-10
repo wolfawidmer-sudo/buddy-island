@@ -5,7 +5,7 @@
 |---|---|---|
 | Signatur | nicht code-signiert (SmartScreen-Warnung) | signiert Partner Center beim Einreichen |
 | Updates | eigener Updater mit Ed25519-Signatur und Rollback | nur über den Store; eigener Updater und Rollback aus |
-| Autostart | Registry (`setLoginItemSettings`) | StartupTask `BuddyIslandStartup` im Manifest, aus bis der Nutzer ihn einschaltet |
+| Autostart | Schalter in Buddy (Registry) | StartupTask `BuddyIslandStartup` im Manifest, standardmässig aus; der Eintrag in Buddy öffnet Einstellungen › Apps › Autostart |
 | Verknüpfungen | legt der Installer an | legt Windows an |
 | Vosk-Laufzeit (libvosk.dll) | wird beim Einschalten geladen | liegt im Paket; geladen werden nur Sprachmodelle (Daten) |
 | «Melden» unter KI-Antworten | ja | ja (Richtlinie 11.16) |
@@ -35,7 +35,11 @@ Der Workflow veröffentlicht nichts und löst kein Auto-Update bei bestehenden N
 
 ## Auf Windows geprüft (Workflow «Store-Paket», windows-latest)
 - Paket baut, Manifest gültig, installiert (mit Wegwerf-Zertifikat signierte Testkopie), Buddy startet im Paket.
-- Autostart: Buddy schaltet die StartupTask beim Start selbst ein; Ein/Aus im Paket-Kontext funktioniert.
+- Autostart-Aufgabe ist im Paket vorhanden, standardmässig aus, ein- und ausschaltbar.
+  Aus Buddy selbst geht das nicht: Ein PowerShell-Kindprozess bekommt «Element not found», auch mit gesetzter
+  App-Kennung (gemessen). Darum öffnet Buddy die Windows-Einstellung. Möglich wäre später ein natives Modul.
+- Vosk: libvosk.dll lässt sich aus dem Paketordner laden.
+- Buddy setzt im Paket keine eigene App-Kennung mehr (sonst passt die Kennung nicht zum Paket).
 - Windows App Certification Kit: Gesamtergebnis PASS. «Blocked executables» meldet FAIL, weil WACK in allen
   Dateien nach Wörtern wie «cmd», «reg», «bash» sucht (auch in Chromiums Sprachdateien). Das trifft jede
   Electron-App und blockiert die Einreichung nicht; Buddy startet PowerShell für seine Helfer (Lautstärke,

@@ -16,16 +16,7 @@ const ext = fs.readFileSync(path.join(__dirname, '..', 'build', 'appx-extensions
 assert.ok(ext.includes(`TaskId="${store.STARTUP_TASK_ID}"`), 'TaskId im Manifest passt');
 assert.ok(/Enabled="false"/.test(ext), 'Autostart im Paket standardmässig aus');
 assert.ok(ext.includes('Executable="app\\Buddy Island.exe"'));
-assert.ok(store.startupTaskScript('enable').includes('RequestEnableAsync'));
-assert.ok(store.startupTaskScript('disable').includes('.Disable()'));
-assert.ok(!store.startupTaskScript('query').includes('RequestEnableAsync'));
-assert.throws(() => store.startupTaskScript('rm -rf'));
-assert.deepStrictEqual(store.parseStartupTask('{"state":"Enabled"}\r\n'), { state: 'Enabled', enabled: true, blocked: false, error: null });
-assert.strictEqual(store.parseStartupTask('{"state":"DisabledByUser"}').blocked, true);
-assert.strictEqual(store.parseStartupTask('{"state":"DisabledByPolicy"}').blocked, true);
-assert.strictEqual(store.parseStartupTask('{"state":"Disabled"}').blocked, false);
-assert.strictEqual(store.parseStartupTask('Müll').state, 'Error');
-assert.strictEqual(store.parseStartupTask('{"state":"Error","error":"x"}').error, 'x');
+assert.strictEqual(store.STARTUP_SETTINGS, 'ms-settings:startupapps');
 
 // Vosk: mit Laufzeit im Paket nur das Modell laden
 (async () => {

@@ -442,7 +442,6 @@ function publicSettings() {
     updateState,
     canUpdate: Boolean(updater),
     storeBuild: IS_STORE,
-    storeAutostart: IS_STORE ? storeAutostart : null,
     rollbackVersion: updater?.rollbackTarget?.() || null,
     updateHealth,
     signingKeys: Object.keys(updateSecurity.PUBLIC_KEYS),
@@ -1281,21 +1280,8 @@ function findDuplicate(source) {
   return null;
 }
 
-// Store-Version: Autostart über die StartupTask des Pakets (Manifest), nicht über die Registry
-let storeAutostart = null; // { state, enabled, blocked, error }
-function applyStoreAutostart() {
-  const { execFile } = require('child_process');
-  const action = settings.autostart ? 'enable' : 'disable';
-  execFile('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', store.startupTaskScript(action)], { windowsHide: true, timeout: 15000 }, (err, out) => {
-    storeAutostart = err ? { state: 'Error', enabled: false, blocked: false, error: err.message } : store.parseStartupTask(String(out));
-    if (storeAutostart.error) log(`Autostart (Store): ${storeAutostart.error}`);
-    else if (storeAutostart.blocked && settings.autostart) log(`Autostart (Store): in Windows ausgeschaltet (${storeAutostart.state})`);
-    liveWin()?.webContents.send('settings:changed', publicSettings());
-  });
-}
-
 function applyAutostart() {
-  if (IS_STORE) { applyStoreAutostart(); return; }
+  if (IS_STORE) return; // Store: nur über Windows-Einstellungen (src/store.js)
   const options = { openAtLogin: Boolean(settings.autostart) };
   if (!app.isPackaged) {
     options.path = process.execPath;
@@ -2610,6 +2596,7 @@ function setupIpc() {
   ipcMain.handle('notify:list', () => watcher?.recent() || []);
   ipcMain.on('notify:clear', () => watcher?.clear());
   ipcMain.on('notify:settings', () => shell.openExternal('ms-settings:notifications'));
+  ipcMain.on('autostart:open-settings', () => shell.openExternal(store.STARTUP_SETTINGS));
   ipcMain.on('chat:report', (_e, o) => {
     const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
     const answer = str(o?.answer, 20000);

@@ -94,16 +94,12 @@ jobs:
           "PFN=$($pkg.PackageFamilyName)" >> $env:GITHUB_ENV
           "SIGNED=$signed" >> $env:GITHUB_ENV
 
-      - name: Starten und Autostart-Aufgabe prüfen
+      - name: Starten und Autostart-Aufgabe prüfen (standardmässig aus, in Windows schaltbar)
         shell: pwsh
         run: |
           $out = Join-Path $env:PUBLIC 'buddy-store-check'
           New-Item -ItemType Directory -Force $out | Out-Null
-          # Einstellungen vorab in den umgeleiteten AppData-Ordner des Pakets: Autostart an,
-          # damit Buddy beim Start selbst die StartupTask einschaltet (Buddys eigener Weg)
           $data = Join-Path $env:LOCALAPPDATA "Packages\$($env:PFN)\LocalCache\Roaming\Buddy Island"
-          New-Item -ItemType Directory -Force $data | Out-Null
-          '{"autostart":true,"onboarded":true}' | Set-Content -Encoding utf8NoBOM (Join-Path $data 'settings.json')
           Start-Process "shell:AppsFolder\$($env:PFN)!BuddyIsland"
           Start-Sleep -Seconds 30
           $procs = Get-Process -Name 'Buddy Island' -ErrorAction SilentlyContinue
@@ -117,7 +113,7 @@ jobs:
           try {
             [Windows.ApplicationModel.StartupTask, Windows.ApplicationModel, ContentType = WindowsRuntime] | Out-Null
             $task = Await ([Windows.ApplicationModel.StartupTask]::GetAsync('BuddyIslandStartup')) ([Windows.ApplicationModel.StartupTask])
-            $s1 = [string]$task.State   # von Buddy beim Start gesetzt (Autostart an)
+            $s1 = [string]$task.State
             $s2 = [string](Await ($task.RequestEnableAsync()) ([Windows.ApplicationModel.StartupTaskState]))
             $task.Disable(); $s3 = [string]$task.State
             "vorher=$s1 eingeschaltet=$s2 danach=$s3" | Set-Content "$env:PUBLIC\buddy-store-check\startup.txt"
@@ -129,47 +125,16 @@ jobs:
           Start-Sleep -Seconds 15
           $res = Get-Content (Join-Path $out 'startup.txt') -ErrorAction SilentlyContinue
           "Autostart-Aufgabe: $res"
-          if ($res -notmatch 'eingeschaltet=Enabled') { Write-Output "::warning::Autostart-Aufgabe nicht wie erwartet: $res" }
           # Log aus dem umgeleiteten AppData-Ordner des Pakets
           $log = Join-Path $env:LOCALAPPDATA "Packages\$($env:PFN)\LocalCache\Roaming\Buddy Island\buddy.log"
           if (Test-Path $log) { "--- buddy.log ---"; Get-Content $log -Tail 60 } else { Write-Output "::warning::Kein Log unter $log" }
           # Fehler erst am Schluss melden, damit Vosk und WACK trotzdem laufen
           $problem = ''
-          if ($res -notmatch 'vorher=Enabled') { $problem += "Buddy hat den Autostart nicht selbst eingeschaltet ($res). " }
-          if ((Test-Path $log) -and (Select-String -Path $log -Pattern 'Autostart \(Store\)' -Quiet)) { $problem += 'Buddy meldet einen Autostart-Fehler im Log. ' }
+          if ($res -notmatch 'vorher=Disabled eingeschaltet=Enabled danach=Disabled') { $problem += "Autostart-Aufgabe im Paket nicht wie erwartet ($res). " }
           if ($problem) { Write-Output "::error::$problem"; "STORE_PROBLEM=$problem" >> $env:GITHUB_ENV }
           "--- Daten-Ordner ---"; Get-ChildItem $data -ErrorAction SilentlyContinue | Select-Object Name, Length | Format-Table | Out-String
           Copy-Item $log $out -ErrorAction SilentlyContinue
           Get-Process -Name 'Buddy Island' -ErrorAction SilentlyContinue | Stop-Process -Force
-
-      - name: Versuch Autostart aus Kindprozess
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          $dir = Join-Path $env:PUBLIC 'buddy-store-check'
-          $aumid = "$($env:PFN)!BuddyIsland"
-          $child = @"
-          param([string]`$mode)
-          Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class A { [DllImport("shell32.dll", CharSet=CharSet.Unicode)] public static extern int SetCurrentProcessExplicitAppUserModelID(string id); }'
-          if (`$mode -eq 'aumid') { [A]::SetCurrentProcessExplicitAppUserModelID('$aumid') | Out-Null }
-          Add-Type -AssemblyName System.Runtime.WindowsRuntime
-          `$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { `$_.Name -eq 'AsTask' -and `$_.GetParameters().Count -eq 1 -and `$_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation``1' })[0]
-          function Await(`$op, [Type]`$type) { `$t = `$asTask.MakeGenericMethod(`$type).Invoke(`$null, @(`$op)); `$t.Wait(-1) | Out-Null; `$t.Result }
-          try {
-            [Windows.ApplicationModel.StartupTask, Windows.ApplicationModel, ContentType = WindowsRuntime] | Out-Null
-            `$task = Await ([Windows.ApplicationModel.StartupTask]::GetAsync('BuddyIslandStartup')) ([Windows.ApplicationModel.StartupTask])
-            "`$mode ok state=`$([string]`$task.State)" | Add-Content '$dir\child.txt'
-          } catch { "`$mode Fehler: `$(`$_.Exception.Message)" | Add-Content '$dir\child.txt' }
-          "@
-          $child | Set-Content "$dir\child.ps1"
-          $parent = @"
-          Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "$dir\child.ps1" plain' -Wait -WindowStyle Hidden
-          Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "$dir\child.ps1" aumid' -Wait -WindowStyle Hidden
-          "@
-          $parent | Set-Content "$dir\parent.ps1"
-          Invoke-CommandInDesktopPackage -PackageFamilyName $env:PFN -AppId 'BuddyIsland' -Command 'powershell.exe' -Args "-NoProfile -ExecutionPolicy Bypass -File `"$dir\parent.ps1`""
-          Start-Sleep -Seconds 20
-          "Kindprozess:"; Get-Content "$dir\child.txt" -ErrorAction SilentlyContinue
 
       - name: Vosk-DLL aus dem Paketordner laden
         shell: pwsh

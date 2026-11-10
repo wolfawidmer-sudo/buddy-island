@@ -1249,5 +1249,5 @@ module.exports = {
   " · Microsoft Store": " · Microsoft Store",
   "Melden": "Report",
   "Unpassende Antwort melden": "Report an inappropriate response",
-  "In Windows ausgeschaltet: Einstellungen › Apps › Autostart": "Turned off in Windows: Settings › Apps › Startup",
+  "In den Windows-Einstellungen": "In the Windows settings",
 };
