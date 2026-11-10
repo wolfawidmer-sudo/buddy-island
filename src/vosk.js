@@ -129,7 +129,8 @@ async function ensure({ root, lang, fetchImpl, unzip, onProgress = () => {}, sig
 
 // Wortliste für die Erkennung: Wakeword-Varianten plus häufige Wörter der Sprache.
 // Ohne Füllwörter presst Vosk jedes Gesagte auf das Wakeword (viele Fehlalarme);
-// gemessen mit synthetischer Sprache: 8/17 → 20/23 richtig (siehe test/eyes-wakeword.test.js).
+// Gemessen mit synthetischer Sprache (test/wake/): ~40 häufige Wörter sind besser als ~300,
+// weil weniger Wörter dem Wakeword bei leiser oder entfernter Sprache Konkurrenz machen.
 function grammarWords(lang, phrases) {
   let fill = [];
   try { fill = fs.readFileSync(path.join(__dirname, 'wake-fillers', `${langFor(lang)}.txt`), 'utf8').split(/\s+/).filter(Boolean); } catch { /* ohne Füllwörter */ }

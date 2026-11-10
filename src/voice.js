@@ -114,6 +114,7 @@ public static class BuddyVosk {
   [DllImport("libvosk", CallingConvention = C)] static extern void vosk_recognizer_set_words(IntPtr r, int on);
   [DllImport("libvosk", CallingConvention = C)] static extern int vosk_recognizer_accept_waveform(IntPtr r, byte[] data, int len);
   [DllImport("libvosk", CallingConvention = C)] static extern IntPtr vosk_recognizer_result(IntPtr r);
+  [DllImport("libvosk", CallingConvention = C)] static extern IntPtr vosk_recognizer_partial_result(IntPtr r);
   [DllImport("libvosk", CallingConvention = C)] static extern void vosk_recognizer_reset(IntPtr r);
   [DllImport("libvosk", CallingConvention = C)] static extern void vosk_recognizer_free(IntPtr r);
 
@@ -131,6 +132,7 @@ public static class BuddyVosk {
   const int HDR = 48, N = 4, BUF = 3200; // 4 × 100 ms bei 16 kHz, 16 Bit, mono
   static IntPtr model = IntPtr.Zero, rec = IntPtr.Zero, wave = IntPtr.Zero;
   static IntPtr[] hdrs = new IntPtr[N];
+  static string lastPartial = "";
 
   static byte[] Z(string s, Encoding e) { byte[] b = e.GetBytes(s); byte[] z = new byte[b.Length + 1]; Array.Copy(b, z, b.Length); return z; }
   static string Str(IntPtr p) {
@@ -187,6 +189,7 @@ public static class BuddyVosk {
     waveInClose(wave);
     wave = IntPtr.Zero;
     if (rec != IntPtr.Zero) vosk_recognizer_reset(rec);
+    lastPartial = "";
   }
 
   // Wartet bis zu ms auf ein fertiges Stück Sprache; gibt das Vosk-Ergebnis (JSON) zurück oder null
@@ -203,7 +206,11 @@ public static class BuddyVosk {
         if (n > 0) Marshal.Copy(Marshal.ReadIntPtr(h, 0), buf, 0, n);
         Marshal.WriteInt32(h, 12, 0);
         waveInAddBuffer(wave, h, HDR);
-        if (n > 0 && vosk_recognizer_accept_waveform(rec, buf, n) == 1) return Str(vosk_recognizer_result(rec));
+        if (n <= 0) continue;
+        if (vosk_recognizer_accept_waveform(rec, buf, n) == 1) { lastPartial = ""; return Str(vosk_recognizer_result(rec)); }
+        // Zwischenstand: Wakeword sofort erkennen, ohne auf eine Sprechpause zu warten
+        string part = Str(vosk_recognizer_partial_result(rec));
+        if (part != lastPartial) { lastPartial = part; if (part.IndexOf("\"partial\" : \"\"") < 0) return "P" + part; }
       }
       if (!any) Thread.Sleep(25);
     }
@@ -230,18 +237,26 @@ public static class BuddyVosk {
   }
 }
 
-# Passt ein Vosk-Ergebnis zu einem der Wakewords? Nur am Anfang einer Äusserung
-# («Hey Kiwi, …»), nicht mitten im Satz («… eine Kiwi zum Frühstück»), und sicher genug.
+# Passt ein Vosk-Ergebnis zu einem der Wakewords? Am Anfang einer Äusserung (erstes oder
+# zweites Wort, «… hey kiwi» nach einem Geräusch zählt), nicht mitten im Satz.
+# Zwischenstände («P{…}») zählen nur für Wakewords aus mindestens zwei Wörtern.
+# Vosk ist strenger als die Windows-Erkennung, darum eine tiefere Schwelle (gemessen, siehe test/wake/).
 function VoskHit($json) {
+  $partial = $json.StartsWith('P')
+  if ($partial) { $json = $json.Substring(1) }
   try { $r = $json | ConvertFrom-Json } catch { return $false }
-  $text = ' ' + ([string]$r.text).Trim() + ' '
+  $text = if ($partial) { [string]$r.partial } else { [string]$r.text }
+  $w = @($text.Trim().Split(' ') | Where-Object { $_ })
   foreach ($p in $list) {
-    if ($text.StartsWith(' ' + $p + ' ')) {
-      $n = $p.Split(' ').Count
-      $words = @($r.result | Select-Object -First $n)
-      if ($words.Count -lt $n) { return $true }
+    $pw = @($p.Split(' '))
+    if ($partial -and $pw.Count -lt 2) { continue }
+    for ($i = 0; $i -le [Math]::Min(1, $w.Count - $pw.Count); $i++) {
+      if ((($w[$i..($i + $pw.Count - 1)]) -join ' ') -ne $p) { continue }
+      if ($partial) { return $true }
+      $words = @($r.result | Select-Object -Skip $i -First $pw.Count)
+      if ($words.Count -lt $pw.Count) { return $true }
       $avg = ($words | Measure-Object -Property conf -Average).Average
-      if ($avg -ge $minconf) { return $true }
+      if ($avg -ge ($minconf - 0.15)) { return $true }
     }
   }
   return $false

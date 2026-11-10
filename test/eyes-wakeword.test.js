@@ -127,7 +127,7 @@ test('Wortliste: Wakeword + Füllwörter, nur sichere Zeichen', () => {
   for (const lang of ['de', 'en', 'fr']) {
     const g = vosk.grammarWords(lang, ww.wakePhrases('Hey Kiwi'));
     assert.ok(g.includes('kiwi') && g.includes('hey'), lang);
-    assert.ok(g.length > 150, `${lang}: genug Füllwörter (${g.length})`);
+    assert.ok(g.length > 30 && g.length < 120, `${lang}: Füllwörter (${g.length})`);
     for (const w of g) assert.ok(!/["\\\[\]{}]/.test(w), `kein Sonderzeichen: ${w}`);
   }
 });
@@ -137,7 +137,7 @@ test('unbekannte Wörter aus der Vosk-Ausgabe', () => {
   assert.deepStrictEqual(vosk.missingWords(''), []);
 });
 test('Sprach-Helfer: Vosk-Teil vorhanden, Mikrofon wird fürs Diktat freigegeben', () => {
-  for (const x of ['[string]$grammar', 'BuddyVosk', '[BuddyVosk]::StopMic()', 'StartsWith', 'waveInOpen', 'GetShortPathName']) assert.ok(SCRIPT.includes(x), x);
+  for (const x of ['[string]$grammar', 'BuddyVosk', 'vosk_recognizer_partial_result', "StartsWith('P')", '[BuddyVosk]::StopMic()', 'StartsWith', 'waveInOpen', 'GetShortPathName']) assert.ok(SCRIPT.includes(x), x);
 });
 
 async function asyncTests() {
