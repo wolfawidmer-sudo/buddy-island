@@ -25,7 +25,9 @@ Die App läuft auf deinem Windows-PC. Die Antworten kommen über **Buddy Cloud**
 
 ## Sprache
 
-Das Wakeword («Hey Buddy» oder ein eigenes) wird nur auf dem PC erkannt, mit Vosk (Apache 2.0). Dafür lädt Buddy beim ersten Einschalten einmal die Vosk-Laufzeit von files.pythonhosted.org und ein Sprachmodell von alphacephei.com (beide mit fester Prüfsumme); diese Server sehen dabei nur deine IP-Adresse. Es geht dabei kein Ton aus dem PC. Fürs Diktat nutzt Buddy die Spracherkennung von Windows; ist dort die Online-Erkennung an, verarbeitet Microsoft das Gesprochene. Vorlesen läuft mit den Windows-Stimmen.
+Das Wakeword («Hey Buddy» oder ein eigenes) wird nur auf dem PC erkannt, mit Vosk (Apache 2.0). Dafür lädt Buddy beim ersten Einschalten einmal die Vosk-Laufzeit von files.pythonhosted.org und ein Sprachmodell von alphacephei.com (beide mit fester Prüfsumme); diese Server sehen dabei nur deine IP-Adresse. Beim Wakeword geht kein Ton aus dem PC. Das Sprachmodell richtet sich nach der Sprache, in der Buddy antwortet (Deutsch, Englisch, Französisch, Spanisch, Italienisch, Portugiesisch oder Niederländisch).
+
+**Diktat über Buddy Cloud** (Einstellung «Diktat über Buddy Cloud», an, wenn du angemeldet bist): Nach dem Wakeword oder dem Mikrofon-Knopf nimmt Buddy auf, bis du eine Pause machst (höchstens 30 Sekunden), und schickt die Aufnahme verschlüsselt über buddy-island.top an OpenAI zur Umwandlung in Text. Die Aufnahme wird weder bei Buddy Cloud noch in der App gespeichert; gespeichert wird nur der Verbrauch (Länge, Kosten) für die Abrechnung in Buddy Credits. OpenAI verarbeitet die Daten nach den Bedingungen der OpenAI-API. Ist die Einstellung aus, bist du nicht angemeldet, ohne Guthaben oder offline, nutzt Buddy wie bisher die Spracherkennung auf dem PC: Vosk oder die Spracherkennung von Windows (ist dort die Online-Erkennung an, verarbeitet Microsoft das Gesprochene). Vorlesen läuft mit den Windows-Stimmen.
 
 ## Kalender
 

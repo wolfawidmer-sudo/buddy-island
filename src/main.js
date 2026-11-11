@@ -35,6 +35,7 @@ const { createCalendar } = require('./calendar');
 const { createVoice } = require('./voice');
 const wakeword = require('./wakeword');
 const vosk = require('./vosk');
+const dictation = require('./dictation');
 const { createPerception } = require('./perception');
 const prompt = require('./prompt');
 const authSpecs = require('./llm/auth');
@@ -94,6 +95,7 @@ const DEFAULTS = {
   calendarEncrypted: null,
   calendarPlain: null,
   voiceWake: false,
+  cloudDictation: true, // Diktat über Buddy Cloud (wirkt nur, wenn angemeldet)
   wakeWord: 'Hey Buddy',
   eyesAlive: true,
   speak: true,
@@ -1605,6 +1607,7 @@ function startListening() {
     return;
   }
   liveWin()?.webContents.send('voice', { kind: 'starting' });
+  applyDictationMode();
   voice.listen();
 }
 
@@ -2010,12 +2013,56 @@ function setupCloud() {
     t,
     log,
     onChange: (state) => {
+      applyDictationMode();
       modelCache.delete('buddy');
       liveWin()?.webContents.send('cloud:state', state);
       liveWin()?.webContents.send('settings:changed', publicSettings());
     },
   });
   if (cloud.configured()) cloud.restore();
+}
+
+// ---------- Diktat über Buddy Cloud (src/dictation.js) ----------
+// Ton geht nur beim Diktat an Buddy Cloud → OpenAI; das Wakeword bleibt auf dem PC.
+const dictationEngine = dictation.createDictation({ post: (body, signal) => cloud.transcribe(body, signal), log });
+let dictationRetryTimer = null;
+
+function dictationDecision() {
+  const st = cloud?.publicState?.() || {};
+  let online = true;
+  try { online = net.isOnline(); } catch { /* unbekannt: versuchen */ }
+  return dictation.decide({
+    enabled: settings.cloudDictation !== false,
+    configured: Boolean(cloud?.configured?.()),
+    signedIn: Boolean(st.signedIn),
+    available: st.wallet ? st.wallet.available : null,
+    online,
+    blockedUntil: dictationEngine.blockedUntil(),
+  });
+}
+
+function applyDictationMode() {
+  voice?.setCloud(dictationDecision().use);
+}
+
+// Aufnahme vom Sprach-Helfer → Buddy Cloud → Text. Jeder Fehler: Text vom PC (Vosk oder Windows-Erkennung).
+async function handleRecorded(msg) {
+  const send = (m) => liveWin()?.webContents.send('voice', m);
+  const local = (reason) => {
+    log(`Diktat: ${msg.text ? 'Vosk' : 'Windows-Erkennung'} statt Buddy Cloud (${reason})`);
+    if (msg.text) send({ kind: 'text', text: msg.text, via: 'vosk' });
+    else voice?.fallback();
+  };
+  if (!msg.wav) { local('Aufnahme unvollständig'); return; }
+  send({ kind: 'transcribing' });
+  const r = await dictationEngine.transcribe(msg.wav, answerLanguage);
+  if (r.ok) { send(r.text ? { kind: 'text', text: r.text, via: 'cloud' } : { kind: 'nothing' }); return; }
+  if (r.reason === 'unavailable') {
+    clearTimeout(dictationRetryTimer);
+    dictationRetryTimer = setTimeout(applyDictationMode, dictation.RETRY_AFTER_404_MS + 1000);
+  }
+  applyDictationMode();
+  local(r.reason);
 }
 
 function setupCloudIpc() {
@@ -2130,6 +2177,7 @@ function setupIpc() {
     if ('memoryEnabled' in patch) settings.memoryEnabled = Boolean(patch.memoryEnabled);
     if ('visualizer' in patch) settings.visualizer = Boolean(patch.visualizer);
     if ('eyesAlive' in patch) settings.eyesAlive = Boolean(patch.eyesAlive);
+    if ('cloudDictation' in patch) { settings.cloudDictation = Boolean(patch.cloudDictation); applyDictationMode(); }
     if ('glowMusic' in patch) settings.glowMusic = Boolean(patch.glowMusic);
     if ('provider' in patch && models.PROVIDERS[patch.provider] && patch.provider !== settings.provider && (!CLOUD_ONLY || patch.provider === 'buddy')) {
       settings.provider = patch.provider;
@@ -2851,6 +2899,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       wakeWord: wakeword.wakeWordOf(settings),
       language: answerLanguage,
       onEvent: (msg) => {
+        if (msg.kind === 'recorded') { handleRecorded(msg).catch((err) => log(`Diktat: ${err.message}`)); return; }
         if (msg.kind === 'wake-oov') {
           // Das Sprachmodell kennt ein Wort nicht: für dieses Wakeword die Windows-Erkennung
           log(`Wakeword: Vosk kennt ${msg.words.join(', ')} nicht, Windows-Erkennung übernimmt`);
@@ -2864,6 +2913,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
         liveWin()?.webContents.send('voice', msg);
       },
     });
+    applyDictationMode();
     if (settings.voiceWake) { voice.setWake(true); applyWakeEngine(); }
 
     checkUpdateHealth();

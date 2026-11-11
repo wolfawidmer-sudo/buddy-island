@@ -1253,4 +1253,8 @@ module.exports = {
   "Entpacken fehlgeschlagen: {msg}": "Échec de la décompression : {msg}",
   "Das Sprachmodell kennt «{words}» nicht.": "Le modèle vocal ne connaît pas « {words} ».",
   "Vosk · {lang} · offline": "Vosk · {lang} · hors ligne",
+  "Diktat über Buddy Cloud": "Dictée via Buddy Cloud",
+  "Diktat über Buddy Cloud versteht dich deutlich besser. Dafür geht dein Ton nach dem Wakeword oder dem Mikrofon-Knopf über buddy-island.top an OpenAI und wird nicht gespeichert. Das Wakeword selbst bleibt auf deinem PC. Wirkt nur, wenn du angemeldet bist; abgerechnet in Buddy Credits.": "La dictée via Buddy Cloud te comprend beaucoup mieux. Ta voix après le mot d’éveil ou le bouton micro passe par buddy-island.top vers OpenAI et n’est pas enregistrée. Le mot d’éveil reste sur ton PC. Fonctionne seulement si tu es connecté·e ; facturé en Buddy Credits.",
+  "Schreibt auf …": "Transcription …",
+  "Diktat": "Dictée",
 };
