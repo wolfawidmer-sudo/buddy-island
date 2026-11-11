@@ -33,7 +33,8 @@
     logout: () => ok(), requestPasswordReset: () => ok(), confirmPasswordReset: () => ok(), portal: () => ok(), subscribe: () => ok(),
     offer: () => ok({ config: { ready: true, minPurchase: '5', maxPurchase: '500', creditsPerUsd: '100' },
       plans: [{ id: 'plus', name: 'Buddy Plus', monthlyCredits: 1000, price: 10 }],
-      packages: [{ id: 'p5', name: 'Klein', credits: 500, price: 5 }, { id: 'p20', name: 'Mittel', credits: 2000, price: 20 }] }),
+      // Wie live: keine festen Pakete, nur eigener Betrag (M.packages für alte Ansichten)
+      packages: M.packages || [] }),
     history: () => ok({ history: { usage: [{ model: 'gpt-6-luna', createdAt: '2026-11-09T16:02:00Z', credits: 0.038275, status: 'settled' }], purchases: [{ credits: 500, amount: 5, status: 'completed', completedAt: '2026-11-09T15:40:00Z' }] } }),
     buy: () => ok({ checkout: { credits: 500, amount: 5 } }), buyAmount: () => ok({ checkout: { credits: 500, amount: 5 } }),
   };
