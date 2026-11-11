@@ -278,6 +278,8 @@
   function visibleState() {
     if (state.alarm) return 'alarm';
     if (state.control) return 'control';
+    // Diktat mit Live-Vorschau: zeigt das Gehörte wie eine Mitteilung («Hört zu …» + Text)
+    if (state.listening && state.voicePreview && !state.open && !state.voiceNote) return 'peek';
     if (state.listening || state.voiceNote) return 'listen';
     if (state.peek && !state.open) return 'peek';
     if (state.status !== 'idle') return state.status;
@@ -303,8 +305,7 @@
       case 'control': return `${capitalize(state.actionLabel || t('steuert'))} …`;
       case 'listen': return state.voiceNote
         || (state.listening === 'transcribing' ? t('Schreibt auf …')
-          : state.listening === 'listening' ? (state.voicePreview ? previewTail(state.voicePreview) : t('Hört zu …'))
-            : t('Mikrofon startet …'));
+          : state.listening === 'listening' ? t('Hört zu …') : t('Mikrofon startet …'));
       case 'music': return [state.media?.title, state.media?.artist].filter(Boolean).join(' · ');
       default: return name;
     }
@@ -326,6 +327,10 @@
       : null;
     if (title !== null && el.label.textContent !== title) el.label.textContent = title;
     el.faceBtn.setAttribute('aria-label', state.open ? t('Buddy') : labelFor(shown));
+    if (shown === 'peek' && state.listening && state.voicePreview) {
+      el.peekApp.textContent = state.listening === 'transcribing' ? t('Schreibt auf …') : t('Hört zu …');
+      el.peekText.textContent = previewTail(state.voicePreview);
+    }
     el.peek.hidden = shown !== 'peek';
     syncLayout();
     syncVisualizer();
