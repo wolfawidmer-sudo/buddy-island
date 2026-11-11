@@ -98,6 +98,7 @@
     wakeEngine: $('wakeEngine'),
     wakeEngineRow: $('wakeEngineRow'),
     speakToggle: $('speakToggle'),
+    cloudDictToggle: $('cloudDictToggle'),
     voiceStatus: $('voiceStatus'),
     mediaToggle: $('mediaToggle'),
     calStatus: $('calStatus'),
@@ -277,6 +278,8 @@
   function visibleState() {
     if (state.alarm) return 'alarm';
     if (state.control) return 'control';
+    // Diktat mit Live-Vorschau: zeigt das Gehörte wie eine Mitteilung («Hört zu …» + Text)
+    if (state.listening && state.voicePreview && !state.open && !state.voiceNote) return 'peek';
     if (state.listening || state.voiceNote) return 'listen';
     if (state.peek && !state.open) return 'peek';
     if (state.status !== 'idle') return state.status;
@@ -300,7 +303,9 @@
       case 'timer': return next ? `${next.label}  ${countdown(next.endsAt - Date.now())}` : name;
       case 'alarm': return state.alarm ? t('{label} ist um', { label: state.alarm.label }) : name;
       case 'control': return `${capitalize(state.actionLabel || t('steuert'))} …`;
-      case 'listen': return state.voiceNote || (state.listening === 'listening' ? t('Hört zu …') : t('Mikrofon startet …'));
+      case 'listen': return state.voiceNote
+        || (state.listening === 'transcribing' ? t('Schreibt auf …')
+          : state.listening === 'listening' ? t('Hört zu …') : t('Mikrofon startet …'));
       case 'music': return [state.media?.title, state.media?.artist].filter(Boolean).join(' · ');
       default: return name;
     }
@@ -322,6 +327,10 @@
       : null;
     if (title !== null && el.label.textContent !== title) el.label.textContent = title;
     el.faceBtn.setAttribute('aria-label', state.open ? t('Buddy') : labelFor(shown));
+    if (shown === 'peek' && state.listening && state.voicePreview) {
+      el.peekApp.textContent = state.listening === 'transcribing' ? t('Schreibt auf …') : t('Hört zu …');
+      el.peekText.textContent = previewTail(state.voicePreview);
+    }
     el.peek.hidden = shown !== 'peek';
     syncLayout();
     syncVisualizer();
@@ -1411,10 +1420,18 @@
   // Sicherung: Meldet der Sprach-Helfer nichts mehr, nicht ewig «hört zu» anzeigen
   let listenGuard = 0;
   let voiceCancelled = false;
+  // Live-Vorschau beim Diktat: nur das Ende zeigen, damit es ins Island passt
+  function previewTail(text) {
+    const s = String(text).trim();
+    return s.length > 42 ? `… ${s.slice(-40).replace(/^\S*\s/, '')}` : s;
+  }
+
   function setListening(value) {
     state.listening = value;
+    if (value !== 'listening' && value !== 'transcribing') state.voicePreview = '';
     clearTimeout(listenGuard);
-    if (value) listenGuard = setTimeout(() => { if (state.listening) stopVoice(); }, 45000);
+    // Aufnahme bis 30 s + Übertragung: grosszügige Sicherung
+    if (value) listenGuard = setTimeout(() => { if (state.listening) stopVoice(); }, 70000);
     api.voiceState?.(Boolean(value));
     el.micBtn.setAttribute('aria-pressed', value ? 'true' : 'false');
     el.micBtn.title = value ? t('Zuhören beenden') : t('Sprechen');
@@ -1443,7 +1460,7 @@
   api.onVoice((msg) => {
     switch (msg.kind) {
       case 'engine':
-        if (state.settings) { state.settings.wakeEngine = { state: msg.state, percent: msg.percent, error: msg.error }; fillWakeEngine(); }
+        if (state.settings) { state.settings.wakeEngine = { state: msg.state, percent: msg.percent, error: msg.error, langName: msg.langName }; fillWakeEngine(); }
         return;
       case 'starting':
         voiceCancelled = false;
@@ -1458,8 +1475,17 @@
         break;
       case 'listening':
         if (voiceCancelled) return;
+        state.voicePreview = '';
         setListening('listening');
         if (state.settings?.sound) chime(true);
+        break;
+      case 'partial':
+        if (voiceCancelled || state.listening !== 'listening') return;
+        state.voicePreview = String(msg.text || '');
+        break;
+      case 'transcribing':
+        if (voiceCancelled) return;
+        setListening('transcribing');
         break;
       case 'cancelled':
         voiceCancelled = true;
@@ -1484,7 +1510,7 @@
         return;
       case 'ready':
         if (state.settings) state.settings.voiceInfo = { ...msg, ready: true };
-        if (!msg.offline && !msg.online) { setListening(''); voiceNote(t('Keine Spracherkennung gefunden')); }
+        if (!msg.offline && !msg.online && !msg.cloud) { setListening(''); voiceNote(t('Keine Spracherkennung gefunden')); }
         if (state.view === 'settings') fillSettings();
         return;
       default:
@@ -1755,6 +1781,7 @@
     el.eyesToggle.checked = s.eyesAlive !== false;
     fillWakeEngine();
     el.speakToggle.checked = s.speak !== false;
+    el.cloudDictToggle.checked = s.cloudDictation !== false;
     const v = s.voiceInfo;
     el.voiceStatus.textContent = !s.canControl ? t('Nur unter Windows')
       : !v || !v.ready ? t('Startet beim ersten Sprechen')
@@ -2134,7 +2161,7 @@
     if (!h.ok) { cloudFooter(h.error, 'err'); return; }
     const usageStatus = { settled: '', partial: t('teilweise'), released: t('abgebrochen'), failed: t('fehlgeschlagen') };
     list(cloudEl.usage, h.history.usage, t('Noch keine Cloud-Anfragen.'), (u) => [
-      String(u.model || '').replace(/^gpt-/, 'GPT-').replace(/-/g, ' '),
+      u.kind === 'dictation' ? t('Diktat') : String(u.model || '').replace(/^gpt-/, 'GPT-').replace(/-/g, ' '),
       [fmtDay(u.createdAt), usageStatus[u.status] || ''].filter(Boolean).join(' · '),
       Number(u.credits) > 0 ? `−${fmtBc(u.credits)}` : '–',
     ]);
@@ -2352,7 +2379,7 @@
     if (!el.wakeEngine) return;
     el.wakeEngineRow.hidden = !state.settings?.voiceWake || !e;
     if (!e) return;
-    el.wakeEngine.textContent = e.state === 'vosk' ? t('Vosk · offline')
+    el.wakeEngine.textContent = e.state === 'vosk' ? (e.langName ? t('Vosk · {lang} · offline', { lang: e.langName }) : t('Vosk · offline'))
       : e.state === 'downloading' ? t('Lädt Sprachmodell … {p} %', { p: e.percent ?? 0 })
         : e.state === 'fallback' ? [t('Windows-Erkennung'), e.error].filter(Boolean).join(' · ')
           : t('Windows-Erkennung');
@@ -2367,6 +2394,7 @@
   el.wakeWordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveWakeWord(); } });
   el.eyesToggle.addEventListener('change', () => save({ eyesAlive: el.eyesToggle.checked }));
   el.speakToggle.addEventListener('change', () => save({ speak: el.speakToggle.checked }));
+  el.cloudDictToggle.addEventListener('change', () => save({ cloudDictation: el.cloudDictToggle.checked }));
   el.mediaToggle.addEventListener('change', async () => { await save({ media: el.mediaToggle.checked }); renderNowPlaying(); });
   el.gameToggle.addEventListener('change', () => save({ gameMode: el.gameToggle.checked }));
   el.displaySelect.addEventListener('change', () => save({ displayId: el.displaySelect.value }));

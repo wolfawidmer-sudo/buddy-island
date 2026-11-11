@@ -1245,4 +1245,9 @@ module.exports = {
   "Windows-Erkennung": "Windows recognition",
   "Entpacken fehlgeschlagen: {msg}": "Unpacking failed: {msg}",
   "Das Sprachmodell kennt «{words}» nicht.": "The speech model doesn't know «{words}».",
+  "Vosk · {lang} · offline": "Vosk · {lang} · offline",
+  "Diktat über Buddy Cloud": "Dictation via Buddy Cloud",
+  "Diktat über Buddy Cloud versteht dich deutlich besser. Dafür geht dein Ton nach dem Wakeword oder dem Mikrofon-Knopf über buddy-island.top an OpenAI und wird nicht gespeichert. Das Wakeword selbst bleibt auf deinem PC. Wirkt nur, wenn du angemeldet bist; abgerechnet in Buddy Credits.": "Dictation via Buddy Cloud understands you much better. Your voice after the wake word or the mic button goes through buddy-island.top to OpenAI and is not stored. The wake word itself stays on your PC. Only works when you're signed in; billed in Buddy Credits.",
+  "Schreibt auf …": "Writing down …",
+  "Diktat": "Dictation",
 };

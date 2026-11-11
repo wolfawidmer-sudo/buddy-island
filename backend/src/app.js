@@ -10,6 +10,7 @@ const { createAuthService } = require('./services/authentication');
 const { createWalletService } = require('./services/wallet');
 const { createBillingService } = require('./services/billing');
 const { createOpenAiGateway } = require('./services/openai');
+const { createTranscriber } = require('./services/transcribe');
 const { createStripeService } = require('./services/stripe');
 const { authRoutes } = require('./routes/auth');
 const { accountRoutes } = require('./routes/account');
@@ -27,6 +28,7 @@ function createApp({ config, logger, fetchImpl = globalThis.fetch, now = Date.no
   const wallet = createWalletService({ supabase });
   const billing = createBillingService({ supabase, logger, now });
   const gateway = createOpenAiGateway({ config, billing, logger, fetchImpl });
+  const transcriber = createTranscriber({ config, billing, logger, fetchImpl });
   const stripe = createStripeService({ config, supabase, logger, fetchImpl });
   const authMw = requireAuth(verifier);
 
@@ -38,12 +40,12 @@ function createApp({ config, logger, fetchImpl = globalThis.fetch, now = Date.no
   const limits = [
     ...authRoutes({ router, auth, requireAuth: authMw }).limits,
     ...accountRoutes({ router, wallet, stripe, requireAuth: authMw }).limits,
-    ...cloudRoutes({ router, gateway, billing, requireAuth: authMw }).limits,
+    ...cloudRoutes({ router, gateway, billing, transcriber, requireAuth: authMw }).limits,
   ];
   webhookRoutes({ router, stripe, logger });
 
   const handler = createHandler({ router, config, logger });
-  return { handler, services: { supabase, auth, wallet, billing, gateway, stripe, verifier }, resetLimits: () => limits.forEach((l) => l.reset()) };
+  return { handler, services: { supabase, auth, wallet, billing, gateway, transcriber, stripe, verifier }, resetLimits: () => limits.forEach((l) => l.reset()) };
 }
 
 module.exports = { createApp };

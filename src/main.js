@@ -35,6 +35,7 @@ const { createCalendar } = require('./calendar');
 const { createVoice } = require('./voice');
 const wakeword = require('./wakeword');
 const vosk = require('./vosk');
+const dictation = require('./dictation');
 const { createPerception } = require('./perception');
 const prompt = require('./prompt');
 const authSpecs = require('./llm/auth');
@@ -94,6 +95,7 @@ const DEFAULTS = {
   calendarEncrypted: null,
   calendarPlain: null,
   voiceWake: false,
+  cloudDictation: true, // Diktat über Buddy Cloud (wirkt nur, wenn angemeldet)
   wakeWord: 'Hey Buddy',
   eyesAlive: true,
   speak: true,
@@ -1548,6 +1550,13 @@ let voskBlocked = ''; // Wakeword, das Vosk nicht kennt: dafür Windows-Erkennun
 
 function sendWakeEngine(patch) {
   wakeEngine = { ...wakeEngine, ...patch };
+  // Sprache des Modells in der Sprache der Oberfläche («Deutsch», «Spanisch» …)
+  if (wakeEngine.lang) {
+    try {
+      const n = new Intl.DisplayNames([i18n.language()], { type: 'language' }).of(wakeEngine.lang) || wakeEngine.lang;
+      wakeEngine.langName = n.charAt(0).toLocaleUpperCase(i18n.language()) + n.slice(1);
+    } catch { wakeEngine.langName = vosk.LANG_NAMES[wakeEngine.lang] || wakeEngine.lang; }
+  }
   liveWin()?.webContents.send('voice', { kind: 'engine', ...wakeEngine });
 }
 
@@ -1564,24 +1573,27 @@ function applyWakeEngine() {
   if (!voice || process.platform !== 'win32' || !settings.voiceWake) return;
   const word = wakeword.wakeWordOf(settings);
   if (voskBlocked === word) { voice.setEngine(null); return; }
-  const lang = vosk.langFor(i18n.language());
+  // Modell nach der gesprochenen Sprache (in der Buddy antwortet), nicht nach der Oberfläche
+  const lang = vosk.langFor(answerLanguage || i18n.language());
+  voice.setLanguage(answerLanguage || i18n.language());
   const root = path.join(app.getPath('userData'), 'vosk');
   const have = vosk.installed(root, lang);
   if (have) {
     voice.setEngine({ ...have, lang });
-    sendWakeEngine({ state: 'vosk', percent: null, error: null });
+    sendWakeEngine({ state: 'vosk', percent: null, error: null, lang });
     return;
   }
   if (wakeEngineJob) return;
   voice.setEngine(null); // bis Vosk bereit ist, hört die Windows-Erkennung
-  sendWakeEngine({ state: 'downloading', percent: 0, error: null });
+  sendWakeEngine({ state: 'downloading', percent: 0, error: null, lang });
   wakeEngineJob = vosk.ensure({
     root, lang, fetchImpl: (url, init) => net.fetch(url, init), unzip: unzipWindows,
     onProgress: (pr) => { if (pr.phase === 'download') sendWakeEngine({ state: 'downloading', percent: pr.percent }); },
   }).then((p) => {
     log(`Wakeword: Vosk (${lang}) installiert`);
-    if (settings.voiceWake) voice.setEngine({ ...p, lang });
-    sendWakeEngine({ state: 'vosk', percent: null });
+    if (settings.voiceWake && vosk.langFor(answerLanguage || i18n.language()) === lang) voice.setEngine({ ...p, lang });
+    sendWakeEngine({ state: 'vosk', percent: null, lang });
+    if (vosk.langFor(answerLanguage || i18n.language()) !== lang) applyWakeEngine(); // Sprache inzwischen gewechselt
   }).catch((err) => {
     log(`Wakeword: Vosk nicht verfügbar: ${err.message}`);
     sendWakeEngine({ state: 'fallback', percent: null, error: err.message });
@@ -1595,6 +1607,7 @@ function startListening() {
     return;
   }
   liveWin()?.webContents.send('voice', { kind: 'starting' });
+  applyDictationMode();
   voice.listen();
 }
 
@@ -2000,12 +2013,56 @@ function setupCloud() {
     t,
     log,
     onChange: (state) => {
+      applyDictationMode();
       modelCache.delete('buddy');
       liveWin()?.webContents.send('cloud:state', state);
       liveWin()?.webContents.send('settings:changed', publicSettings());
     },
   });
   if (cloud.configured()) cloud.restore();
+}
+
+// ---------- Diktat über Buddy Cloud (src/dictation.js) ----------
+// Ton geht nur beim Diktat an Buddy Cloud → OpenAI; das Wakeword bleibt auf dem PC.
+const dictationEngine = dictation.createDictation({ post: (body, signal) => cloud.transcribe(body, signal), log });
+let dictationRetryTimer = null;
+
+function dictationDecision() {
+  const st = cloud?.publicState?.() || {};
+  let online = true;
+  try { online = net.isOnline(); } catch { /* unbekannt: versuchen */ }
+  return dictation.decide({
+    enabled: settings.cloudDictation !== false,
+    configured: Boolean(cloud?.configured?.()),
+    signedIn: Boolean(st.signedIn),
+    available: st.wallet ? st.wallet.available : null,
+    online,
+    blockedUntil: dictationEngine.blockedUntil(),
+  });
+}
+
+function applyDictationMode() {
+  voice?.setCloud(dictationDecision().use);
+}
+
+// Aufnahme vom Sprach-Helfer → Buddy Cloud → Text. Jeder Fehler: Text vom PC (Vosk oder Windows-Erkennung).
+async function handleRecorded(msg) {
+  const send = (m) => liveWin()?.webContents.send('voice', m);
+  const local = (reason) => {
+    log(`Diktat: ${msg.text ? 'Vosk' : 'Windows-Erkennung'} statt Buddy Cloud (${reason})`);
+    if (msg.text) send({ kind: 'text', text: msg.text, via: 'vosk' });
+    else voice?.fallback();
+  };
+  if (!msg.wav) { local('Aufnahme unvollständig'); return; }
+  send({ kind: 'transcribing' });
+  const r = await dictationEngine.transcribe(msg.wav, answerLanguage);
+  if (r.ok) { send(r.text ? { kind: 'text', text: r.text, via: 'cloud' } : { kind: 'nothing' }); return; }
+  if (r.reason === 'unavailable') {
+    clearTimeout(dictationRetryTimer);
+    dictationRetryTimer = setTimeout(applyDictationMode, dictation.RETRY_AFTER_404_MS + 1000);
+  }
+  applyDictationMode();
+  local(r.reason);
 }
 
 function setupCloudIpc() {
@@ -2120,6 +2177,7 @@ function setupIpc() {
     if ('memoryEnabled' in patch) settings.memoryEnabled = Boolean(patch.memoryEnabled);
     if ('visualizer' in patch) settings.visualizer = Boolean(patch.visualizer);
     if ('eyesAlive' in patch) settings.eyesAlive = Boolean(patch.eyesAlive);
+    if ('cloudDictation' in patch) { settings.cloudDictation = Boolean(patch.cloudDictation); applyDictationMode(); }
     if ('glowMusic' in patch) settings.glowMusic = Boolean(patch.glowMusic);
     if ('provider' in patch && models.PROVIDERS[patch.provider] && patch.provider !== settings.provider && (!CLOUD_ONLY || patch.provider === 'buddy')) {
       settings.provider = patch.provider;
@@ -2839,7 +2897,9 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       scriptDir: app.getPath('userData'),
       log,
       wakeWord: wakeword.wakeWordOf(settings),
+      language: answerLanguage,
       onEvent: (msg) => {
+        if (msg.kind === 'recorded') { handleRecorded(msg).catch((err) => log(`Diktat: ${err.message}`)); return; }
         if (msg.kind === 'wake-oov') {
           // Das Sprachmodell kennt ein Wort nicht: für dieses Wakeword die Windows-Erkennung
           log(`Wakeword: Vosk kennt ${msg.words.join(', ')} nicht, Windows-Erkennung übernimmt`);
@@ -2853,6 +2913,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
         liveWin()?.webContents.send('voice', msg);
       },
     });
+    applyDictationMode();
     if (settings.voiceWake) { voice.setWake(true); applyWakeEngine(); }
 
     checkUpdateHealth();

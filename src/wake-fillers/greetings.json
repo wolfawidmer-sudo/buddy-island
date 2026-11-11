@@ -1,0 +1,10 @@
+{
+  "_": "Begrüssungen vor einem einzelnen Wakeword, pro gesprochener Sprache. Nur Wörter, die das Vosk-Modell kennt (geprüft am 11.11.2026). Andere Sprachen: en.",
+  "de": ["hey", "hallo", "hi", "he", "okay"],
+  "en": ["hey", "hi", "hello", "okay"],
+  "fr": ["hey", "hé", "salut", "ok"],
+  "es": ["hola", "oye", "hey"],
+  "it": ["ciao", "ehi", "hey"],
+  "pt": ["olá", "oi", "ei"],
+  "nl": ["hoi", "hallo", "hé", "hey"]
+}

@@ -118,17 +118,35 @@ test('Sprache → Modell', () => {
   assert.strictEqual(vosk.langFor('de-CH'), 'de');
   assert.strictEqual(vosk.langFor('en'), 'en');
   assert.strictEqual(vosk.langFor('fr'), 'fr');
-  assert.strictEqual(vosk.langFor('it'), 'de');
+  assert.strictEqual(vosk.langFor('it-IT'), 'it');
+  assert.strictEqual(vosk.langFor('es'), 'es');
+  assert.strictEqual(vosk.langFor('pt-BR'), 'pt');
+  assert.strictEqual(vosk.langFor('nl-BE'), 'nl');
+  assert.strictEqual(vosk.langFor('gsw'), 'de');
+  assert.strictEqual(vosk.langFor('ja-JP'), 'en'); // ohne Modell: Englisch
+  assert.strictEqual(vosk.langFor(''), 'de');
+  assert.strictEqual(vosk.MODELS.pt.check, 'final.mdl');
   for (const m of Object.values(vosk.MODELS)) assert.match(m.sha256, /^[0-9a-f]{64}$/);
   assert.match(vosk.RUNTIME.sha256, /^[0-9a-f]{64}$/);
   assert.ok(vosk.RUNTIME.url.startsWith('https://files.pythonhosted.org/'));
 });
 test('Wortliste: Wakeword + Füllwörter, nur sichere Zeichen', () => {
-  for (const lang of ['de', 'en', 'fr']) {
-    const g = vosk.grammarWords(lang, ww.wakePhrases('Hey Kiwi'));
+  for (const lang of ['de', 'en', 'fr', 'es', 'it', 'pt', 'nl']) {
+    const g = vosk.grammarWords(lang, ww.wakePhrases('Hey Kiwi', lang));
     assert.ok(g.includes('kiwi') && g.includes('hey'), lang);
     assert.ok(g.length > 30 && g.length < 120, `${lang}: Füllwörter (${g.length})`);
     for (const w of g) assert.ok(!/["\\\[\]{}]/.test(w), `kein Sonderzeichen: ${w}`);
+  }
+});
+test('Begrüssungen pro gesprochener Sprache', () => {
+  assert.deepStrictEqual(ww.wakePhrases('Jarvis', 'es-ES'), ['jarvis', 'hola jarvis', 'oye jarvis', 'hey jarvis']);
+  assert.deepStrictEqual(ww.wakePhrases('Hey Buddy', 'it'), ['hey buddy', 'ciao buddy', 'ehi buddy']);
+  assert.deepStrictEqual(ww.wakePhrases('Hallo Kiwi', 'nl'), ['hallo kiwi', 'hoi kiwi', 'hé kiwi', 'hey kiwi']);
+  assert.ok(ww.wakePhrases('Jarvis', 'gsw').includes('hallo jarvis'));
+  assert.deepStrictEqual(ww.wakePhrases('Jarvis', 'ja'), ww.wakePhrases('Jarvis', 'en')); // ohne Liste: Englisch
+  for (const [lang, list] of Object.entries(ww.GREETINGS_BY_LANG)) {
+    assert.ok(vosk.MODELS[lang], `Modell für ${lang}`);
+    assert.ok(list.length >= 3, lang);
   }
 });
 test('unbekannte Wörter aus der Vosk-Ausgabe', () => {

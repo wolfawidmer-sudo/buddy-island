@@ -209,10 +209,10 @@ test.describe('OpenAI-Gateway', () => {
     } finally { await app.close(); }
   });
 
-  test('Sprache/Echtzeit: ehrlich «noch nicht verfügbar» (501)', async () => {
+  test('Echtzeit: ehrlich «noch nicht verfügbar» (501); Diktat ist da (tests/transcribe.test.js)', async () => {
     const app = await startApp({});
     try {
-      assert.equal((await app.call('POST', '/v1/cloud/audio/transcriptions', { token: signToken(), body: {} })).status, 501);
+      assert.equal((await app.call('POST', '/v1/cloud/audio/transcriptions', { token: signToken(), body: {} })).status, 400);
       assert.equal((await app.call('POST', '/v1/cloud/realtime/sessions', { token: signToken(), body: {} })).status, 501);
     } finally { await app.close(); }
   });
