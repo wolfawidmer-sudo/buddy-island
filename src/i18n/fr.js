@@ -1252,4 +1252,5 @@ module.exports = {
   "Windows-Erkennung": "Reconnaissance Windows",
   "Entpacken fehlgeschlagen: {msg}": "Échec de la décompression : {msg}",
   "Das Sprachmodell kennt «{words}» nicht.": "Le modèle vocal ne connaît pas « {words} ».",
+  "Vosk · {lang} · offline": "Vosk · {lang} · hors ligne",
 };

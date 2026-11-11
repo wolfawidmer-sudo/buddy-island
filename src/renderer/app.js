@@ -1443,7 +1443,7 @@
   api.onVoice((msg) => {
     switch (msg.kind) {
       case 'engine':
-        if (state.settings) { state.settings.wakeEngine = { state: msg.state, percent: msg.percent, error: msg.error }; fillWakeEngine(); }
+        if (state.settings) { state.settings.wakeEngine = { state: msg.state, percent: msg.percent, error: msg.error, langName: msg.langName }; fillWakeEngine(); }
         return;
       case 'starting':
         voiceCancelled = false;
@@ -2352,7 +2352,7 @@
     if (!el.wakeEngine) return;
     el.wakeEngineRow.hidden = !state.settings?.voiceWake || !e;
     if (!e) return;
-    el.wakeEngine.textContent = e.state === 'vosk' ? t('Vosk · offline')
+    el.wakeEngine.textContent = e.state === 'vosk' ? (e.langName ? t('Vosk · {lang} · offline', { lang: e.langName }) : t('Vosk · offline'))
       : e.state === 'downloading' ? t('Lädt Sprachmodell … {p} %', { p: e.percent ?? 0 })
         : e.state === 'fallback' ? [t('Windows-Erkennung'), e.error].filter(Boolean).join(' · ')
           : t('Windows-Erkennung');

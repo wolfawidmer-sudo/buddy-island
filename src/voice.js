@@ -337,7 +337,8 @@ while ($true) {
 if ($vosk) { [BuddyVosk]::Free() }
 `;
 
-function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD }) {
+function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD, language = 'de' }) {
+  let spoken = language; // gesprochene Sprache (Begrüssungen vor dem Wakeword)
   let engine = null; // { dllDir, modelDir } für Vosk, sonst Windows-Erkennung
   let proc = null;
   let buffer = '';
@@ -354,9 +355,9 @@ function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD }) 
     fs.writeFileSync(file, '﻿' + SCRIPT, 'utf8');
     const p = spawn('powershell.exe', [
       '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file, '-wake', wake ? '1' : '0',
-      '-words', encodePhrases(wakePhrases(word)), '-minconf', String(minConfidence(word)),
+      '-words', encodePhrases(wakePhrases(word, spoken)), '-minconf', String(minConfidence(word)),
       ...(engine ? ['-engine', 'vosk', '-voskdll', b64(engine.dllDir), '-voskmodel', b64(engine.modelDir),
-        '-grammar', b64(grammarWords(engine.lang, wakePhrases(word)).join('\n'))] : []),
+        '-grammar', b64(grammarWords(engine.lang, wakePhrases(word, spoken)).join('\n'))] : []),
     ], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     proc = p;
     info = { ...info, ready: false };
@@ -443,6 +444,13 @@ function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD }) 
     if (wake) { stop(); start(); }
   }
 
+  // Gesprochene Sprache geändert: Begrüssungen passen sich an (Helfer neu starten, wenn er aufs Wort hört)
+  function setLanguage(next) {
+    if (!next || next === spoken) return;
+    spoken = next;
+    if (wake) { stop(); start(); }
+  }
+
   // Laufendes Zuhören abbrechen und das Mikrofon sofort freigeben
   function cancel() {
     pendingListen = false;
@@ -464,7 +472,7 @@ function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD }) 
     setTimeout(() => { try { p.kill(); } catch { /* weg */ } }, 1500);
   }
 
-  return { listen, cancel, setWake, setWakeWord, setEngine, stop, wakeWord: () => word, engine: () => (engine ? 'vosk' : 'windows'), info: () => ({ ...info, running: Boolean(proc) }) };
+  return { listen, cancel, setWake, setWakeWord, setEngine, setLanguage, stop, wakeWord: () => word, engine: () => (engine ? 'vosk' : 'windows'), info: () => ({ ...info, running: Boolean(proc) }) };
 }
 
 module.exports = { createVoice, SCRIPT };

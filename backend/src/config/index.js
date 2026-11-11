@@ -51,6 +51,12 @@ function load() {
       timeoutMs: int('OPENAI_TIMEOUT_MS', 600000),
     },
 
+    // Diktat (OpenAI-Transkription). Modell muss in model_pricing mit audio_pricing stehen.
+    transcribe: {
+      model: str('TRANSCRIBE_MODEL', 'gpt-4o-mini-transcribe'),
+      timeoutMs: int('TRANSCRIBE_TIMEOUT_MS', 30000),
+    },
+
     stripe: {
       secretKey: str('STRIPE_SECRET_KEY', ''),
       webhookSecret: str('STRIPE_WEBHOOK_SECRET', ''),

@@ -5,7 +5,18 @@
 const DEFAULT_WAKE_WORD = 'Hey Buddy';
 const MAX_LEN = 32;
 const MAX_WORDS = 4;
-const GREETINGS = ['hey', 'hallo', 'hi', 'he', 'okay', 'ok'];
+// Begrüssungen pro gesprochener Sprache (src/wake-fillers/greetings.json, gegen die Vosk-Modelle geprüft)
+const GREETINGS_BY_LANG = (() => {
+  try { const g = require('./wake-fillers/greetings.json'); delete g._; return g; } catch { return { en: ['hey', 'hi', 'hello', 'okay'] }; }
+})();
+const ALL_GREETINGS = new Set([...Object.values(GREETINGS_BY_LANG).flat(), 'he', 'ok']);
+const lang2 = (lang) => {
+  const l = String(lang || '').toLowerCase();
+  if (l === 'gsw' || l.startsWith('gsw-')) return 'de'; // Schweizerdeutsch
+  return l.slice(0, 2);
+};
+/** Begrüssungen für eine Sprache (unbekannte Sprache: Englisch) */
+const greetingsFor = (lang) => GREETINGS_BY_LANG[lang2(lang)] || GREETINGS_BY_LANG.en;
 
 // Nur Buchstaben (alle Sprachen), Leerzeichen, Apostroph und Bindestrich
 const ALLOWED = /^[\p{L}][\p{L}' -]*$/u;
@@ -34,18 +45,20 @@ function wakeWordOf(settings) {
 
 /**
  * Varianten, auf die Buddy hört (klein geschrieben, ohne Duplikate).
- * Ein einzelnes Wort bekommt zusätzlich die üblichen Begrüssungen davor,
- * damit «Hey Jarvis» genauso klappt wie «Jarvis».
+ * Ein einzelnes Wort bekommt zusätzlich die Begrüssungen der gesprochenen Sprache davor,
+ * damit «Hey Jarvis» (oder «Hola Jarvis») genauso klappt wie «Jarvis».
+ * @param {string} word @param {string} [lang] gesprochene Sprache (z. B. «de-CH», «es»)
  */
-function wakePhrases(word) {
+function wakePhrases(word, lang = 'de') {
   const w = (cleanWakeWord(word).ok ? cleanWakeWord(word).value : DEFAULT_WAKE_WORD).toLowerCase();
   const parts = w.split(' ');
+  const greets = greetingsFor(lang);
   const out = [w];
   if (parts.length === 1) {
-    for (const g of GREETINGS) out.push(`${g} ${w}`);
-  } else if (GREETINGS.includes(parts[0])) {
+    for (const g of greets) out.push(`${g} ${w}`);
+  } else if (ALL_GREETINGS.has(parts[0])) {
     const rest = parts.slice(1).join(' ');
-    for (const g of GREETINGS) out.push(`${g} ${rest}`);
+    for (const g of greets) out.push(`${g} ${rest}`);
   }
   return [...new Set(out)];
 }
@@ -63,4 +76,4 @@ function encodePhrases(phrases) {
   return Buffer.from(phrases.join('\n'), 'utf8').toString('base64');
 }
 
-module.exports = { DEFAULT_WAKE_WORD, cleanWakeWord, wakeWordOf, wakePhrases, minConfidence, encodePhrases };
+module.exports = { DEFAULT_WAKE_WORD, GREETINGS_BY_LANG, greetingsFor, cleanWakeWord, wakeWordOf, wakePhrases, minConfidence, encodePhrases };
