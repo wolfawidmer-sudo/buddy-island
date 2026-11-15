@@ -1652,7 +1652,20 @@
   const INK_DARK = '#000000';
   const INK_LIGHT = '#F7F8F7';
   const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  const rgbHex = (rgb) => '#' + rgb.map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+  // Für CSS: Farbwerte als oklch() wie in tokens.css (Kontrast wird weiter in sRGB nach WCAG gerechnet)
+  const rgbOklch = (rgb) => {
+    const lin = (v) => { const c = Math.max(0, Math.min(255, v)) / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+    const [r, g, b] = rgb.map(lin);
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    const L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+    const A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+    const B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+    const C = Math.hypot(A, B);
+    const H = C < 0.0005 ? 0 : ((Math.atan2(B, A) * 180) / Math.PI + 360) % 360;
+    return `oklch(${(L * 100).toFixed(2)}% ${C < 0.0005 ? 0 : C.toFixed(4)} ${H.toFixed(1)})`;
+  };
   const luminance = (rgb) => {
     const [r, g, b] = rgb.map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
@@ -1687,13 +1700,13 @@
     const fill = contrast(rgb, bg) >= 1.6 ? rgb : reach(rgb, bg, 3);
     const onFill = contrast(fill, [0, 0, 0]) >= contrast(fill, [255, 255, 255]) ? '#0b0c0f' : '#ffffff';
     const root = document.documentElement.style;
-    root.setProperty('--accent', c);
-    root.setProperty('--accent-text', rgbHex(reach(rgb, bg, 4.5)));
-    root.setProperty('--accent-fill', rgbHex(fill));
-    root.setProperty('--on-accent', onFill);
-    root.setProperty('--accent-on-ink', rgbHex(reach(rgb, [0, 0, 0], 3)));
+    root.setProperty('--accent', rgbOklch(rgb));
+    root.setProperty('--accent-text', rgbOklch(reach(rgb, bg, 4.5)));
+    root.setProperty('--accent-fill', rgbOklch(fill));
+    root.setProperty('--on-accent', rgbOklch(hexRgb(onFill)));
+    root.setProperty('--accent-on-ink', rgbOklch(reach(rgb, [0, 0, 0], 3)));
     // Schalter-Knopf auf der Akzentfläche: weiss, wenn er sich davon abhebt, sonst dunkel (ein «Auge» auf heller Lagune)
-    root.setProperty('--knob-on', contrast(fill, [255, 255, 255]) >= 1.8 ? '#ffffff' : onFill);
+    root.setProperty('--knob-on', rgbOklch(hexRgb(contrast(fill, [255, 255, 255]) >= 1.8 ? '#ffffff' : onFill)));
   }
   // Wechselt Windows das Theme (bei «System»), Theme und Kontraste neu setzen
   systemLight.addEventListener('change', applyTheme);

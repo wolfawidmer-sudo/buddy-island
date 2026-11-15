@@ -18,7 +18,7 @@
   display: grid;
   gap: 0;
   min-height: 0;
-  max-height: 40vh;
+  max-height: 40dvh;
   padding-bottom: var(--space-3);   /* innen, damit der Ausblend-Rand nur den Abstand trifft */
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -68,11 +68,32 @@
 .md blockquote { margin: 0 0 var(--space-2); padding-left: var(--space-3); border-left: 2px solid var(--fill-3); color: var(--text-2); }
 .md hr { margin: var(--space-4) 0; border: 0; border-top: 1px solid var(--separator); }
 .md code { padding: 1px 5px; border-radius: var(--radius-sm); background: var(--fill-1); font: 400 12.5px/1 var(--font-mono); }
-.md a { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent-text) 40%, transparent); text-underline-offset: 2px; }
+.md a { text-decoration: underline; text-decoration-color: color-mix(in oklch, var(--accent-text) 40%, transparent); text-underline-offset: 2px; }
 
 .codeblock { position: relative; margin: 0 0 var(--space-3); max-width: none; }
 .codeblock .lang { display: block; padding: var(--space-2) var(--space-3) 0; font: 400 11px/14px var(--font-mono); color: var(--text-3); }
 .codeblock pre { margin: 0; padding: var(--space-2) var(--space-3) var(--space-3); overflow-x: auto; font: var(--type-code); }
+/* Waagrecht scrollender Code: Ränder weich ausblenden, aber nur dort, wo noch mehr Code steht.
+   Die Breite folgt der Scroll-Position (scroll-driven animation); passt der Code, gibt es keine
+   Zeitleiste und damit auch keine Maske. 24px statt 15 %, damit der Code lesbar bleibt. */
+@property --fade-l { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --fade-r { syntax: "<length>"; inherits: false; initial-value: 0px; }
+.codeblock pre {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
+  animation: code-edges linear both;
+  animation-timeline: scroll(self inline);
+}
+@keyframes code-edges {
+  0% { --fade-l: 0px; --fade-r: 24px; }
+  8% { --fade-l: 24px; }
+  92% { --fade-r: 24px; }
+  100% { --fade-l: 24px; --fade-r: 0px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Die Maske ist keine Bewegung: an die Scroll-Position gebunden lassen */
+  .codeblock pre { animation-duration: auto !important; }
+}
 .md .codeblock code { padding: 0; border-radius: 0; background: none; font: inherit; }
 .md .hl-c { color: var(--code-comment); font-style: italic; }
 .md .hl-s { color: var(--code-string); }
@@ -165,7 +186,7 @@
 .composer textarea {
   flex: 1;
   min-height: var(--control-sm);
-  max-height: clamp(54px, 22vh, 150px);
+  max-height: clamp(54px, 22dvh, 150px);
   padding: var(--space-1) 0;
   overflow-y: auto;
   border: 0;
@@ -178,11 +199,22 @@
 .composer textarea::placeholder { color: var(--text-4); }
 .composer textarea:focus-visible { outline: none; }
 .composer .mic, .composer .send { margin-bottom: 0; }
-.send .i-stop { display: none; }
 .send .i-stop rect { fill: currentColor; stroke: none; }
 .island.streaming .send { background: var(--fill-2); color: var(--text-1); }
-.island.streaming .send .i-send { display: none; }
-.island.streaming .send .i-stop { display: block; }
+/* Icon-Wechsel (Senden ↔ Stopp, Play ↔ Pause): beide Icons liegen übereinander; das alte
+   geht mit Unschärfe, Transparenz und leichter Verkleinerung, das neue kommt so herein. */
+.send > svg, .now-controls .play > svg {
+  grid-area: 1 / 1;
+  transition: opacity var(--dur-base) var(--ease-standard), transform var(--dur-base) var(--ease-standard),
+    filter var(--dur-base) var(--ease-standard);
+}
+.send .i-stop, .island.streaming .send .i-send,
+.now-controls .play .i-pause, .now.playing .play .i-play {
+  opacity: 0;
+  transform: scale(0.6);
+  filter: blur(4px);
+}
+.island.streaming .send .i-stop, .now.playing .play .i-pause { opacity: 1; transform: none; filter: none; }
 .island.listening .mic { background: var(--accent-fill); color: var(--on-accent); }
 #micBtn[aria-pressed="true"] { background: var(--danger); color: var(--on-status); }
 #chatView > :is(.composer, .footnote) { flex: none; }
@@ -244,9 +276,6 @@
 .now-sub { overflow: hidden; font: var(--type-caption); color: var(--text-2); white-space: nowrap; text-overflow: ellipsis; }
 .now-controls { display: flex; gap: var(--space-0); }
 .now-controls .icon-btn { color: var(--text-1); }
-.now-controls .play .i-pause { display: none; }
-.now.playing .play .i-play { display: none; }
-.now.playing .play .i-pause { display: block; }
 
 /* Mitteilungen und Termine */
 .inbox { overflow: hidden; }

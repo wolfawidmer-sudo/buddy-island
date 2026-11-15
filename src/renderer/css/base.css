@@ -34,7 +34,7 @@ button { cursor: default; }
 a { color: var(--accent-text); text-decoration: none; border-radius: var(--radius-xs); }
 a:hover { text-decoration: underline; text-underline-offset: 2px; }
 
-::selection { background: color-mix(in srgb, var(--accent) 34%, transparent); color: inherit; }
+::selection { background: color-mix(in oklch, var(--accent) 34%, transparent); color: inherit; }
 
 /* Fokus: nur bei Tastaturbedienung, immer gleich */
 :focus { outline: none; }
@@ -56,6 +56,10 @@ svg {
 }
 svg.icon-sm { width: var(--icon-sm); height: var(--icon-sm); stroke-width: var(--icon-stroke-sm); }
 svg .fill { fill: currentColor; stroke: none; }
+/* Strichstärke in echten Pixeln, unabhängig von viewBox und Icon-Grösse */
+svg :is(path, line, polyline, polygon, rect, circle, ellipse) { vector-effect: non-scaling-stroke; }
+/* Icons neben Bedien-Schrift (560–650) bekommen den kräftigeren Strich, damit Icon und Text gleich schwer wirken */
+:is(.button, .segmented button, .cat-nav button, .tag, .role, .risk, .health-badge) svg { stroke-width: var(--icon-stroke-strong); }
 
 /* Zahlen in Tabellen und Zeiten springen nicht */
 .num, time { font-variant-numeric: tabular-nums; }
