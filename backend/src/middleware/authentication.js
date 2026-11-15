@@ -68,6 +68,8 @@ function createTokenVerifier({ supabaseUrl, jwtSecret = '', fetchImpl = globalTh
       const key = jwks?.keys.get(header.kid);
       if (!key) throw unauthorized('Ungültige Anmeldung', 'invalid_token');
       if (/** @type {any} */ (key).alg && /** @type {any} */ (key).alg !== header.alg) throw unauthorized('Ungültige Anmeldung', 'invalid_token');
+      // Schlüsseltyp muss zum Algorithmus passen (EC ↔ ES256, RSA ↔ RS256), auch ohne «alg» im JWK
+      if (key.asymmetricKeyType !== (header.alg === 'ES256' ? 'ec' : 'rsa')) throw unauthorized('Ungültige Anmeldung', 'invalid_token');
       ok = header.alg === 'ES256'
         ? crypto.verify('sha256', data, { key, dsaEncoding: 'ieee-p1363' }, sig)
         : crypto.verify('sha256', data, key, sig);

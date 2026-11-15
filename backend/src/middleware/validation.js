@@ -8,13 +8,14 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,63}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Regeln: { type: 'string'|'number'|'integer'|'boolean'|'object'|'array'|'any', required?, min?, max?, pattern?, enum?, email?, uuid? }
+ * Regeln: { type: 'string'|'number'|'integer'|'boolean'|'object'|'array'|'any', required?, min?, max?, maxBytes?, pattern?, enum?, email?, uuid? }
  * @param {Record<string, any>} schema @param {any} value @param {{ strict?: boolean }} [opts]
  */
 function check(schema, value, { strict = true } = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw badRequest('Anfrage muss ein JSON-Objekt sein');
   if (strict) {
-    const extra = Object.keys(value).filter((k) => !(k in schema));
+    // Object.hasOwn statt «in»: sonst gälten «constructor» oder «__proto__» als bekannte Felder
+    const extra = Object.keys(value).filter((k) => !Object.hasOwn(schema, k));
     if (extra.length) throw badRequest(`Unbekannte Felder: ${extra.slice(0, 5).join(', ')}`);
   }
   /** @type {Record<string, any>} */
@@ -31,6 +32,7 @@ function check(schema, value, { strict = true } = {}) {
         if (typeof v !== 'string') fail('Text erwartet');
         if (rule.min !== undefined && v.length < rule.min) fail(`mindestens ${rule.min} Zeichen`);
         if (rule.max !== undefined && v.length > rule.max) fail(`höchstens ${rule.max} Zeichen`);
+        if (rule.maxBytes !== undefined && Buffer.byteLength(v, 'utf8') > rule.maxBytes) fail(`höchstens ${rule.maxBytes} Bytes`);
         if (rule.email && !EMAIL.test(v)) fail('keine gültige E-Mail-Adresse');
         if (rule.uuid && !UUID.test(v)) fail('keine gültige ID');
         if (rule.pattern && !rule.pattern.test(v)) fail('ungültiges Format');

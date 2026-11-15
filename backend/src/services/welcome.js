@@ -10,7 +10,8 @@ const { badRequest } = require('../lib/errors');
 
 // E-Mail vergleichbar machen: klein, ohne «+zusatz»; bei Gmail ohne Punkte (a.b@gmail.com = ab@gmail.com)
 function normalizeEmail(email) {
-  const e = String(email || '').trim().toLowerCase();
+  // NFKC: Vollbreiten- und ähnliche Unicode-Zeichen auf ihre Grundform, damit sie nicht als neue Adresse zählen
+  const e = String(email || '').normalize('NFKC').trim().toLowerCase();
   const at = e.lastIndexOf('@');
   if (at < 1) return e;
   let local = e.slice(0, at);
