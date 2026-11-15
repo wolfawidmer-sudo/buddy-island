@@ -27,7 +27,7 @@ function redact(value, depth = 0) {
     if (value instanceof Error) return { name: value.name, message: redact(value.message, depth + 1), code: /** @type {any} */ (value).code };
     /** @type {Record<string, unknown>} */
     const out = {};
-    for (const [k, v] of Object.entries(value)) out[k] = SECRET_KEYS.test(k) && k !== 'requestId' ? '[redacted]' : redact(v, depth + 1);
+    for (const [k, v] of Object.entries(value)) if (k !== '__proto__') out[k] = SECRET_KEYS.test(k) && k !== 'requestId' ? '[redacted]' : redact(v, depth + 1);
     return out;
   }
   return value;

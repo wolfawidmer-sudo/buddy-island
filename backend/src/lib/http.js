@@ -3,7 +3,31 @@
 // Sicherheits-Header, Request-ID und zentrale Fehlerbehandlung.
 
 const crypto = require('node:crypto');
+const net = require('node:net');
 const { AppError } = require('./errors');
+
+/**
+ * Client-IP für Rate-Limits und das Startguthaben (höchstens N pro IP und Tag).
+ * Ohne TRUST_PROXY zählt nur die Socket-Adresse. Hinter Railway: Die Railway-Edge überschreibt
+ * X-Forwarded-For und X-Real-IP bei jeder Anfrage (Railway-Antworten im Forum, Stand Nov. 2026);
+ * der erste Eintrag von X-Forwarded-For ist dann die echte Client-IP. Werte, die keine gültige
+ * IP sind, werden verworfen (kein freier Text als Schlüssel). Wer das Backend direkt (ohne Edge)
+ * erreichen könnte, dürfte TRUST_PROXY nicht setzen.
+ * @param {import('node:http').IncomingMessage} req @param {boolean} trustProxy
+ */
+function clientIp(req, trustProxy) {
+  const socket = String(req.socket?.remoteAddress || '');
+  if (!trustProxy) return socket;
+  const candidates = [
+    String(req.headers['x-forwarded-for'] || '').split(',')[0].trim(),
+    String(req.headers['x-real-ip'] || '').trim(),
+  ];
+  for (const c of candidates) {
+    const ip = c.replace(/^::ffff:/i, '');
+    if (ip.length <= 45 && net.isIP(ip)) return ip;
+  }
+  return socket;
+}
 
 /**
  * @typedef {import('node:http').IncomingMessage & { id: string, ip: string, path: string, query: URLSearchParams, params: Record<string,string>, rawBody?: Buffer, body?: any, user?: { id: string, email?: string, role?: string, token: string } }} Req
@@ -106,8 +130,7 @@ function createHandler({ router, config, logger }) {
   return async function handle(req, res) {
     const started = Date.now();
     req.id = crypto.randomUUID();
-    const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-    req.ip = (config.trustProxy && forwarded) || req.socket.remoteAddress || '';
+    req.ip = clientIp(req, config.trustProxy);
     const url = new URL(req.url || '/', 'http://localhost');
     req.path = url.pathname;
     req.query = url.searchParams;
@@ -141,7 +164,8 @@ function createHandler({ router, config, logger }) {
         if (!route.raw && raw.length) {
           const type = String(req.headers['content-type'] || '');
           if (!/^application\/json\b/i.test(type)) throw new AppError(415, 'unsupported_media_type', 'Nur JSON');
-          try { req.body = JSON.parse(raw.toString('utf8')); } catch { throw new AppError(400, 'invalid_json', 'Ungültiges JSON'); }
+          // «__proto__»-Schlüssel fallen weg (Schutz vor Prototype Pollution in späterem Code)
+          try { req.body = JSON.parse(raw.toString('utf8'), (k, v) => (k === '__proto__' ? undefined : v)); } catch { throw new AppError(400, 'invalid_json', 'Ungültiges JSON'); }
         } else if (!route.raw) req.body = {};
       }
       for (const h of route.handlers) {
@@ -174,4 +198,4 @@ function createHandler({ router, config, logger }) {
   };
 }
 
-module.exports = { createRouter, createHandler, sendJson, readBody };
+module.exports = { createRouter, createHandler, sendJson, readBody, clientIp };

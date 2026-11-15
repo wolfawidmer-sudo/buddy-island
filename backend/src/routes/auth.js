@@ -7,6 +7,9 @@ const { rateLimit, byIp } = require('../middleware/rate-limit');
 
 const email = { type: 'string', required: true, email: true, max: 320 };
 const password = { type: 'string', required: true, min: 8, max: 128, trim: false };
+// Neue Passwörter: Supabase Auth hasht mit bcrypt, das nur 72 Bytes nimmt. Längere werden hier
+// klar abgelehnt statt still gekürzt. Beim Login bleibt die alte Grenze, damit niemand ausgesperrt wird.
+const newPassword = { ...password, maxBytes: 72 };
 const code = { type: 'string', required: true, pattern: /^[0-9]{6,10}$/ };
 
 /** @param {{ router: any, auth: any, requireAuth: any }} deps */
@@ -14,7 +17,7 @@ function authRoutes({ router, auth, requireAuth }) {
   const strict = rateLimit({ name: 'auth', capacity: 10, refillPerSec: 10 / 60, key: byIp });
   const refreshLimit = rateLimit({ name: 'refresh', capacity: 30, refillPerSec: 30 / 60, key: byIp });
 
-  router.post('/v1/auth/signup', strict, body({ email, password, displayName: { type: 'string', max: 80 } }), async (req, res) => {
+  router.post('/v1/auth/signup', strict, body({ email, password: newPassword, displayName: { type: 'string', max: 80 } }), async (req, res) => {
     const r = await auth.signup(req.body);
     sendJson(res, r.session ? 200 : 202, r);
   });
@@ -37,7 +40,7 @@ function authRoutes({ router, auth, requireAuth }) {
     sendJson(res, 202, { ok: true });
   });
 
-  router.post('/v1/auth/password-reset/confirm', strict, body({ email, code, password }), async (req, res) => {
+  router.post('/v1/auth/password-reset/confirm', strict, body({ email, code, password: newPassword }), async (req, res) => {
     sendJson(res, 200, { session: await auth.resetPassword(req.body) });
   });
 
