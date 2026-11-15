@@ -1338,7 +1338,8 @@ function askToControl(id, send) {
 
 // Freigabe für Aktionen mit mittlerem oder hohem Risiko
 function askPermission(id, request, send) {
-  const reqId = Math.random().toString(36).slice(2, 10);
+  // Freigabe-ID mit CSPRNG: nicht erratbar, auch wenn später das Terminal-Werkzeug dazukommt
+  const reqId = require('node:crypto').randomUUID();
   return new Promise((resolve) => {
     permissionAsks.set(`${id}:${reqId}`, resolve);
     send('agent:permission', { id, reqId, ...request });
