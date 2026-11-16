@@ -33,6 +33,8 @@ const { createComputer, supportsCaptureExclusion } = require('./computer');
 const { createSystemWatcher } = require('./notifications');
 const { createCalendar } = require('./calendar');
 const { createVoice } = require('./voice');
+const { createControl } = require('./control');
+const { createControlTools } = require('./control-tools');
 const wakeword = require('./wakeword');
 const vosk = require('./vosk');
 const dictation = require('./dictation');
@@ -230,6 +232,7 @@ let cloud = null;
 let discovery = null;
 let local = null; // Lokale KI (src/local/manager.js)
 let audioMeter = null;
+let control = null; // Ton- und Fenster-Helfer (src/control.js)
 const modelCache = new Map(); // Anbieter -> { at, list }
 let updateHealth = null; // Infos für Rollback und Anzeige
 let layout = { open: false, width: 112, height: 42, notch: false };
@@ -2848,6 +2851,11 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       getNowPlaying: () => nowPlaying,
       mediaCommand: (cmd) => watcher?.media(cmd) || false,
       getCalendar: (from, to) => (getSecret('calendar') ? calendar.list(from, to) : []),
+      control: process.platform === 'win32' ? createControlTools({
+        control: (control = createControl({ scriptDir: app.getPath('userData'), log })),
+        // Buddy selbst: alle eigenen Prozesse und der Name der eigenen exe
+        getOwn: () => ({ pids: [process.pid, ...app.getAppMetrics().map((m) => m.pid)], name: path.parse(process.execPath).name }),
+      }) : null,
     });
     createAgentRuntime();
     setupCloud();
@@ -2944,6 +2952,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     computer?.stop();
     watcher?.stop();
     voice?.stop();
+    control?.stop();
     calendar?.stop();
   });
   app.on('window-all-closed', (e) => e.preventDefault());

@@ -49,11 +49,14 @@ function fakeTools() {
     definitions: [
       { name: 'set_timer', description: '', input_schema: { type: 'object', properties: { minutes: { type: 'number' }, label: { type: 'string' } } } },
       { name: 'open_app', description: '', input_schema: { type: 'object', properties: { app: { type: 'string', enum: ['rechner', 'editor'] } }, required: ['app'] } },
+      { name: 'set_volume', description: '', input_schema: { type: 'object', properties: { level: { type: 'integer' } } } },
+      { name: 'close_app', description: '', input_schema: { type: 'object', properties: { app: { type: 'string' }, force: { type: 'boolean' } } } },
     ],
     describe: (name) => `${name} gemacht`,
     run: async (name, input) => {
       ran.push({ name, input });
       if (errors.has(name)) return { error: true, text: `${name} ging nicht` };
+      if (name === 'set_volume') return { text: 'ok', label: 'Lautstärke: 40 → 20 %' };
       return { text: `${name} ok` };
     },
   };
@@ -356,6 +359,28 @@ function setup({ steps, analysis, settings = {}, computer = false, files = null,
     assert.match(err.p.message, /hat den API-Key abgelehnt/);
     assert.strictEqual(err.p.code, 'key');
     assert.strictEqual(authErrors, 1);
+  }
+
+  // ---------- Ton und Apps: Verlauf mit Ergebnis-Beschriftung, hart beenden nur mit Freigabe ----------
+  {
+    const t = setup({
+      settings: { permissions: { medium: 'allow', high: 'ask' } },
+      permissionAnswer: false,
+      steps: [
+        [tu('set_volume', { level: 20 })],
+        [tu('close_app', { app: 'chrome' })],
+        [tu('close_app', { app: 'chrome', force: true })],
+        [txt('Chrome ist zu, ausser dem harten Beenden.')],
+      ],
+    });
+    await t.run('Mach leiser und schliess Chrome');
+    const labels = t.of('chat:tool').map((x) => x.label);
+    assert.ok(labels.includes('Lautstärke: 40 → 20 %'), 'Beschriftung aus dem Ergebnis');
+    assert.ok(labels.includes('close_app gemacht'));
+    assert.strictEqual(t.asked.length, 1, 'nur das harte Beenden wird gefragt');
+    assert.strictEqual(t.asked[0].level, 'high');
+    assert.match(t.asked[0].summary, /chrome hart beenden/);
+    assert.strictEqual(t.tools.ran.filter((x) => x.name === 'close_app').length, 1, 'abgelehnt = nicht ausgeführt');
   }
 
   // ---------- Hilfsfunktionen ----------

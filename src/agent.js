@@ -31,7 +31,7 @@ const COMPUTER_MEMBERS = new Set([
 const COMPUTER_READ = new Set(['screenshot', 'zoom', 'cursor_position', 'wait']);
 const COMPUTER_IDEMPOTENT = new Set(['screenshot', 'zoom', 'cursor_position']);
 // Werkzeuge mit Wirkung: doppelte Ausführung in derselben Aufgabe verhindern
-const SIDE_EFFECT_TOOLS = new Set(['set_timer', 'open_app', 'open_website', 'open_settings', 'create_folder', 'move_files', 'delete_files']);
+const SIDE_EFFECT_TOOLS = new Set(['set_timer', 'open_app', 'launch_app', 'close_app', 'open_website', 'open_settings', 'create_folder', 'move_files', 'delete_files']);
 
 const AGENT_TOOLS = [
   {
@@ -96,6 +96,7 @@ Arbeitsweise als Agent:
 - Für Dateien nimm die Datei-Werkzeuge (list_files, find_duplicates, create_folder, move_files, delete_files) statt Maus und Tastatur. Sie arbeiten nur in den Benutzerordnern, und delete_files legt in den Papierkorb.
 - Risiko: mittel = Dateien verschieben, App-Einstellungen ändern, normale Software installieren. Hoch = Dateien löschen, Admin-Befehle, System- oder Sicherheitseinstellungen. Für so etwas über die Bildschirmsteuerung rufe vorher request_permission auf.
 - Deaktiviere oder umgehe nie Windows-Sicherheitsfunktionen (Virenschutz, Firewall, Benutzerkontensteuerung, SmartScreen), auch nicht auf Umwegen. Ist das wirklich nötig, erkläre es und bitte den Nutzer, es selbst zu tun.
+- Ton und Apps: Für Lautstärke, Ausgabegerät und Mikrofon nimm audio_status, set_volume, set_audio_device und set_microphone; für Fenster list_apps, window_control und close_app. Apps schliesst du immer zuerst sanft. Hart beenden nur, wenn der Nutzer es ausdrücklich will.
 - Lehnt der Nutzer etwas ab, versuche keinen Umweg.
 - Ist die Aufgabe für dich zu schwer oder scheiterst du wiederholt, rufe escalate auf.
 - Schliesse mit einer kurzen Zusammenfassung, was du gemacht und geprüft hast.`;
@@ -111,6 +112,7 @@ How to work as an agent:
 - For files use the file tools (list_files, find_duplicates, create_folder, move_files, delete_files) instead of mouse and keyboard. They only work in the user folders, and delete_files moves to the recycle bin.
 - Risk: medium = moving files, changing app settings, installing normal software. High = deleting files, admin commands, system or security settings. For such things via screen control, call request_permission first.
 - Never disable or bypass Windows security features (antivirus, firewall, User Account Control, SmartScreen), not even indirectly. If it is really necessary, explain it and ask the user to do it themselves.
+- Sound and apps: for volume, output device and microphone use audio_status, set_volume, set_audio_device and set_microphone; for windows use list_apps, window_control and close_app. Always close apps gently first. Force-quit only if the user explicitly wants it.
 - If the user declines something, do not try a workaround.
 - If the task is too hard for you or you fail repeatedly, call escalate.
 - Finish with a short summary of what you did and verified.`;
@@ -615,7 +617,8 @@ function createAgent(deps) {
         if (err?.name === 'AbortError' || signal.aborted) throw abortError();
         output = { error: true, text: err.message || String(err) };
       }
-      const label = isFile ? files.describe(call.name, call.input) : tools.describe(call.name, call.input);
+      // Werkzeuge mit Ergebnis-Beschriftung (z. B. «Lautstärke Spotify: 60 → 30 %») zeigen diese im Verlauf
+      const label = (typeof output.label === 'string' && output.label) || (isFile ? files.describe(call.name, call.input) : tools.describe(call.name, call.input));
       send('chat:tool', { id, name: call.name, label: output.error ? `${label} · ${t('Fehler')}` : label, error: Boolean(output.error) });
       task?.step(isFile ? 'file' : 'tool', output.error ? `${label}: ${String(output.text).slice(0, 100)}` : label, output.error ? 'error' : 'ok');
       if (output.error) st.consecutiveErrors += 1;
