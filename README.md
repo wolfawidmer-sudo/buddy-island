@@ -21,6 +21,7 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 - **Dateien ordnen**: auflisten, Duplikate finden, Ordner anlegen, verschieben, in den Papierkorb legen. Nur in deinen Benutzerordnern.
 - **Berechtigungen**: Niedriges Risiko läuft direkt, mittleres fragt einmal pro Aufgabe, hohes (Löschen, Admin, System) jedes Mal.
 - **Timer, Apps, Websites, Musik**: «Stell einen Timer auf 10 Minuten», Rechner oder Spotify öffnen, Musik pausieren oder leiser machen.
+- **Ton und Fenster**: Lautstärke gesamt oder pro App («Mach Discord leiser»), Ausgabegerät wechseln («Ton auf die Kopfhörer»), Mikrofon stumm. Apps auflisten, starten, sanft schliessen, Fenster nach vorne holen, minimieren, maximieren, links/rechts teilen. Hart beenden oder Schliessen mit ungespeicherten Änderungen nur nach deinem Klick auf «Erlauben»; Buddy selbst und Windows-Prozesse nie. Jede Änderung steht im Verlauf.
 - **Mitteilungen und «Läuft gerade»**: Windows-Mitteilungen erscheinen kurz im Island, Musik mit Cover und Zurück / Pause / Weiter.
 - **Kalender**: über einen privaten iCal-Link (Google, Outlook, iCloud), mit Erinnerung vor Terminen.
 - **Sprache**: Mikrofon-Knopf, eigenes Tastenkürzel oder «Hey Buddy» (standardmässig aus). Antworten auf Wunsch vorgelesen.
@@ -80,6 +81,7 @@ Ausführlich in [PRIVACY.md](PRIVACY.md). Kurz:
 | `src/models.js`, `src/router.js` | Modelle, Preise, Modellwahl |
 | `src/agent.js`, `src/permissions.js` | Ausführung, Plan, Freigaben |
 | `src/tools.js`, `src/files.js` | Timer, Apps, Medien, Dateien |
+| `src/control.js`, `src/control-tools.js`, `src/control-policy.js` | Ton (Core Audio), Ausgabegerät, Fenster und Apps schliessen |
 | `src/notifications.js`, `src/calendar.js`, `src/voice.js` | Mitteilungen, Kalender, Sprache |
 | `src/update-security.js` | Signatur- und Kompatibilitätsprüfung für Updates |
 | `src/i18n/` | Deutsch (Quelle), Englisch, Französisch |

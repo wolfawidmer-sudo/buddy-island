@@ -20,6 +20,7 @@ Die App läuft auf deinem Windows-PC. Die Antworten kommen über **Buddy Cloud**
 - **Kalender-Link** (verschlüsselt mit DPAPI), **Chatverlauf**, **Gedächtnis**, **Einstellungen** und ein kurzes **Protokoll** ohne Chat-Inhalte im Ordner `%APPDATA%\Buddy Island`.
 - **Ausführungsverlauf** (`history.json`): Titel, Schritte, Modelle, keine Antworten. Abschaltbar und löschbar.
 - **Windows-Mitteilungen**, **«Läuft gerade»** und **Termine** werden nur angezeigt, nicht dauerhaft gespeichert.
+- **Ton und Fenster steuern**: Bittest du Buddy darum, liest er die Namen deiner offenen Fenster, der Apps mit Ton und deiner Audiogeräte und schickt sie als Teil der Antwort an die KI (über Buddy Cloud an OpenAI), damit sie das richtige Fenster oder Gerät wählt. Gespeichert wird davon nichts ausser dem Eintrag im Verlauf auf deinem PC.
 - **Spielmodus** und **Musik-Visualizer** werten nur lokal aus (Vordergrund-Programm, Lautstärke des Systemtons). Nichts wird aufgenommen oder verschickt.
 - Mit früheren Versionen gespeicherte API-Keys, Admin-Keys und der Hugging-Face-Token werden ab 0.13 beim Start gelöscht.
 
