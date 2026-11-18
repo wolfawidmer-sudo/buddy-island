@@ -32,57 +32,57 @@
 
 :root {
   /* ---------- Marke ---------- */
-  --brand-lagoon: #8ee0d2;          /* Lagune hell: wählbare Markenfarbe */
-  --accent: #f2f2f7;                /* Standard-Akzent Weiss (app.js setzt die gewählte Farbe) */
+  --brand-lagoon: oklch(85.01% 0.0829 182.3);          /* Lagune hell: wählbare Markenfarbe */
+  --accent: oklch(96.26% 0.0066 286.3);                /* Standard-Akzent Weiss (app.js setzt die gewählte Farbe) */
   --accent-text: var(--accent);     /* Akzent als Text/Icon auf der Fläche (von app.js nachgeführt) */
   --accent-fill: var(--accent);     /* Akzent als Fläche (Knöpfe, Schalter) */
-  --on-accent: #04110f;             /* Text auf --accent-fill */
+  --on-accent: oklch(16.39% 0.0207 183.7);             /* Text auf --accent-fill */
   --accent-on-ink: var(--accent);   /* Akzent auf dem schwarzen Island (Augen) */
-  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-soft: color-mix(in oklch, var(--accent) 14%, transparent);
 
   /* ---------- Material (dunkel) ---------- */
-  --ink: #000;                      /* das Island, geschlossen und offen */
-  --bg: #000;                       /* Fläche des offenen Islands: dasselbe Schwarz */
-  --surface-1: #161618;             /* Graphit: Bedienflächen (Eingabe, Code, eigene Nachricht) */
-  --surface-2: #202023;             /* erhöht: Tooltip, Menü, Hover in Listen */
-  --surface-3: #2b2b2f;             /* gewählt auf Graphit */
-  --fill-1: rgba(233, 236, 235, 0.08);   /* Knopf, Chip, Feld */
-  --fill-2: rgba(233, 236, 235, 0.13);   /* Hover darauf */
-  --fill-3: rgba(233, 236, 235, 0.22);   /* Schalter aus, Druck */
-  --separator: rgba(233, 236, 235, 0.10);/* Haarlinie zwischen Zeilen */
-  --rule: rgba(233, 236, 235, 0.16);     /* Linie über/unter einer Liste */
-  --border: rgba(233, 236, 235, 0.12);
-  --border-strong: rgba(233, 236, 235, 0.24);
-  --scrim: rgba(0, 0, 0, 0.6);
+  --ink: oklch(0% 0 0);                      /* das Island, geschlossen und offen */
+  --bg: oklch(0% 0 0);                       /* Fläche des offenen Islands: dasselbe Schwarz */
+  --surface-1: oklch(20.11% 0.0039 286);             /* Graphit: Bedienflächen (Eingabe, Code, eigene Nachricht) */
+  --surface-2: oklch(24.48% 0.0056 286);             /* erhöht: Tooltip, Menü, Hover in Listen */
+  --surface-3: oklch(29.07% 0.0072 285.9);             /* gewählt auf Graphit */
+  --fill-1: oklch(94.05% 0.0035 174.5 / 0.08);   /* Knopf, Chip, Feld */
+  --fill-2: oklch(94.05% 0.0035 174.5 / 0.13);   /* Hover darauf */
+  --fill-3: oklch(94.05% 0.0035 174.5 / 0.22);   /* Schalter aus, Druck */
+  --separator: oklch(94.05% 0.0035 174.5 / 0.1);/* Haarlinie zwischen Zeilen */
+  --rule: oklch(94.05% 0.0035 174.5 / 0.16);     /* Linie über/unter einer Liste */
+  --border: oklch(94.05% 0.0035 174.5 / 0.12);
+  --border-strong: oklch(94.05% 0.0035 174.5 / 0.24);
+  --scrim: oklch(0% 0 0 / 0.6);
 
   /* ---------- Text (dunkel): Nebel, leicht kühl ---------- */
-  --text-1: #e9eceb;                         /* primär, 17:1 */
-  --text-2: rgba(233, 236, 235, 0.70);       /* sekundär, ≥ 8:1 */
-  --text-3: rgba(233, 236, 235, 0.54);       /* gedämpft, Metadaten, ≥ 4.8:1 */
-  --text-4: rgba(233, 236, 235, 0.38);       /* nur Platzhalter und deaktiviert */
+  --text-1: oklch(94.05% 0.0035 174.5);                         /* primär, 17:1 */
+  --text-2: oklch(94.05% 0.0035 174.5 / 0.7);       /* sekundär, ≥ 8:1 */
+  --text-3: oklch(94.05% 0.0035 174.5 / 0.54);       /* gedämpft, Metadaten, ≥ 4.8:1 */
+  --text-4: oklch(94.05% 0.0035 174.5 / 0.38);       /* nur Platzhalter und deaktiviert */
 
   /* ---------- Status (dunkel) ---------- */
-  --success: #5ed39a;               /* Seegras */
-  --warning: #f2c14e;               /* Bernstein */
-  --danger: #ff7a6b;                /* Koralle */
-  --success-text: #74dca9;
-  --warning-text: #f5cd6f;
-  --danger-text: #ff9387;
-  --success-soft: rgba(94, 211, 154, 0.12);
-  --warning-soft: rgba(242, 193, 78, 0.12);
-  --danger-soft: rgba(255, 122, 107, 0.12);
+  --success: oklch(78.43% 0.1352 159.7);               /* Seegras */
+  --warning: oklch(83.41% 0.141 85.4);               /* Bernstein */
+  --danger: oklch(73.18% 0.165 28.3);                /* Koralle */
+  --success-text: oklch(81.8% 0.1225 160.6);
+  --warning-text: oklch(86.4% 0.1216 86.7);
+  --danger-text: oklch(77.49% 0.1322 27.2);
+  --success-soft: oklch(78.43% 0.1352 159.7 / 0.12);
+  --warning-soft: oklch(83.41% 0.141 85.4 / 0.12);
+  --danger-soft: oklch(73.18% 0.165 28.3 / 0.12);
   --info-soft: var(--fill-1);
-  --on-status: #0b0505;
+  --on-status: oklch(12.56% 0.0132 19.1);
 
   --focus-ring: var(--accent-text);
 
   /* Code-Hervorhebung: ruhig, aus der Palette */
-  --code-keyword: #9fc3ff;
-  --code-string: #9fdcb8;
-  --code-number: #f0c987;
+  --code-keyword: oklch(81.29% 0.0938 260.5);
+  --code-string: oklch(84.31% 0.0801 158.2);
+  --code-number: oklch(85.49% 0.0946 80.1);
   --code-comment: var(--text-3);
 
-  --knob: #e9eceb;
+  --knob: oklch(94.05% 0.0035 174.5);
 
   /* ---------- Schrift ---------- */
   --font-text: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
@@ -126,8 +126,11 @@
   --icon-sm: 14px;
   --icon-md: 18px;
   --icon-lg: 20px;
-  --icon-stroke: 1.6;
-  --icon-stroke-sm: 2;
+  /* Strichstärke in echten Pixeln (vector-effect: non-scaling-stroke in base.css),
+     passend zum Schriftgewicht daneben: 1.5px zu Text 400, 2px zu Bedien-Schrift 560–650. */
+  --icon-stroke: 1.5px;
+  --icon-stroke-sm: 1.5px;
+  --icon-stroke-strong: 2px;
   --row-x: 0px;            /* Listen stehen bündig auf der Ansicht, ohne Karte */
   --row-min: var(--control-lg);
   --view-x: 20px;          /* Rand im offenen Island: innen bündig mit dem Titel */
@@ -137,16 +140,20 @@
   --radius-sm: 6px;        /* Inline-Code, Mini-Cover */
   --radius-md: 10px;       /* Knöpfe, Felder */
   --radius-lg: 14px;       /* Code, Dialog, eigene Nachricht */
-  --radius-xl: 20px;       /* Eingabezeile */
+  /* Eingabezeile: sitzt in der unteren Ecke des offenen Islands → konzentrisch:
+     innen = max(0, aussen − Abstand) = 34px − 20px. */
+  --radius-xl: max(0px, calc(var(--island-radius-open) - var(--island-pad)));
   --radius-pill: 999px;    /* Chips, Badges, Schalter */
   --radius-round: 50%;
   --radius-eye: 3px;       /* die Kapsel der Augen: Motiv für Zustände */
 
-  /* ---------- Tiefe: Schwarz braucht keine Schatten ---------- */
+  /* ---------- Tiefe: Schwarz braucht keine Schatten ----------
+     Im Dunkeln zeigt die Fläche die Höhe (surface-1 → 2 → 3 werden heller), nicht ein
+     Schlagschatten. Erhöhte Flächen bekommen nur eine feine Alpha-Kante. Hell siehe unten. */
   --shadow-0: none;
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border);
-  --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border);
+  --shadow-1: none;
+  --shadow-2: 0 0 0 1px var(--border);
+  --shadow-3: 0 0 0 1px var(--border-strong);
   --island-edge: none;
   --card-edge: none;
 
@@ -193,58 +200,58 @@
    Island bleibt schwarz; offen wird es zu einem hellen Blatt mit feiner Kante.
    app.js setzt data-theme auf <html> (Einstellung «Erscheinungsbild»). */
 :root[data-theme="light"] {
-  --accent-text: #0b6f64;
-  --on-accent: #04110f;
-  --bg: #f7f8f7;
-  --surface-1: #eceeed;
-  --surface-2: #ffffff;
-  --surface-3: #ffffff;
-  --fill-1: rgba(18, 24, 22, 0.06);
-  --fill-2: rgba(18, 24, 22, 0.10);
-  --fill-3: rgba(18, 24, 22, 0.18);
-  --separator: rgba(18, 24, 22, 0.10);
-  --rule: rgba(18, 24, 22, 0.18);
-  --border: rgba(18, 24, 22, 0.12);
-  --border-strong: rgba(18, 24, 22, 0.24);
-  --scrim: rgba(18, 24, 22, 0.28);
+  --accent-text: oklch(48.76% 0.0843 182.8);
+  --on-accent: oklch(16.39% 0.0207 183.7);
+  --bg: oklch(97.81% 0.0017 145.6);
+  --surface-1: oklch(94.73% 0.0025 165.1);
+  --surface-2: oklch(100% 0 0);
+  --surface-3: oklch(100% 0 0);
+  --fill-1: oklch(20.2% 0.0099 173.1 / 0.06);
+  --fill-2: oklch(20.2% 0.0099 173.1 / 0.1);
+  --fill-3: oklch(20.2% 0.0099 173.1 / 0.18);
+  --separator: oklch(20.2% 0.0099 173.1 / 0.1);
+  --rule: oklch(20.2% 0.0099 173.1 / 0.18);
+  --border: oklch(20.2% 0.0099 173.1 / 0.12);
+  --border-strong: oklch(20.2% 0.0099 173.1 / 0.24);
+  --scrim: oklch(20.2% 0.0099 173.1 / 0.28);
 
-  --text-1: #121816;
-  --text-2: rgba(18, 24, 22, 0.72);
-  --text-3: rgba(18, 24, 22, 0.62);
-  --text-4: rgba(18, 24, 22, 0.44);
+  --text-1: oklch(20.2% 0.0099 173.1);
+  --text-2: oklch(20.2% 0.0099 173.1 / 0.72);
+  --text-3: oklch(20.2% 0.0099 173.1 / 0.62);
+  --text-4: oklch(20.2% 0.0099 173.1 / 0.44);
 
-  --success: #1d8a55;
-  --warning: #b07208;
-  --danger: #cf3e30;
-  --success-text: #146c42;
-  --warning-text: #8a5a06;
-  --danger-text: #b5342a;
-  --success-soft: rgba(29, 138, 85, 0.10);
-  --warning-soft: rgba(176, 114, 8, 0.11);
-  --danger-soft: rgba(207, 62, 48, 0.09);
-  --on-status: #ffffff;
+  --success: oklch(56.13% 0.1254 156.3);
+  --warning: oklch(60.34% 0.1277 71.2);
+  --danger: oklch(57.47% 0.1841 29.4);
+  --success-text: oklch(47.08% 0.1048 156.7);
+  --warning-text: oklch(50.8% 0.1063 72.6);
+  --danger-text: oklch(51.9% 0.1673 28.7);
+  --success-soft: oklch(56.13% 0.1254 156.3 / 0.1);
+  --warning-soft: oklch(60.34% 0.1277 71.2 / 0.11);
+  --danger-soft: oklch(57.47% 0.1841 29.4 / 0.09);
+  --on-status: oklch(100% 0 0);
 
-  --code-keyword: #2a59c4;
-  --code-string: #1a7343;
-  --code-number: #8f5506;
-  --knob: #ffffff;
+  --code-keyword: oklch(49.62% 0.1754 263.5);
+  --code-string: oklch(49.23% 0.1119 154.4);
+  --code-number: oklch(50.49% 0.1109 65.1);
+  --knob: oklch(100% 0 0);
 
-  --shadow-1: 0 1px 2px rgba(18, 24, 22, 0.22);
-  --shadow-2: 0 8px 22px rgba(18, 24, 22, 0.14), 0 0 0 1px var(--border);
-  --shadow-3: 0 14px 36px rgba(18, 24, 22, 0.18), 0 0 0 1px var(--border);
-  --island-edge: 0 0 0 1px rgba(18, 24, 22, 0.12), 0 10px 28px rgba(18, 24, 22, 0.16);
+  --shadow-1: 0 1px 2px oklch(20.2% 0.0099 173.1 / 0.22);
+  --shadow-2: 0 8px 22px oklch(20.2% 0.0099 173.1 / 0.14), 0 0 0 1px var(--border);
+  --shadow-3: 0 14px 36px oklch(20.2% 0.0099 173.1 / 0.18), 0 0 0 1px var(--border);
+  --island-edge: 0 0 0 1px oklch(20.2% 0.0099 173.1 / 0.12), 0 10px 28px oklch(20.2% 0.0099 173.1 / 0.16);
   color-scheme: light;
 }
 
 /* Das geschlossene Island ist immer schwarz: dort gelten die dunklen Werte. */
 .island:not(.open) {
-  --text-1: #e9eceb;
-  --text-2: rgba(233, 236, 235, 0.70);
-  --text-3: rgba(233, 236, 235, 0.54);
-  --fill-1: rgba(233, 236, 235, 0.08);
-  --fill-2: rgba(233, 236, 235, 0.13);
-  --fill-3: rgba(233, 236, 235, 0.22);
-  --danger: #ff7a6b;
-  --on-status: #0b0505;
+  --text-1: oklch(94.05% 0.0035 174.5);
+  --text-2: oklch(94.05% 0.0035 174.5 / 0.7);
+  --text-3: oklch(94.05% 0.0035 174.5 / 0.54);
+  --fill-1: oklch(94.05% 0.0035 174.5 / 0.08);
+  --fill-2: oklch(94.05% 0.0035 174.5 / 0.13);
+  --fill-3: oklch(94.05% 0.0035 174.5 / 0.22);
+  --danger: oklch(73.18% 0.165 28.3);
+  --on-status: oklch(12.56% 0.0132 19.1);
   --accent-text: var(--accent-on-ink);
 }
