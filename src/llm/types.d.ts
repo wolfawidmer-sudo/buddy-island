@@ -6,7 +6,7 @@
 // Jeder Adapter übersetzt es in das Format seines Anbieters und zurück. So bleiben
 // Agent, Router und Verlauf vom Anbieter unabhängig.
 
-export type ProviderId = 'anthropic' | 'openai' | 'xai' | 'gemini' | 'huggingface' | 'local';
+export type ProviderId = 'anthropic' | 'openai' | 'xai' | 'gemini' | 'huggingface' | 'local' | 'buddy';
 export type ProviderKind = 'anthropic' | 'openai' | 'openai-responses' | 'gemini' | 'huggingface' | 'local';
 export type Tier = 'haiku' | 'sonnet' | 'opus';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -77,6 +77,8 @@ export interface ModelInfo {
   caps: Capabilities;
   local?: boolean;
   estimated?: boolean;
+  /** Läuft über Buddy Cloud (Abrechnung in Buddy Credits auf dem Server) */
+  cloud?: boolean;
 }
 
 export interface ProviderInfo {
@@ -89,6 +91,10 @@ export interface ProviderInfo {
   needsKey: boolean;
   local?: boolean;
   family?: RegExp;
+  /** Anmeldung über das Buddy-Konto statt API-Key (Buddy Cloud) */
+  account?: boolean;
+  /** Präfix der Modell-IDs in Buddy (wird vor dem Senden entfernt und beim Listen ergänzt) */
+  modelPrefix?: string;
 }
 
 export interface Usage {

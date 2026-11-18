@@ -2,6 +2,88 @@
   "_hinweis": "Neuigkeiten pro Version, neueste zuerst. Die Website zeigt alle Einträge der neusten Hauptversion (z. B. alle 0.7.x), der Release-Workflow schreibt sie in die Release-Notizen. Für Kundinnen und Kunden geschrieben: Nutzen statt Technik, keine Fachbegriffe.",
   "versions": [
     {
+      "version": "0.15.0",
+      "highlights": [
+        {
+          "title": "Besseres Diktat",
+          "text": "Was du Buddy sagst, wird jetzt viel genauer verstanden. Das Wakeword funktioniert neu auch auf Spanisch, Italienisch, Portugiesisch und Niederländisch."
+        },
+        {
+          "title": "Ton und Fenster steuern",
+          "text": "«Mach Spotify leiser», «Ton auf die Kopfhörer» oder «Chrome nach links»: Buddy regelt Lautstärke pro App, wechselt das Ausgabegerät und ordnet Fenster."
+        },
+        {
+          "title": "PC-Steuerung ist zurück",
+          "text": "Buddy kann wieder klicken und tippen, wenn du es in den Einstellungen unter Sicherheit einschaltest. Vor jeder Aufgabe fragt er dich, und du kannst jederzeit stoppen."
+        },
+        {
+          "title": "Befehle ausführen",
+          "text": "Auf Wunsch führt Buddy PowerShell-Befehle für dich aus. Standardmässig aus. Jeder Befehl wird dir vorher gezeigt und läuft erst nach deinem Klick."
+        }
+      ]
+    },
+    {
+      "version": "0.14.3",
+      "highlights": [
+        {
+          "title": "Wakeword zuverlässig",
+          "text": "Buddy hat Teile von dem, was du sagst, manchmal in falscher Reihenfolge gehört. Das ist behoben: Dein Wakeword klappt jetzt viel regelmässiger."
+        }
+      ]
+    },
+    {
+      "version": "0.14.2",
+      "highlights": [
+        {
+          "title": "Wakeword hört besser",
+          "text": "Buddy reagiert schneller und auch aus mehr Abstand auf dein Wakeword. Tipp: Zwei Wörter wie «Hey Kiwi» klappen zuverlässiger als eins."
+        }
+      ]
+    },
+    {
+      "version": "0.14.1",
+      "highlights": [
+        {
+          "title": "Wakeword reagiert",
+          "text": "In 0.14.0 hat Buddy auf dein Wakeword nicht reagiert. Jetzt hört er wieder zu, auch bei «Hey Buddy»."
+        }
+      ]
+    },
+    {
+      "version": "0.14.0",
+      "highlights": [
+        {
+          "title": "Dein eigenes Wakeword",
+          "text": "Ruf Buddy, wie du willst: «Hey Kiwi», «Jarvis» oder bei «Hey Buddy» bleiben. Das Wakeword wird direkt auf deinem PC erkannt, ohne dass Ton ins Internet geht."
+        },
+        {
+          "title": "Lebendige Augen",
+          "text": "Buddy wird müde, wenn du ihn eine Weile nicht brauchst, und schläft dann mit leicht geschlossenen Augen. Ein Blick oder dein Wakeword weckt ihn wieder."
+        }
+      ]
+    },
+    {
+      "version": "0.13.0",
+      "highlights": [
+        {
+          "title": "Buddy Cloud",
+          "text": "Melde dich mit Google oder E-Mail an und leg los. Bezahlt wird mit Buddy Credits: ab $5 oder mit Buddy Plus für $10 im Monat."
+        },
+        {
+          "title": "Aufgeräumte Einstellungen",
+          "text": "Fünf klare Bereiche statt einer langen Liste. Konto und Guthaben haben einen eigenen Platz oben in der Insel."
+        },
+        {
+          "title": "Einführung beim ersten Start",
+          "text": "Sprache, Anmeldung, Tastenkürzel: Buddy zeigt dir in wenigen Schritten, wie alles geht."
+        },
+        {
+          "title": "Nur noch Buddy Cloud",
+          "text": "Eigene API-Keys und die lokale KI gibt es nicht mehr, gespeicherte Keys werden gelöscht. Die PC-Steuerung mit Maus und Tastatur ist vorerst nicht verfügbar."
+        }
+      ]
+    },
+    {
       "version": "0.12.0",
       "highlights": [
         {

@@ -7,9 +7,9 @@
    Im Ruhezustand ist das Fenster geschlossen und kostet nichts. */
 
 :root {
-  --accent: #f2f2f7;
-  --edge: color-mix(in srgb, var(--accent) 35%, #ffffff);
-  --soft: color-mix(in srgb, var(--accent) 60%, #dfe6f2);
+  --accent: oklch(96.26% 0.0066 286.3);
+  --edge: color-mix(in oklch, var(--accent) 35%, oklch(100% 0 0));
+  --soft: color-mix(in oklch, var(--accent) 60%, oklch(92.32% 0.018 261.3));
   --w: clamp(18px, 2.4vmin, 34px);
 }
 
@@ -22,7 +22,7 @@ body[data-mode="perceive"] { opacity: 1; transition-duration: 0.45s; }
 .line {
   position: fixed;
   inset: 0;
-  border: 1.5px solid color-mix(in srgb, var(--edge) 85%, transparent);
+  border: 1.5px solid color-mix(in oklch, var(--edge) 85%, transparent);
   box-sizing: border-box;
   pointer-events: none;
 }
@@ -32,9 +32,9 @@ body[data-mode="perceive"] { opacity: 1; transition-duration: 0.45s; }
   position: fixed;
   inset: 0;
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--soft) 30%, transparent),
-    inset 0 0 var(--w) color-mix(in srgb, var(--soft) 32%, transparent),
-    inset 0 0 calc(var(--w) * 3) color-mix(in srgb, var(--soft) 10%, transparent);
+    inset 0 0 0 1px color-mix(in oklch, var(--soft) 30%, transparent),
+    inset 0 0 var(--w) color-mix(in oklch, var(--soft) 32%, transparent),
+    inset 0 0 calc(var(--w) * 3) color-mix(in oklch, var(--soft) 10%, transparent);
   pointer-events: none;
 }
 
@@ -45,7 +45,7 @@ body[data-mode="perceive"] { opacity: 1; transition-duration: 0.45s; }
   width: 220px; height: 3px;
   margin: -1px 0 0 -110px;
   border-radius: 2px;
-  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--edge) 95%, transparent), transparent);
+  background: linear-gradient(to right in oklch, transparent, color-mix(in oklch, var(--edge) 95%, transparent), transparent);
   offset-path: inset(0 round 0);
   offset-rotate: auto;
   animation: sweep 6s linear infinite;
@@ -68,10 +68,10 @@ body[data-mode="perceive"] .sweep { animation-play-state: running; }
   width: 34px; height: 34px;
   margin: -17px 0 0 -17px;
   border-radius: 50%;
-  border: 1.5px solid color-mix(in srgb, var(--edge) 90%, transparent);
+  border: 1.5px solid color-mix(in oklch, var(--edge) 90%, transparent);
   animation: ripple 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
   pointer-events: none;
 }
-.ripple.move { width: 10px; height: 10px; margin: -5px 0 0 -5px; background: color-mix(in srgb, var(--edge) 80%, transparent); border: 0; }
+.ripple.move { width: 10px; height: 10px; margin: -5px 0 0 -5px; background: color-mix(in oklch, var(--edge) 80%, transparent); border: 0; }
 @keyframes ripple { from { transform: scale(0.4); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .ripple { animation-duration: 0.01s; } }

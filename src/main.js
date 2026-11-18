@@ -17,6 +17,7 @@ const { createRouter } = require('./router');
 const { createAgent } = require('./agent');
 const updateSecurity = require('./update-security');
 const { createAiUsage } = require('./ai-usage');
+const { migrateToCloudOnly } = require('./cloud-only');
 const systemSpecs = require('./system-specs');
 const { createAudioMeter } = require('./audio-meter');
 const { createLlm } = require('./llm');
@@ -25,11 +26,20 @@ const { createRuntime } = require('./local/runtime');
 const { createColibri } = require('./local/colibri');
 const { createLocalManager, cleanAdvanced } = require('./local/manager');
 const i18n = require('./i18n');
+const { createCloudAccount } = require('./cloud/account');
+const cloudConfig = require('./cloud/config');
 const { t } = i18n;
 const { createComputer, supportsCaptureExclusion } = require('./computer');
+const { createTerminal } = require('./terminal');
+const terminalPolicy = require('./terminal-policy');
 const { createSystemWatcher } = require('./notifications');
 const { createCalendar } = require('./calendar');
 const { createVoice } = require('./voice');
+const { createControl } = require('./control');
+const { createControlTools } = require('./control-tools');
+const wakeword = require('./wakeword');
+const vosk = require('./vosk');
+const dictation = require('./dictation');
 const { createPerception } = require('./perception');
 const prompt = require('./prompt');
 const authSpecs = require('./llm/auth');
@@ -49,13 +59,17 @@ const TOP_GAP = 6; // wie die Dynamic Island: knapp unter dem oberen Rand (im Fe
 const OPEN_H = 660 + TOP_GAP;
 const CLOSED_H = 36 + TOP_GAP;
 const NOTCH_H = 12 + TOP_GAP;
-const SETTINGS_VERSION = 6;
+const SETTINGS_VERSION = 7;
 const MODELS_CACHE_MS = 6 * 3600 * 1000;
+// Ab 0.13: Buddy läuft nur noch über Buddy Cloud. Eigene API-Keys, lokale KI (Ollama, Colibrì,
+// Hugging Face) und die Admin-Keys der Nutzungsansicht sind abgeschaltet. Der Code dafür ist noch
+// da (Tests), wird aber weder gestartet noch ist er über die Oberfläche erreichbar.
+const CLOUD_ONLY = true;
 
 const DEFAULTS = {
   name: 'Buddy',
-  provider: 'anthropic',
-  model: 'claude-sonnet-5-5', // manuelle Wahl und Rückfall
+  provider: 'buddy',
+  model: 'cloud:gpt-6.1-terra', // manuelle Wahl und Rückfall (Cloud-Standardmodell)
   autoModel: true, // Router wählt Modell und Denkaufwand
   modelFallback: true, // bei Überlastung/Rate-Limit einmalig ein anderes verfügbares Modell desselben Anbieters nehmen (mit Hinweis)
   fallbackModels: [], // optional: bevorzugte Ausweichmodelle (IDs); leer = automatisch aus der Modellliste
@@ -66,7 +80,7 @@ const DEFAULTS = {
   historyEnabled: true,
   memoryEnabled: true,
   bannerHintDismissed: false,
-  usageLocal: true, // lokale Nutzungsdaten von Claude Code und Codex lesen
+  usageLocal: false, // lokale Nutzungsdaten von Claude Code und Codex lesen (ab 0.13 abgeschaltet)
   maxTokens: 4096,
   hotkey: 'Control+Shift+Space',
   shortcuts: { newChat: '', settings: '', stop: '', voice: '' },
@@ -75,8 +89,10 @@ const DEFAULTS = {
   autostart: false,
   accent: '#F2F2F7', // Weiss: Standardfarbe der Augen («Lagune» und andere wählbar)
   theme: 'dark', // dark | light | system: Erscheinungsbild des offenen Islands (geschlossen immer schwarz)
-  computerUse: true,
+  computerUse: false, // PC-Steuerung: ab 0.15 wieder da (Buddy Cloud), bewusst einschalten
   confirmControl: true,
+  terminal: false, // «Befehl ausführen» (PowerShell): standardmässig aus
+  terminalAllow: [], // «Immer erlauben» nur für rein lesende Befehle aus terminal-policy.js
   glow: true,
   notifications: true,
   media: true,
@@ -85,6 +101,9 @@ const DEFAULTS = {
   calendarEncrypted: null,
   calendarPlain: null,
   voiceWake: false,
+  cloudDictation: true, // Diktat über Buddy Cloud (wirkt nur, wenn angemeldet)
+  wakeWord: 'Hey Buddy',
+  eyesAlive: true,
   speak: true,
   displayId: null,
   // Präferenzen für Antworten (Länge, Tonfall, eigene Hinweise). Wer Buddy ist, steht fest in src/prompt.js.
@@ -113,6 +132,8 @@ const DEFAULTS = {
   localAdvanced: { ctx: null, temperature: null, topP: null, maxTokens: null, keepAlive: 'auto', gpu: 'auto', threads: null, batch: null },
   localPermissions: { high: 'block' }, // lokale Modelle: riskante Aktionen standardmässig gesperrt
   shortcutsCreated: false,
+  onboarded: false, // Einführung beim ersten Start gesehen (oder übersprungen)
+  cloudNotice: null, // einmaliger Hinweis: 'keys-removed' (hatte eigene Keys/lokale KI) | 'new-cloud' (bestehender Nutzer)
   settingsVersion: SETTINGS_VERSION,
 };
 
@@ -148,6 +169,7 @@ const AUDIO_GRACE_MS = 2 * 60 * 1000; // nach einer Pause noch so lange zuhören
 let tray = null;
 let tools = null;
 let computer = null;
+let terminal = null; // «Befehl ausführen» (PowerShell), nur wenn eingeschaltet
 let watcher = null;
 let calendar = null;
 let voice = null;
@@ -210,9 +232,12 @@ function usagePresent(id) {
   }
 }
 let llm = null;
+/** Buddy-Cloud-Konto (Tokens bleiben im Hauptprozess) */
+let cloud = null;
 let discovery = null;
 let local = null; // Lokale KI (src/local/manager.js)
 let audioMeter = null;
+let control = null; // Ton- und Fenster-Helfer (src/control.js)
 const modelCache = new Map(); // Anbieter -> { at, list }
 let updateHealth = null; // Infos für Rollback und Anzeige
 let layout = { open: false, width: 112, height: 42, notch: false };
@@ -267,10 +292,26 @@ function loadSettings() {
     if (savedVersion < 6 && settings.autoModel !== false && models.OLD_DEFAULTS.has(settings.model)) {
       settings.model = models.resolveTiers([], 'openai').sonnet || settings.model;
     }
+    // 0.15: PC-Steuerung war seit 0.13 ausgeblendet. Nicht stillschweigend mit alten Werten wieder
+    // einschalten: aus, und «Vor jeder Aufgabe fragen» wieder an.
+    if (savedVersion < 7) {
+      settings.computerUse = false;
+      settings.confirmControl = true;
+    }
     settings.settingsVersion = SETTINGS_VERSION;
     migrateKey();
     saveSettings();
   }
+  if (CLOUD_ONLY) enforceCloudOnly(saved);
+}
+
+// Nur Buddy Cloud: alte Keys löschen, Anbieter fest auf Buddy Cloud (siehe src/cloud-only.js)
+function enforceCloudOnly(saved) {
+  const changed = migrateToCloudOnly(settings, saved, {
+    isCloudModel: (id) => models.providerOf(id) === 'buddy',
+    defaultModel: models.resolveTiers([], 'buddy').sonnet || DEFAULTS.model,
+  });
+  if (changed) { log('Nur noch Buddy Cloud: alte Keys und lokale Auswahl entfernt'); saveSettings(); }
 }
 
 // Ein unverschlüsselt gespeicherter Key wird verschlüsselt, sobald Windows es kann.
@@ -294,6 +335,7 @@ function redact(message) {
     .replace(/\bAIza[0-9A-Za-z_-]{20,}|\bAQ\.[A-Za-z0-9_.-]{20,}|\bxai-[A-Za-z0-9_-]{16,}|\bhf_[A-Za-z0-9]{16,}/g, '[Key]')
     .replace(/(x-goog-api-key)[\s:=]+[^\s,;]+/gi, '$1 …')
     .replace(/(bearer|x-api-key|authorization)[\s:=]+[^\s,;]+/gi, '$1 …')
+    .replace(/(-(?:password|passwort|token|secret|apikey|key|credential)\s+)("[^"]*"|'[^']*'|\S+)/gi, '$1…')
     .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[privater Schlüssel entfernt]');
 }
 
@@ -344,9 +386,16 @@ function displayList() {
 function providerList() {
   const found = discovery?.peek();
   return Object.values(models.PROVIDERS)
+    .filter((p) => !CLOUD_ONLY || p.id === 'buddy')
     // Die alte Hugging-Face-Laufzeit nur noch für Nutzer, die sie schon eingerichtet haben
     .filter((p) => p.id !== 'huggingface' || settings.provider === 'huggingface' || Boolean(getSecret('hfModel')))
+    // Buddy Cloud erst zeigen, wenn diese Version eine Backend-Adresse hat
+    .filter((p) => p.id !== 'buddy' || cloudConfig.apiUrl() || settings.provider === 'buddy' || CLOUD_ONLY)
     .map((p) => {
+      if (p.id === 'buddy') {
+        const cs = cloud?.publicState();
+        return { id: 'buddy', name: 'Buddy Cloud', consoleUrl: p.consoleUrl, local: false, account: true, hasKey: Boolean(cs?.signedIn), hint: null, status: cs?.status || null, ready: Boolean(cs?.configured), auth: null, keyNotice: null };
+      }
       if (p.id === 'local') {
         return { id: 'local', name: t('Lokal auf diesem PC'), consoleUrl: p.consoleUrl, local: true, hasKey: localHasModel(), hint: null, status: null, ready: true, auth: null, keyNotice: null };
       }
@@ -397,12 +446,15 @@ function publicSettings() {
     hasCalendar: Boolean(settings.calendarEncrypted || settings.calendarPlain),
     calendarStatus: calendar?.status() || null,
     canControl: process.platform === 'win32',
+    canTerminal: Boolean(terminal?.available()),
+    terminalAllow: terminalPolicy.cleanAllowList(settings.terminalAllow),
     meterAvailable: audioMeter ? audioMeter.available() : process.platform === 'win32',
     musicActive,
     notifyStatus,
     mediaOk,
     game,
     voiceInfo: voice?.info() || null,
+    wakeEngine,
     displays: displayList(),
     version: app.getVersion(),
     updateState,
@@ -420,6 +472,7 @@ let localProgressTimer = null;
 // Wählt beim Start das lokale Modell, solange der Nutzer keinen Anbieter selbst gewählt
 // und keinen API-Key hat. Das empfohlene Modell richtet sich nach der Hardware.
 async function autoSelectLocal() {
+  if (CLOUD_ONLY) return;
   // Neue lokale KI: Ollama mit einem installierten Modell ist da, aber noch kein Anbieter gewählt
   if (local && !settings.providerChosen && !(getApiKey(currentProvider()) && !['huggingface', 'local'].includes(currentProvider()))) {
     const s = await local.init();
@@ -488,6 +541,7 @@ function onLocalStatus(st) {
 
 // Island geht auf: lokales Modell im Hintergrund schon laden
 function warmLocal() {
+  if (CLOUD_ONLY) return;
   if (currentProvider() === 'local') {
     const s = local?.snapshot();
     // Nur laden, wenn ein Modell installiert ist und nichts anderes läuft
@@ -732,6 +786,7 @@ function applyLanguage() {
   // übersetzte Oberfläche gibt (dann ist die Oberfläche englisch)
   answerLanguage = wanted ? lang : (preferred[0] || lang);
   liveWin()?.webContents.send('i18n', i18n.dictionary());
+  applyWakeEngine(); // Wakeword-Modell passend zur Sprache
   return lang;
 }
 
@@ -739,11 +794,12 @@ function applyLanguage() {
 // Claude behält seinen bisherigen Speicherplatz (keyEncrypted), die anderen liegen als
 // key_<anbieter>. Lokale Hugging-Face-Modelle brauchen keinen Key, nur Modell-ID/Pfad.
 
-const currentProvider = () => (models.PROVIDERS[settings.provider] ? settings.provider : 'anthropic');
+const currentProvider = () => (CLOUD_ONLY ? 'buddy' : models.PROVIDERS[settings.provider] ? settings.provider : 'anthropic');
 
 function getApiKey(provider = currentProvider()) {
   if (provider === 'huggingface') return getSecret('hfModel') ? 'lokal' : null;
   if (provider === 'local') return settings.localModel ? 'lokal' : null;
+  if (provider === 'buddy') return cloud?.accessToken() || null;
   if (provider !== 'anthropic') return getSecret(`key_${provider}`);
   if (settings.keyEncrypted && safeStorage.isEncryptionAvailable()) {
     try {
@@ -793,6 +849,7 @@ function providerKeyInfo(id) {
   if (id === 'anthropic') return { has: Boolean(settings.keyEncrypted || settings.keyPlain), hint: settings.keyHint, protected: Boolean(settings.keyEncrypted) };
   if (id === 'huggingface') return { has: Boolean(getSecret('hfModel')), hint: null, protected: Boolean(settings.hfModelEncrypted) };
   if (id === 'local') return { has: localHasModel(), hint: null, protected: false };
+  if (id === 'buddy') return { has: Boolean(cloud?.accessToken()), hint: null, protected: true };
   return { has: Boolean(settings[`key_${id}Encrypted`] || settings[`key_${id}Plain`]), hint: settings.keyHints?.[id] || null, protected: Boolean(settings[`key_${id}Encrypted`]) };
 }
 
@@ -1300,7 +1357,8 @@ function askToControl(id, send) {
 
 // Freigabe für Aktionen mit mittlerem oder hohem Risiko
 function askPermission(id, request, send) {
-  const reqId = Math.random().toString(36).slice(2, 10);
+  // Freigabe-ID mit CSPRNG: nicht erratbar, auch wenn später das Terminal-Werkzeug dazukommt
+  const reqId = require('node:crypto').randomUUID();
   return new Promise((resolve) => {
     permissionAsks.set(`${id}:${reqId}`, resolve);
     send('agent:permission', { id, reqId, ...request });
@@ -1341,9 +1399,13 @@ function computerAvailable() {
 async function runChat(id, messages, meta, send) {
   const controller = new AbortController();
   running.set(id, controller);
+  const viaCloud = currentProvider() === 'buddy';
   try {
+    // Buddy Cloud: Token vorher erneuern, falls es bald abläuft (Offline ist hier kein Fehler)
+    if (viaCloud) await cloud?.ensureFresh().catch(() => {});
     await agent.run({ id, messages, meta, send, signal: controller.signal });
   } finally {
+    if (viaCloud) cloud?.refreshWallet();
     running.delete(id);
     // Aufgabe zu Ende: Buddy wertet keine Aufnahmen mehr aus
     if (!running.size) perception.taskEnd();
@@ -1425,7 +1487,7 @@ function createAgentRuntime() {
   });
   // Buddy kann die Nutzung auch im Chat beantworten
   const baseTools = { definitions: tools.definitions, run: tools.run, describe: tools.describe };
-  tools.definitions = [...baseTools.definitions, ...aiUsage.definitions];
+  tools.definitions = CLOUD_ONLY ? baseTools.definitions : [...baseTools.definitions, ...aiUsage.definitions];
   tools.run = (name, input) => (aiUsage.names.has(name) ? aiUsage.run(name, input) : baseTools.run(name, input));
   tools.describe = (name, input) => (aiUsage.names.has(name) ? aiUsage.describe(name, input) : baseTools.describe(name, input));
   // Gedächtnis-Werkzeuge (nur wenn eingeschaltet)
@@ -1455,7 +1517,14 @@ function createAgentRuntime() {
     askControl: askToControl,
     askPermission,
     onControl: setControlling,
-    onAuthError: (pid) => markKeyInvalid(pid || currentProvider()),
+    getTerminal: () => (settings.terminal && terminal?.available() ? terminal : null),
+    onTerminalAllow: (name) => {
+      settings.terminalAllow = terminalPolicy.cleanAllowList([...(settings.terminalAllow || []), name]);
+      saveSettings();
+      log(`Terminal: «${name}» immer erlaubt`);
+    },
+    // Buddy Cloud: abgelehntes Token → Sitzung erneuern statt «Key ungültig»
+    onAuthError: (pid) => ((pid || currentProvider()) === 'buddy' ? cloud?.refresh(true).catch(() => {}) : markKeyInvalid(pid || currentProvider())),
   });
 }
 
@@ -1498,6 +1567,63 @@ function setGame(focus) {
   }
 }
 
+// ---------- Wakeword-Erkennung: Vosk (offline) mit Windows-Erkennung als Rückfall ----------
+let wakeEngine = { state: 'windows', percent: null, error: null }; // windows | downloading | vosk | fallback
+let wakeEngineJob = null;
+let voskBlocked = ''; // Wakeword, das Vosk nicht kennt: dafür Windows-Erkennung
+
+function sendWakeEngine(patch) {
+  wakeEngine = { ...wakeEngine, ...patch };
+  // Sprache des Modells in der Sprache der Oberfläche («Deutsch», «Spanisch» …)
+  if (wakeEngine.lang) {
+    try {
+      const n = new Intl.DisplayNames([i18n.language()], { type: 'language' }).of(wakeEngine.lang) || wakeEngine.lang;
+      wakeEngine.langName = n.charAt(0).toLocaleUpperCase(i18n.language()) + n.slice(1);
+    } catch { wakeEngine.langName = vosk.LANG_NAMES[wakeEngine.lang] || wakeEngine.lang; }
+  }
+  liveWin()?.webContents.send('voice', { kind: 'engine', ...wakeEngine });
+}
+
+function unzipWindows(zip, dest) {
+  const { execFile } = require('child_process');
+  const q = (x) => `'${String(x).replace(/'/g, "''")}'`;
+  return new Promise((resolve, reject) => execFile('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command',
+    `Expand-Archive -LiteralPath ${q(zip)} -DestinationPath ${q(dest)} -Force`], { windowsHide: true, timeout: 10 * 60 * 1000 },
+  (err, _o, e) => (err ? reject(new Error(t('Entpacken fehlgeschlagen: {msg}', { msg: String(e || err.message).slice(-200) }))) : resolve())));
+}
+
+// Vosk für die aktuelle Sprache bereitstellen (lädt beim ersten Mal ~60 MB) und einschalten
+function applyWakeEngine() {
+  if (!voice || process.platform !== 'win32' || !settings.voiceWake) return;
+  const word = wakeword.wakeWordOf(settings);
+  if (voskBlocked === word) { voice.setEngine(null); return; }
+  // Modell nach der gesprochenen Sprache (in der Buddy antwortet), nicht nach der Oberfläche
+  const lang = vosk.langFor(answerLanguage || i18n.language());
+  voice.setLanguage(answerLanguage || i18n.language());
+  const root = path.join(app.getPath('userData'), 'vosk');
+  const have = vosk.installed(root, lang);
+  if (have) {
+    voice.setEngine({ ...have, lang });
+    sendWakeEngine({ state: 'vosk', percent: null, error: null, lang });
+    return;
+  }
+  if (wakeEngineJob) return;
+  voice.setEngine(null); // bis Vosk bereit ist, hört die Windows-Erkennung
+  sendWakeEngine({ state: 'downloading', percent: 0, error: null, lang });
+  wakeEngineJob = vosk.ensure({
+    root, lang, fetchImpl: (url, init) => net.fetch(url, init), unzip: unzipWindows,
+    onProgress: (pr) => { if (pr.phase === 'download') sendWakeEngine({ state: 'downloading', percent: pr.percent }); },
+  }).then((p) => {
+    log(`Wakeword: Vosk (${lang}) installiert`);
+    if (settings.voiceWake && vosk.langFor(answerLanguage || i18n.language()) === lang) voice.setEngine({ ...p, lang });
+    sendWakeEngine({ state: 'vosk', percent: null, lang });
+    if (vosk.langFor(answerLanguage || i18n.language()) !== lang) applyWakeEngine(); // Sprache inzwischen gewechselt
+  }).catch((err) => {
+    log(`Wakeword: Vosk nicht verfügbar: ${err.message}`);
+    sendWakeEngine({ state: 'fallback', percent: null, error: err.message });
+  }).finally(() => { wakeEngineJob = null; });
+}
+
 function startListening() {
   if (!voice) return;
   if (process.platform !== 'win32') {
@@ -1505,6 +1631,7 @@ function startListening() {
     return;
   }
   liveWin()?.webContents.send('voice', { kind: 'starting' });
+  applyDictationMode();
   voice.listen();
 }
 
@@ -1835,7 +1962,7 @@ async function runDiagnostics() {
   } else if (provider.id === 'huggingface') {
     const found = await discovery.get();
     add(t('Lokales Modell'), found.python ? true : false, found.python ? `${getSecret('hfModel') || t('kein Modell gewählt')} · transformers ${found.python.transformers} · ${found.python.device}` : t('Python mit transformers und torch fehlt'));
-  } else if (!key) add(provider.name, false, t('Kein API-Key verbunden'));
+  } else if (!key) add(provider.name, false, CLOUD_ONLY ? t('Nicht angemeldet') : t('Kein API-Key verbunden'));
   else {
     try {
       const list = await llm.client(provider.id).listModels(key, provider.id === 'anthropic' ? settings.workspaceId : undefined);
@@ -1878,19 +2005,130 @@ async function runDiagnostics() {
   const v = voice.info();
   if (process.platform !== 'win32') add(t('Sprache'), null, t('Nur unter Windows'));
   else if (!v.ready) add(t('Sprache'), null, t('Startet beim ersten Sprechen'));
-  else add(t('Sprache'), v.offline || v.online, [v.online ? t('Online-Diktat') : null, v.offline ? `Offline (${v.language})` : null, v.wake ? t('«Hey Buddy» aktiv') : null].filter(Boolean).join(', ') || t('Keine Spracherkennung installiert'));
+  else add(t('Sprache'), v.offline || v.online, [v.online ? t('Online-Diktat') : null, v.offline ? `Offline (${v.language})` : null, v.wake ? t('«{word}» aktiv', { word: wakeword.wakeWordOf(settings) }) : null].filter(Boolean).join(', ') || t('Keine Spracherkennung installiert'));
 
   add(t('Updates'), updater ? updateState.state !== 'error' : null, updater
     ? ({ idle: t('Noch nicht geprüft'), checking: t('Prüfe …'), latest: t('Aktuell'), verifying: t('Prüfe Signatur …'), downloading: t('Lädt Update …'), ready: `Version ${updateState.version} bereit und verifiziert`, skipped: updateState.error, rollback: t('Stellt ältere Version wieder her …'), error: updateState.error }[updateState.state] || '')
     : t('Nur mit dem Installer'));
   add('Update-Signatur', true, `Ed25519, Schlüssel ${Object.keys(updateSecurity.PUBLIC_KEYS).join(', ')} eingebaut`);
   const b = usage.budget(settings.monthlyLimit);
-  add(t('Ausgabenlimit'), b.level === 'none' ? null : b.level !== 'blocked', b.level === 'none'
-    ? t('Kein Limit gesetzt')
-    : `$${b.spent.toFixed(2)} von $${b.limit.toFixed(2)} diesen Monat`);
-  add(t('API-Key-Schutz'), settings.keyEncrypted ? true : settings.keyPlain ? false : null, settings.keyEncrypted ? t('Mit Windows-Verschlüsselung (DPAPI) gespeichert') : settings.keyPlain ? t('Unverschlüsselt (nur Entwicklung)') : t('Kein Key'));
+  if (!CLOUD_ONLY) {
+    add(t('Ausgabenlimit'), b.level === 'none' ? null : b.level !== 'blocked', b.level === 'none'
+      ? t('Kein Limit gesetzt')
+      : `$${b.spent.toFixed(2)} von $${b.limit.toFixed(2)} diesen Monat`);
+    add(t('API-Key-Schutz'), settings.keyEncrypted ? true : settings.keyPlain ? false : null, settings.keyEncrypted ? t('Mit Windows-Verschlüsselung (DPAPI) gespeichert') : settings.keyPlain ? t('Unverschlüsselt (nur Entwicklung)') : t('Kein Key'));
+  }
   log(`Diagnose: ${results.map((r) => `${r.name}=${r.ok}`).join(', ')}`);
   return results;
+}
+
+// ---------- Buddy Cloud (Konto, Guthaben) ----------
+
+function setupCloud() {
+  cloud = createCloudAccount({
+    apiUrl: cloudConfig.apiUrl,
+    fetchImpl: (url, init) => net.fetch(url, init),
+    storage: {
+      load: () => { try { return JSON.parse(getSecret('cloudSession') || 'null'); } catch { return null; } },
+      save: (s) => { try { setSecret('cloudSession', s ? JSON.stringify(s) : ''); } catch (err) { log(`Cloud: Sitzung nicht gespeichert: ${err.message}`); } },
+    },
+    // Nur echte Web-Adressen im System-Browser öffnen
+    openExternal: (url) => (/^https:\/\//.test(url) ? shell.openExternal(url) : Promise.reject(new Error('blocked'))),
+    t,
+    log,
+    onChange: (state) => {
+      applyDictationMode();
+      modelCache.delete('buddy');
+      liveWin()?.webContents.send('cloud:state', state);
+      liveWin()?.webContents.send('settings:changed', publicSettings());
+    },
+  });
+  if (cloud.configured()) cloud.restore();
+}
+
+// ---------- Diktat über Buddy Cloud (src/dictation.js) ----------
+// Ton geht nur beim Diktat an Buddy Cloud → OpenAI; das Wakeword bleibt auf dem PC.
+const dictationEngine = dictation.createDictation({ post: (body, signal) => cloud.transcribe(body, signal), log });
+let dictationRetryTimer = null;
+
+function dictationDecision() {
+  const st = cloud?.publicState?.() || {};
+  let online = true;
+  try { online = net.isOnline(); } catch { /* unbekannt: versuchen */ }
+  return dictation.decide({
+    enabled: settings.cloudDictation !== false,
+    configured: Boolean(cloud?.configured?.()),
+    signedIn: Boolean(st.signedIn),
+    available: st.wallet ? st.wallet.available : null,
+    online,
+    blockedUntil: dictationEngine.blockedUntil(),
+  });
+}
+
+function applyDictationMode() {
+  voice?.setCloud(dictationDecision().use);
+}
+
+// Aufnahme vom Sprach-Helfer → Buddy Cloud → Text. Jeder Fehler: Text vom PC (Vosk oder Windows-Erkennung).
+async function handleRecorded(msg) {
+  const send = (m) => liveWin()?.webContents.send('voice', m);
+  const local = (reason) => {
+    log(`Diktat: ${msg.text ? 'Vosk' : 'Windows-Erkennung'} statt Buddy Cloud (${reason})`);
+    if (msg.text) send({ kind: 'text', text: msg.text, via: 'vosk' });
+    else voice?.fallback();
+  };
+  if (!msg.wav) { local('Aufnahme unvollständig'); return; }
+  send({ kind: 'transcribing' });
+  const r = await dictationEngine.transcribe(msg.wav, answerLanguage);
+  if (r.ok) { send(r.text ? { kind: 'text', text: r.text, via: 'cloud' } : { kind: 'nothing' }); return; }
+  if (r.reason === 'unavailable') {
+    clearTimeout(dictationRetryTimer);
+    dictationRetryTimer = setTimeout(applyDictationMode, dictation.RETRY_AFTER_404_MS + 1000);
+  }
+  applyDictationMode();
+  local(r.reason);
+}
+
+function setupCloudIpc() {
+  const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  /** Einheitliche Antwort an die Oberfläche: nie Tokens, nur Status und verständliche Fehler */
+  const wrap = (fn) => async (_e, input = {}) => {
+    if (!cloud) return { ok: false, code: 'not_ready', error: t('Bitte einen Moment warten.') };
+    try {
+      return { ok: true, ...((await fn(input || {})) || {}), state: cloud.publicState() };
+    } catch (err) {
+      return { ok: false, code: err.code || 'error', error: err.message || t('Unbekannter Fehler.'), state: cloud.publicState() };
+    }
+  };
+  const creds = (i) => ({ email: str(i.email, 320), password: typeof i.password === 'string' ? i.password.slice(0, 128) : '' });
+  ipcMain.handle('cloud:state', wrap(async () => ({})));
+  ipcMain.handle('cloud:reload', wrap(() => cloud.loadMe()));
+  ipcMain.handle('cloud:signup', wrap((i) => cloud.signup({ ...creds(i), ...(str(i.displayName, 80) ? { displayName: str(i.displayName, 80) } : {}) })));
+  ipcMain.handle('cloud:login', wrap((i) => cloud.login(creds(i))));
+  ipcMain.handle('cloud:verify-email', wrap((i) => cloud.verifyEmail({ email: str(i.email, 320), code: str(i.code, 10) })));
+  ipcMain.handle('cloud:resend', wrap((i) => cloud.resendConfirmation({ email: str(i.email, 320) })));
+  ipcMain.handle('cloud:reset-request', wrap((i) => cloud.requestPasswordReset({ email: str(i.email, 320) })));
+  ipcMain.handle('cloud:reset-confirm', wrap((i) => cloud.confirmPasswordReset({ email: str(i.email, 320), code: str(i.code, 10), password: typeof i.password === 'string' ? i.password.slice(0, 128) : '' })));
+  ipcMain.handle('cloud:google', wrap(() => cloud.google()));
+  ipcMain.handle('cloud:google-cancel', wrap(async () => { cloud.cancelGoogle(); }));
+  ipcMain.handle('cloud:logout', wrap(async () => {
+    await cloud.logout();
+    // Abgemeldet und Buddy Cloud aktiv: auf lokale KI ausweichen, falls eingerichtet
+    if (!CLOUD_ONLY && settings.provider === 'buddy' && localHasModel()) { settings.provider = 'local'; saveSettings(); }
+  }));
+  ipcMain.handle('cloud:profile', wrap((i) => cloud.updateProfile({ displayName: str(i.displayName, 80) })));
+  ipcMain.handle('cloud:history', wrap(async () => ({ history: await cloud.history() })));
+  ipcMain.handle('cloud:packages', wrap(async () => ({ packages: await cloud.packages() })));
+  ipcMain.handle('cloud:offer', wrap(async () => {
+    const [packages, plans, config] = await Promise.all([cloud.packages(), cloud.plans(), cloud.billingConfig()]);
+    return { packages, plans, config };
+  }));
+  ipcMain.handle('cloud:buy', wrap(async (i) => {
+    const amount = str(i.amount, 12).replace(',', '.');
+    return { checkout: await cloud.buy(str(i.packageId, 64) ? { packageId: str(i.packageId, 64) } : { amount }) };
+  }));
+  ipcMain.handle('cloud:subscribe', wrap(async (i) => ({ subscription: await cloud.subscribe(str(i.planId, 64)) })));
+  ipcMain.handle('cloud:portal', wrap(() => cloud.portal()));
 }
 
 // ---------- IPC ----------
@@ -1928,6 +2166,7 @@ function setupIpc() {
   });
 
   ipcMain.handle('settings:get', () => publicSettings());
+  setupCloudIpc();
   ipcMain.handle('i18n:get', () => i18n.dictionary());
   // Zwischenablage über den Hauptprozess: navigator.clipboard scheitert im Island oft,
   // weil das Fenster nicht den Fokus hat.
@@ -1939,7 +2178,7 @@ function setupIpc() {
   ipcMain.on('i18n:sync', (event) => { event.returnValue = i18n.dictionary(); });
 
   ipcMain.handle('settings:set', (_e, patch = {}) => {
-    const allowedKeys = ['usageLocal', 'bannerHintDismissed', 'name', 'model', 'maxTokens', 'sound', 'autostart', 'accent', 'workspaceId', 'computerUse', 'confirmControl', 'glow', 'notifications', 'media', 'gameMode', 'calendarLead', 'voiceWake', 'speak', 'displayId'];
+    const allowedKeys = ['bannerHintDismissed', 'name', 'model', 'maxTokens', 'sound', 'autostart', 'accent', 'workspaceId', 'computerUse', 'confirmControl', 'glow', 'notifications', 'media', 'gameMode', 'calendarLead', 'voiceWake', 'speak', 'displayId'];
     for (const k of allowedKeys) if (k in patch) settings[k] = patch[k];
     // KI-Einstellungen mit Prüfung
     if ('effort' in patch && ['auto', 'low', 'medium', 'high'].includes(patch.effort)) settings.effort = patch.effort;
@@ -1953,13 +2192,23 @@ function setupIpc() {
       settings.fallbackModels = patch.fallbackModels.filter((x) => typeof x === 'string' && /^[\w.:/-]{1,120}$/.test(x)).slice(0, 5);
     }
     if ('showRouting' in patch) settings.showRouting = Boolean(patch.showRouting);
+    if ('terminal' in patch) {
+      settings.terminal = Boolean(patch.terminal);
+      log(`Terminal: ${settings.terminal ? 'eingeschaltet' : 'ausgeschaltet'}`);
+    }
+    if ('terminalAllow' in patch) settings.terminalAllow = terminalPolicy.cleanAllowList(patch.terminalAllow);
+    if ('onboarded' in patch) settings.onboarded = Boolean(patch.onboarded);
+    if ('cloudNotice' in patch && patch.cloudNotice === null) settings.cloudNotice = null; // nur quittieren
+    if ('usageLocal' in patch && !CLOUD_ONLY) settings.usageLocal = Boolean(patch.usageLocal);
     // Nur Präferenzen sind einstellbar; die Identität (src/prompt.js) nicht
     if ('promptPrefs' in patch) settings.promptPrefs = prompt.cleanPrefs({ ...settings.promptPrefs, ...patch.promptPrefs });
     if ('historyEnabled' in patch) settings.historyEnabled = Boolean(patch.historyEnabled);
     if ('memoryEnabled' in patch) settings.memoryEnabled = Boolean(patch.memoryEnabled);
     if ('visualizer' in patch) settings.visualizer = Boolean(patch.visualizer);
+    if ('eyesAlive' in patch) settings.eyesAlive = Boolean(patch.eyesAlive);
+    if ('cloudDictation' in patch) { settings.cloudDictation = Boolean(patch.cloudDictation); applyDictationMode(); }
     if ('glowMusic' in patch) settings.glowMusic = Boolean(patch.glowMusic);
-    if ('provider' in patch && models.PROVIDERS[patch.provider] && patch.provider !== settings.provider) {
+    if ('provider' in patch && models.PROVIDERS[patch.provider] && patch.provider !== settings.provider && (!CLOUD_ONLY || patch.provider === 'buddy')) {
       settings.provider = patch.provider;
       settings.providerChosen = true;
       if (patch.provider !== 'huggingface') llm.stopAll();
@@ -2014,13 +2263,23 @@ function setupIpc() {
     if ('visualizer' in patch || 'glowMusic' in patch || 'glow' in patch || 'media' in patch) syncAudio();
     if ('notifications' in patch || 'media' in patch || 'gameMode' in patch) startWatcher();
     if ('calendarLead' in patch) calendar?.setLead(settings.calendarLead);
-    if ('voiceWake' in patch) voice?.setWake(settings.voiceWake && !game.active);
+    let wakeWordError = null;
+    if ('wakeWord' in patch) {
+      const res = wakeword.cleanWakeWord(patch.wakeWord);
+      if (res.ok) {
+        settings.wakeWord = res.value;
+        voice?.setWakeWord(res.value);
+        if (voskBlocked && voskBlocked !== res.value) { voskBlocked = ''; }
+        applyWakeEngine();
+      } else wakeWordError = t(res.error);
+    }
+    if ('voiceWake' in patch) { voice?.setWake(settings.voiceWake && !game.active); applyWakeEngine(); }
     if ('displayId' in patch) {
       placeWindow();
       fitGlow();
     }
     saveSettings();
-    return { ok: !shortcutError, settings: publicSettings(), error: shortcutError };
+    return { ok: !shortcutError && !wakeWordError, settings: publicSettings(), error: shortcutError || wakeWordError };
   });
 
   ipcMain.handle('key:set', async (_e, { key, workspaceId, provider: pid } = {}) => {
@@ -2301,7 +2560,7 @@ function setupIpc() {
     if (healthRunning) return healthRunning;
     healthRunning = (async () => {
       const { runHealth, healthReport } = require('./llm/health');
-      const ids = scope === 'current' ? [currentProvider()] : Object.keys(models.PROVIDERS).filter((pid) => (pid === 'huggingface'
+      const ids = scope === 'current' || CLOUD_ONLY ? [currentProvider()] : Object.keys(models.PROVIDERS).filter((pid) => (pid === 'huggingface'
         ? Boolean(getSecret('hfModel') && discovery?.peek()?.python)
         : Boolean(getApiKey(pid))));
       if (!ids.length) ids.push(currentProvider());
@@ -2403,7 +2662,7 @@ function setupIpc() {
     const key = `${id}:${reqId}`;
     const resolve = permissionAsks.get(key);
     permissionAsks.delete(key);
-    resolve?.(allow === true);
+    resolve?.(allow === true ? true : allow === 'always' ? 'always' : false);
   });
 
   ipcMain.on('agent:confirm-reply', (_e, { id, allow }) => {
@@ -2464,6 +2723,20 @@ function setupIpc() {
   ipcMain.on('link:open', (_e, url) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
   });
+
+  // Nur Buddy Cloud: alte Wege (eigene Keys, lokale KI, Admin-Keys, Programm-Suche) sind gesperrt,
+  // auch wenn jemand sie direkt über die Brücke aufruft.
+  if (CLOUD_ONLY) {
+    const blocked = ['key:set', 'key:clear', 'key:revoke', 'hf:set', 'hf:test', 'hf:setup', 'local:get', 'local:refresh', 'local:registry',
+      'local:install-runtime', 'local:cancel-install', 'local:pull', 'local:cancel-pull', 'local:remove', 'local:select', 'local:use', 'local:load',
+      'local:config', 'local:storage-pick', 'local:storage-set', 'local:restart-runtime', 'local:diagnostics', 'local:colibri-catalog',
+      'local:colibri-plan', 'local:colibri-install', 'local:colibri-setup', 'local:colibri-auto', 'local:colibri-cancel', 'local:colibri-dir',
+      'local:benchmark', 'specs:get', 'discovery:get', 'aiusage:get', 'aiusage:key'];
+    for (const ch of blocked) {
+      ipcMain.removeHandler(ch);
+      ipcMain.handle(ch, () => ({ ok: false, error: t('Buddy läuft nur noch über Buddy Cloud.'), code: 'cloud_only' }));
+    }
+  }
 }
 
 // ---------- Selbsttest (für die Installation) ----------
@@ -2550,8 +2823,8 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     });
     // Im Hintergrund prüfen, welche KI-Tools installiert sind (blockiert den Start nicht).
     // Ohne API-Key wählt Buddy danach automatisch das passende lokale Modell.
-    setTimeout(() => local.init().catch((err) => log(`Lokale KI: ${err.message}`)), 800);
-    setTimeout(() => discovery.get().then(async () => {
+    if (!CLOUD_ONLY) setTimeout(() => local.init().catch((err) => log(`Lokale KI: ${err.message}`)), 800);
+    if (!CLOUD_ONLY) setTimeout(() => discovery.get().then(async () => {
       liveWin()?.webContents.send('discovery', publicDiscovery(discovery.peek()));
       await autoSelectLocal().catch((err) => log(`Lokale Auswahl: ${err.message}`));
       // Oberfläche weiss jetzt, ob die lokale KI wirklich bereit ist
@@ -2561,6 +2834,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       if (Date.now() - (settings.lastLocalUse || 0) < 7 * 24 * 3600 * 1000 && currentProvider() !== 'local') warmLocal();
     }), 1500);
 
+    terminal = createTerminal({ log });
     computer = createComputer({
       scriptDir: app.getPath('userData'),
       getDisplay: targetDisplay,
@@ -2604,12 +2878,19 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       getNowPlaying: () => nowPlaying,
       mediaCommand: (cmd) => watcher?.media(cmd) || false,
       getCalendar: (from, to) => (getSecret('calendar') ? calendar.list(from, to) : []),
+      control: process.platform === 'win32' ? createControlTools({
+        control: (control = createControl({ scriptDir: app.getPath('userData'), log })),
+        // Buddy selbst: alle eigenen Prozesse und der Name der eigenen exe
+        getOwn: () => ({ pids: [process.pid, ...app.getAppMetrics().map((m) => m.pid)], name: path.parse(process.execPath).name }),
+      }) : null,
     });
     createAgentRuntime();
+    setupCloud();
 
     watcher = createSystemWatcher({
       scriptDir: app.getPath('userData'),
       log,
+      wakeWord: wakeword.wakeWordOf(settings),
       onNotification: (item) => liveWin()?.webContents.send('notify', item),
       onStatus: (status, error) => {
         notifyStatus = status;
@@ -2650,11 +2931,25 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     voice = createVoice({
       scriptDir: app.getPath('userData'),
       log,
+      wakeWord: wakeword.wakeWordOf(settings),
+      language: answerLanguage,
       onEvent: (msg) => {
+        if (msg.kind === 'recorded') { handleRecorded(msg).catch((err) => log(`Diktat: ${err.message}`)); return; }
+        if (msg.kind === 'wake-oov') {
+          // Das Sprachmodell kennt ein Wort nicht: für dieses Wakeword die Windows-Erkennung
+          log(`Wakeword: Vosk kennt ${msg.words.join(', ')} nicht, Windows-Erkennung übernimmt`);
+          const word = wakeword.wakeWordOf(settings).toLowerCase();
+          if (msg.words.some((w) => word.split(' ').includes(w))) {
+            voskBlocked = wakeword.wakeWordOf(settings);
+            voice.setEngine(null);
+            sendWakeEngine({ state: 'fallback', error: t('Das Sprachmodell kennt «{words}» nicht.', { words: msg.words.join(', ') }) });
+          }
+        }
         liveWin()?.webContents.send('voice', msg);
       },
     });
-    if (settings.voiceWake) voice.setWake(true);
+    applyDictationMode();
+    if (settings.voiceWake) { voice.setWake(true); applyWakeEngine(); }
 
     checkUpdateHealth();
     updater = setupUpdater();
@@ -2684,6 +2979,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     computer?.stop();
     watcher?.stop();
     voice?.stop();
+    control?.stop();
     calendar?.stop();
   });
   app.on('window-all-closed', (e) => e.preventDefault());

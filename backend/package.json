@@ -1,0 +1,16 @@
+{
+  "name": "buddy-island-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Buddy Island Cloud: Konten, Buddy Credits und OpenAI-Gateway",
+  "main": "src/server.js",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test \"tests/**/*.test.js\"",
+    "test:db": "node --test tests/db/wallet.db.test.js"
+  }
+}
