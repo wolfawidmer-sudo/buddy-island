@@ -1,0 +1,79 @@
+// Eigenes Wakeword («Hey Buddy», «Jarvis», «Hallo Kiwi» …)
+// Erkannt wird es von der Windows-Spracherkennung mit einer festen Wortliste (siehe src/voice.js).
+// Hier wird die Eingabe geprüft und daraus die Liste der Varianten gebaut.
+
+const DEFAULT_WAKE_WORD = 'Hey Buddy';
+const MAX_LEN = 32;
+const MAX_WORDS = 4;
+// Begrüssungen pro gesprochener Sprache (src/wake-fillers/greetings.json, gegen die Vosk-Modelle geprüft)
+const GREETINGS_BY_LANG = (() => {
+  try { const g = require('./wake-fillers/greetings.json'); delete g._; return g; } catch { return { en: ['hey', 'hi', 'hello', 'okay'] }; }
+})();
+const ALL_GREETINGS = new Set([...Object.values(GREETINGS_BY_LANG).flat(), 'he', 'ok']);
+const lang2 = (lang) => {
+  const l = String(lang || '').toLowerCase();
+  if (l === 'gsw' || l.startsWith('gsw-')) return 'de'; // Schweizerdeutsch
+  return l.slice(0, 2);
+};
+/** Begrüssungen für eine Sprache (unbekannte Sprache: Englisch) */
+const greetingsFor = (lang) => GREETINGS_BY_LANG[lang2(lang)] || GREETINGS_BY_LANG.en;
+
+// Nur Buchstaben (alle Sprachen), Leerzeichen, Apostroph und Bindestrich
+const ALLOWED = /^[\p{L}][\p{L}' -]*$/u;
+
+/**
+ * Prüft ein Wakeword und bringt es in eine saubere Form.
+ * @returns {{ ok: true, value: string } | { ok: false, error: string }}
+ */
+function cleanWakeWord(input) {
+  if (typeof input !== 'string') return { ok: false, error: 'Bitte ein Wakeword eingeben.' };
+  const value = input.normalize('NFC').replace(/[’`]/g, "'").replace(/\s+/g, ' ').trim();
+  if (!value) return { ok: false, error: 'Bitte ein Wakeword eingeben.' };
+  if (value.length > MAX_LEN) return { ok: false, error: `Höchstens ${MAX_LEN} Zeichen.` };
+  if (!ALLOWED.test(value)) return { ok: false, error: 'Nur Buchstaben, Leerzeichen und Bindestrich.' };
+  if (value.split(' ').length > MAX_WORDS) return { ok: false, error: `Höchstens ${MAX_WORDS} Wörter.` };
+  const letters = value.replace(/[^\p{L}]/gu, '');
+  if (letters.length < 4) return { ok: false, error: 'Mindestens 4 Buchstaben, sonst reagiert Buddy zu oft.' };
+  return { ok: true, value };
+}
+
+// Gespeicherten Wert lesen; Ungültiges fällt auf «Hey Buddy» zurück
+function wakeWordOf(settings) {
+  const res = cleanWakeWord(settings?.wakeWord ?? DEFAULT_WAKE_WORD);
+  return res.ok ? res.value : DEFAULT_WAKE_WORD;
+}
+
+/**
+ * Varianten, auf die Buddy hört (klein geschrieben, ohne Duplikate).
+ * Ein einzelnes Wort bekommt zusätzlich die Begrüssungen der gesprochenen Sprache davor,
+ * damit «Hey Jarvis» (oder «Hola Jarvis») genauso klappt wie «Jarvis».
+ * @param {string} word @param {string} [lang] gesprochene Sprache (z. B. «de-CH», «es»)
+ */
+function wakePhrases(word, lang = 'de') {
+  const w = (cleanWakeWord(word).ok ? cleanWakeWord(word).value : DEFAULT_WAKE_WORD).toLowerCase();
+  const parts = w.split(' ');
+  const greets = greetingsFor(lang);
+  const out = [w];
+  if (parts.length === 1) {
+    for (const g of greets) out.push(`${g} ${w}`);
+  } else if (ALL_GREETINGS.has(parts[0])) {
+    const rest = parts.slice(1).join(' ');
+    for (const g of greets) out.push(`${g} ${rest}`);
+  }
+  return [...new Set(out)];
+}
+
+// Ein einzelnes Wort ohne Begrüssung fällt im normalen Gespräch leichter: strengere Schwelle
+function minConfidence(word) {
+  const w = cleanWakeWord(word).ok ? cleanWakeWord(word).value : DEFAULT_WAKE_WORD;
+  return w.includes(' ') ? 0.6 : 0.75;
+}
+
+// Für den PowerShell-Helfer: eine Variante pro Zeile, als Base64 (nur A–Z, a–z, 0–9, +, /, =),
+// damit nichts aus der Eingabe als Befehl gelesen werden kann. Bewusst kein JSON:
+// Windows PowerShell 5.1 gibt eine JSON-Liste als ein einziges Objekt weiter (Fehler in 0.14.0).
+function encodePhrases(phrases) {
+  return Buffer.from(phrases.join('\n'), 'utf8').toString('base64');
+}
+
+module.exports = { DEFAULT_WAKE_WORD, GREETINGS_BY_LANG, greetingsFor, cleanWakeWord, wakeWordOf, wakePhrases, minConfidence, encodePhrases };

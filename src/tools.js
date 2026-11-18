@@ -162,7 +162,7 @@ const TOOL_DEFINITIONS = [
     name: 'media_control',
     description:
       'Steuert Musik und Lautstärke wie die Medientasten der Tastatur: abspielen/pausieren, nächster/vorheriger Titel, lauter, leiser, stumm. ' +
-      'Ein Lautstärke-Schritt entspricht etwa 2 Prozent.',
+      'Ein Lautstärke-Schritt entspricht etwa 2 Prozent. Für genaue Werte, Lautstärke pro App oder Stumm nimm lieber set_volume (falls vorhanden).',
     input_schema: {
       type: 'object',
       properties: {
@@ -248,7 +248,7 @@ function openApp(name) {
 
 function createTools({
   onTimersChanged, onTimerDone, getNotifications = () => [], getNowPlaying = () => null,
-  mediaCommand = () => false, getCalendar = null,
+  mediaCommand = () => false, getCalendar = null, control = null,
 }) {
   const timers = new Map(); // id -> { id, label, endsAt, durationMs, handle }
   let counter = 0;
@@ -389,11 +389,16 @@ function createTools({
         return { text: `Erledigt (${input.action}${isVolume ? `, ${steps} Schritte` : ''}).` };
       }
       default:
+        if (control?.names.has(name)) return control.run(name, input);
         return { error: true, text: `Unbekanntes Werkzeug: ${name}` };
     }
   }
 
-  return { definitions: TOOL_DEFINITIONS, run, cancel, snapshot, describe };
+  // Ton und Apps (src/control-tools.js), nur wenn vorhanden (Windows)
+  const definitions = control ? [...TOOL_DEFINITIONS, ...control.definitions] : TOOL_DEFINITIONS;
+  const describeAll = (name, input) => (control?.names.has(name) ? control.describe(name, input) : describe(name, input));
+
+  return { definitions, run, cancel, snapshot, describe: describeAll };
 }
 
 module.exports = { createTools, formatDuration, describe, TOOL_DEFINITIONS };

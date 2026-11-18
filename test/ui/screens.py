@@ -45,6 +45,11 @@ def shot(browser, name, mock, steps, lang='de', size=(1000, 720), scale=1):
 
 OPEN = lambda view: f"window.__emit('onOpen', {json.dumps(view)})"
 TAB = lambda tab: f"document.querySelector('[data-tab={tab}]').click()"
+CMD = ("window.buddy.sendChat = (id) => { window.__sid = id; };"
+       "document.querySelector('[data-send]').click();"
+       "setTimeout(() => window.__emit('onPermission', { id: window.__sid, reqId: 'r1', kind: 'command', level: 'high', label: 'Befehl ausführen',"
+       " summary: 'Zeigt die grössten Dateien in Downloads', command: 'Get-ChildItem ~/Downloads -File | Sort-Object Length -Descending | Select-Object -First 5 Name, Length',"
+       " derived: false, allowAlways: false }), 50)")
 OB = lambda n: f"for (let i = 0; i < {n}; i++) document.getElementById('obNext').click()"
 
 with sync_playwright() as p:
@@ -71,6 +76,10 @@ with sync_playwright() as p:
         shot(b, f'settings-{tab}-dark', {**dark, 'signedIn': True}, [OPEN('settings'), TAB(tab)])
     shot(b, 'settings-general-light', {**light, 'signedIn': True}, [OPEN('settings')])
     shot(b, 'settings-system-advanced-light', {**light, 'signedIn': True}, [OPEN('settings'), TAB('system'), "document.getElementById('modelBox').open = true"])
+    # Lauf 3: Sicherheit mit PC-Steuerung und Befehlen, Freigabe-Karte für einen Befehl
+    shot(b, 'settings-safety-terminal-light', {**light, 'signedIn': True, 'terminal': True}, [OPEN('settings'), TAB('safety')])
+    for theme in (dark, light):
+        shot(b, f"command-approval-{theme['theme']}", {**theme, 'signedIn': True, 'terminal': True}, [OPEN('chat'), CMD])
     # Wenig Platz: kleiner Bildschirm und 200 %
     shot(b, 'small-settings-dark', {**dark, 'signedIn': True}, [OPEN('settings')], size=(700, 480))
     shot(b, 'scale200-onboarding-dark', {**new_user, 'theme': 'dark'}, [OB(1)], size=(683, 384), scale=2)
