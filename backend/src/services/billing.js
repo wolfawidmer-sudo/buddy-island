@@ -91,7 +91,16 @@ function createBillingService({ supabase, logger, now = Date.now }) {
     }
   }
 
-  return { models, isAllowed, quote, reserve, settle, release, newRequestId, estimateInputTokens };
+  /** Buchung im Verlauf benennen (z. B. «Diktat» statt «Cloud-Nutzung»). Fehler sind egal. */
+  async function label(requestId, description) {
+    try {
+      await supabase.update('wallet_transactions', `reference_id=eq.${encodeURIComponent(requestId)}&transaction_type=eq.usage`, { description });
+    } catch (err) {
+      logger.warn('label_failed', { requestId, error: err });
+    }
+  }
+
+  return { models, isAllowed, quote, reserve, settle, release, label, newRequestId, estimateInputTokens };
 }
 
 module.exports = { createBillingService, estimateInputTokens, IMAGE_TOKENS_ESTIMATE };

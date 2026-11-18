@@ -79,6 +79,7 @@ function createHistory({ file, enabled = () => true, now = () => Date.now(), log
       },
       addCost(cost, usage = {}) {
         task.cost += cost;
+        if (Number(usage.buddy_credits) > 0) task.credits = (Number(task.credits) || 0) + Number(usage.buddy_credits);
         task.tokens.input += (Number(usage.input_tokens) || 0) + (Number(usage.cache_creation_input_tokens) || 0) + (Number(usage.cache_read_input_tokens) || 0);
         task.tokens.output += Number(usage.output_tokens) || 0;
         save();

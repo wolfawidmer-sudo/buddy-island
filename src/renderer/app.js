@@ -64,6 +64,12 @@
     modelSelect: $('modelSelect'),
     effortSeg: $('effortSeg'),
     themeSeg: $('themeSeg'),
+    computerToggle: $('computerToggle'),
+    confirmToggle: $('confirmToggle'),
+    terminalToggle: $('terminalToggle'),
+    terminalAllowRow: $('terminalAllowRow'),
+    terminalAllowList: $('terminalAllowList'),
+    terminalAllowReset: $('terminalAllowReset'),
     notifyToggle: $('notifyToggle'),
     notifyStatus: $('notifyStatus'),
     dndBtn: $('dndBtn'),
@@ -98,6 +104,7 @@
     wakeEngine: $('wakeEngine'),
     wakeEngineRow: $('wakeEngineRow'),
     speakToggle: $('speakToggle'),
+    cloudDictToggle: $('cloudDictToggle'),
     voiceStatus: $('voiceStatus'),
     mediaToggle: $('mediaToggle'),
     calStatus: $('calStatus'),
@@ -277,6 +284,8 @@
   function visibleState() {
     if (state.alarm) return 'alarm';
     if (state.control) return 'control';
+    // Diktat mit Live-Vorschau: zeigt das Gehörte wie eine Mitteilung («Hört zu …» + Text)
+    if (state.listening && state.voicePreview && !state.open && !state.voiceNote) return 'peek';
     if (state.listening || state.voiceNote) return 'listen';
     if (state.peek && !state.open) return 'peek';
     if (state.status !== 'idle') return state.status;
@@ -300,7 +309,9 @@
       case 'timer': return next ? `${next.label}  ${countdown(next.endsAt - Date.now())}` : name;
       case 'alarm': return state.alarm ? t('{label} ist um', { label: state.alarm.label }) : name;
       case 'control': return `${capitalize(state.actionLabel || t('steuert'))} …`;
-      case 'listen': return state.voiceNote || (state.listening === 'listening' ? t('Hört zu …') : t('Mikrofon startet …'));
+      case 'listen': return state.voiceNote
+        || (state.listening === 'transcribing' ? t('Schreibt auf …')
+          : state.listening === 'listening' ? t('Hört zu …') : t('Mikrofon startet …'));
       case 'music': return [state.media?.title, state.media?.artist].filter(Boolean).join(' · ');
       default: return name;
     }
@@ -322,6 +333,10 @@
       : null;
     if (title !== null && el.label.textContent !== title) el.label.textContent = title;
     el.faceBtn.setAttribute('aria-label', state.open ? t('Buddy') : labelFor(shown));
+    if (shown === 'peek' && state.listening && state.voicePreview) {
+      el.peekApp.textContent = state.listening === 'transcribing' ? t('Schreibt auf …') : t('Hört zu …');
+      el.peekText.textContent = previewTail(state.voicePreview);
+    }
     el.peek.hidden = shown !== 'peek';
     syncLayout();
     syncVisualizer();
@@ -634,7 +649,8 @@
       parts.push(sep, span);
     };
     add(EFFORT_LABEL[route.effort] || t('Standard'));
-    const cost = extra.final ? usd(extra.cost) : extra.cost ? usd(extra.cost) : route.estimate ? `≈ ${usd(route.estimate)}` : '';
+    // Buddy Cloud rechnet in Credits ab: die echten Credits dieser Aufgabe zeigen statt $0
+    const cost = Number(extra.credits) > 0 ? fmtBc(extra.credits) : extra.final ? usd(extra.cost) : extra.cost ? usd(extra.cost) : route.estimate ? `≈ ${usd(route.estimate)}` : '';
     if (cost) add(cost, 'cost');
     if (extra.final && extra.tokens) add(t('{n} Tokens', { n: tokens(extra.tokens) }));
     if (route.reason) {
@@ -671,7 +687,7 @@
     const node = document.createElement('div');
     node.className = 'bubble assistant';
     if (extra.route && showRouting()) {
-      placePart(node, routeLine(extra.route, { final: Boolean(extra.usage), cost: extra.usage?.cost, tokens: (extra.usage?.input_tokens || 0) + (extra.usage?.output_tokens || 0), models: extra.usage?.models }));
+      placePart(node, routeLine(extra.route, { final: Boolean(extra.usage), cost: extra.usage?.cost, credits: extra.usage?.credits, tokens: (extra.usage?.input_tokens || 0) + (extra.usage?.output_tokens || 0), models: extra.usage?.models }));
     }
     if (extra.plan && extra.plan.length) placePart(node, planCard(extra.plan));
     if (toolList && toolList.length) placePart(node, toolRow(toolList));
@@ -910,7 +926,7 @@
     const entry = { role: 'assistant', content: text || '', tools: s.tools };
     if (s.route) entry.route = { model: s.route.model, modelName: s.route.modelName, tier: s.route.tier, effort: s.route.effort, reason: s.route.reason, estimate: s.route.estimate };
     if (s.plan) entry.plan = s.plan;
-    if (usage) entry.usage = { cost: usage.cost || 0, input_tokens: usage.input_tokens || 0, output_tokens: usage.output_tokens || 0, models: usage.models || [] };
+    if (usage) entry.usage = { cost: usage.cost || 0, credits: usage.credits || 0, input_tokens: usage.input_tokens || 0, output_tokens: usage.output_tokens || 0, models: usage.models || [] };
     if (text || s.tools.length || (s.plan && s.plan.length)) {
       s.node.replaceWith(assistantBubble(text, s.tools, entry));
       state.history.push(entry);
@@ -969,7 +985,7 @@
     if (!s || !s.route) return;
     s.node.querySelector('.route')?.remove();
     if (!showRouting()) return;
-    placePart(s.node, routeLine(s.route, { cost: s.cost, switchNote: s.switchNote }));
+    placePart(s.node, routeLine(s.route, { cost: s.cost, credits: s.credits, switchNote: s.switchNote }));
   }
 
   api.onRoute((route) => {
@@ -991,10 +1007,11 @@
     paintRoute();
   });
 
-  api.onCost(({ id, cost }) => {
+  api.onCost(({ id, cost, credits }) => {
     const s = state.stream;
     if (!s || s.id !== id) return;
     s.cost = cost;
+    s.credits = credits;
     paintRoute();
   });
 
@@ -1074,7 +1091,7 @@
   });
 
   // Freigabe für Aktionen mit mittlerem oder hohem Risiko
-  api.onPermission(({ id, reqId, level, label, summary, details }) => {
+  api.onPermission(({ id, reqId, level, label, summary, details, kind, command, derived, allowAlways }) => {
     if (state.stream?.id !== id) {
       api.replyPermission(id, reqId, false);
       return;
@@ -1097,13 +1114,36 @@
       pre.textContent = details;
       card.insertBefore(pre, card.querySelector('.confirm-actions'));
     }
-    card.querySelector('.primary').textContent = high ? t('Ja, ausführen') : t('Für diese Aufgabe erlauben');
+    if (kind === 'command') {
+      // Exakter Befehl, genau so, wie er läuft (textContent: nie als HTML)
+      card.classList.add('command');
+      card.querySelector('.confirm-title').textContent = t('{name} möchte diesen Befehl ausführen', { name: state.settings?.name || t('Buddy') });
+      const code = document.createElement('pre');
+      code.className = 'confirm-command';
+      code.textContent = String(command || '');
+      card.insertBefore(code, card.querySelector('.confirm-actions'));
+      if (derived) {
+        const note = document.createElement('p');
+        note.className = 'confirm-derived';
+        note.textContent = t('Abgeleitet aus Inhalten (Web, Dateien, Mitteilungen oder Bildschirm). Prüf den Befehl genau.');
+        card.insertBefore(note, code);
+      }
+      if (allowAlways) {
+        const always = document.createElement('button');
+        always.type = 'button';
+        always.className = 'button';
+        always.dataset.allow = 'always';
+        always.textContent = t('Immer erlauben');
+        card.querySelector('.confirm-actions').insertBefore(always, card.querySelector('.primary'));
+      }
+    }
+    card.querySelector('.primary').textContent = kind === 'command' ? t('Ausführen') : high ? t('Ja, ausführen') : t('Für diese Aufgabe erlauben');
     card.addEventListener('click', (event) => {
       const btn = event.target.closest('button[data-allow]');
       if (!btn) return;
       event.stopPropagation();
       card.remove();
-      api.replyPermission(id, reqId, btn.dataset.allow === '1');
+      api.replyPermission(id, reqId, btn.dataset.allow === 'always' ? 'always' : btn.dataset.allow === '1');
     });
     el.messages.appendChild(card);
     scrollToBottom(true);
@@ -1411,10 +1451,18 @@
   // Sicherung: Meldet der Sprach-Helfer nichts mehr, nicht ewig «hört zu» anzeigen
   let listenGuard = 0;
   let voiceCancelled = false;
+  // Live-Vorschau beim Diktat: nur das Ende zeigen, damit es ins Island passt
+  function previewTail(text) {
+    const s = String(text).trim();
+    return s.length > 42 ? `… ${s.slice(-40).replace(/^\S*\s/, '')}` : s;
+  }
+
   function setListening(value) {
     state.listening = value;
+    if (value !== 'listening' && value !== 'transcribing') state.voicePreview = '';
     clearTimeout(listenGuard);
-    if (value) listenGuard = setTimeout(() => { if (state.listening) stopVoice(); }, 45000);
+    // Aufnahme bis 30 s + Übertragung: grosszügige Sicherung
+    if (value) listenGuard = setTimeout(() => { if (state.listening) stopVoice(); }, 70000);
     api.voiceState?.(Boolean(value));
     el.micBtn.setAttribute('aria-pressed', value ? 'true' : 'false');
     el.micBtn.title = value ? t('Zuhören beenden') : t('Sprechen');
@@ -1443,7 +1491,7 @@
   api.onVoice((msg) => {
     switch (msg.kind) {
       case 'engine':
-        if (state.settings) { state.settings.wakeEngine = { state: msg.state, percent: msg.percent, error: msg.error }; fillWakeEngine(); }
+        if (state.settings) { state.settings.wakeEngine = { state: msg.state, percent: msg.percent, error: msg.error, langName: msg.langName }; fillWakeEngine(); }
         return;
       case 'starting':
         voiceCancelled = false;
@@ -1458,8 +1506,17 @@
         break;
       case 'listening':
         if (voiceCancelled) return;
+        state.voicePreview = '';
         setListening('listening');
         if (state.settings?.sound) chime(true);
+        break;
+      case 'partial':
+        if (voiceCancelled || state.listening !== 'listening') return;
+        state.voicePreview = String(msg.text || '');
+        break;
+      case 'transcribing':
+        if (voiceCancelled) return;
+        setListening('transcribing');
         break;
       case 'cancelled':
         voiceCancelled = true;
@@ -1484,7 +1541,7 @@
         return;
       case 'ready':
         if (state.settings) state.settings.voiceInfo = { ...msg, ready: true };
-        if (!msg.offline && !msg.online) { setListening(''); voiceNote(t('Keine Spracherkennung gefunden')); }
+        if (!msg.offline && !msg.online && !msg.cloud) { setListening(''); voiceNote(t('Keine Spracherkennung gefunden')); }
         if (state.view === 'settings') fillSettings();
         return;
       default:
@@ -1632,6 +1689,8 @@
 
   // ---------- Einstellungen ----------
 
+  // Anzeigenamen der Befehle mit «Immer erlauben»
+  const COMMAND_NAMES = { 'get-date': 'Get-Date', 'get-childitem': 'Get-ChildItem', 'get-process': 'Get-Process', 'test-netconnection': 'Test-NetConnection', ipconfig: 'ipconfig' };
   const NOTIFY_STATUS = {
     Allowed: t('Aktiv'),
     Starting: t('Startet …'),
@@ -1741,6 +1800,15 @@
     el.prefStyle.value = s.promptPrefs?.style || 'friendly';
     el.soundToggle.checked = Boolean(s.sound);
     el.autostartToggle.checked = Boolean(s.autostart);
+    el.computerToggle.checked = Boolean(s.computerUse);
+    el.computerToggle.disabled = !s.canControl;
+    el.confirmToggle.checked = Boolean(s.confirmControl);
+    el.confirmToggle.disabled = !s.computerUse;
+    el.terminalToggle.checked = Boolean(s.terminal);
+    el.terminalToggle.disabled = !s.canTerminal;
+    const allowed = Array.isArray(s.terminalAllow) ? s.terminalAllow : [];
+    el.terminalAllowRow.hidden = !allowed.length;
+    el.terminalAllowList.textContent = allowed.map((n) => COMMAND_NAMES[n] || n).join(', ');
     el.notifyToggle.checked = Boolean(s.notifications);
     const status = s.notifications ? s.notifyStatus : 'Off';
     el.notifyStatus.textContent = NOTIFY_STATUS[status] || status || '–';
@@ -1755,6 +1823,7 @@
     el.eyesToggle.checked = s.eyesAlive !== false;
     fillWakeEngine();
     el.speakToggle.checked = s.speak !== false;
+    el.cloudDictToggle.checked = s.cloudDictation !== false;
     const v = s.voiceInfo;
     el.voiceStatus.textContent = !s.canControl ? t('Nur unter Windows')
       : !v || !v.ready ? t('Startet beim ersten Sprechen')
@@ -1853,7 +1922,7 @@
       title.textContent = task.title || t('Aufgabe');
       const meta = document.createElement('span');
       meta.className = 'hist-meta';
-      meta.textContent = `${clock(task.started)} · ${usd(task.cost)}`;
+      meta.textContent = `${clock(task.started)} · ${Number(task.credits) > 0 ? fmtBc(task.credits) : usd(task.cost)}`;
       sum.append(dot, title, meta);
       const body = document.createElement('div');
       body.className = 'hist-body';
@@ -2134,7 +2203,7 @@
     if (!h.ok) { cloudFooter(h.error, 'err'); return; }
     const usageStatus = { settled: '', partial: t('teilweise'), released: t('abgebrochen'), failed: t('fehlgeschlagen') };
     list(cloudEl.usage, h.history.usage, t('Noch keine Cloud-Anfragen.'), (u) => [
-      String(u.model || '').replace(/^gpt-/, 'GPT-').replace(/-/g, ' '),
+      u.kind === 'dictation' ? t('Diktat') : String(u.model || '').replace(/^gpt-/, 'GPT-').replace(/-/g, ' '),
       [fmtDay(u.createdAt), usageStatus[u.status] || ''].filter(Boolean).join(' · '),
       Number(u.credits) > 0 ? `−${fmtBc(u.credits)}` : '–',
     ]);
@@ -2330,6 +2399,10 @@
     if (el.soundToggle.checked) chime();
   });
   el.autostartToggle.addEventListener('change', () => save({ autostart: el.autostartToggle.checked }));
+  el.computerToggle.addEventListener('change', async () => { await save({ computerUse: el.computerToggle.checked }); fillSettings(); });
+  el.confirmToggle.addEventListener('change', () => save({ confirmControl: el.confirmToggle.checked }));
+  el.terminalToggle.addEventListener('change', async () => { await save({ terminal: el.terminalToggle.checked }); fillSettings(); });
+  el.terminalAllowReset.addEventListener('click', async () => { await save({ terminalAllow: [] }); fillSettings(); });
   el.notifyToggle.addEventListener('change', async () => { await save({ notifications: el.notifyToggle.checked }); fillSettings(); });
   // Direkt zu den Windows-Einstellungen, um die Banner unten rechts auszuschalten
   el.bannerOpen.addEventListener('click', (event) => {
@@ -2352,7 +2425,7 @@
     if (!el.wakeEngine) return;
     el.wakeEngineRow.hidden = !state.settings?.voiceWake || !e;
     if (!e) return;
-    el.wakeEngine.textContent = e.state === 'vosk' ? t('Vosk · offline')
+    el.wakeEngine.textContent = e.state === 'vosk' ? (e.langName ? t('Vosk · {lang} · offline', { lang: e.langName }) : t('Vosk · offline'))
       : e.state === 'downloading' ? t('Lädt Sprachmodell … {p} %', { p: e.percent ?? 0 })
         : e.state === 'fallback' ? [t('Windows-Erkennung'), e.error].filter(Boolean).join(' · ')
           : t('Windows-Erkennung');
@@ -2367,6 +2440,7 @@
   el.wakeWordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveWakeWord(); } });
   el.eyesToggle.addEventListener('change', () => save({ eyesAlive: el.eyesToggle.checked }));
   el.speakToggle.addEventListener('change', () => save({ speak: el.speakToggle.checked }));
+  el.cloudDictToggle.addEventListener('change', () => save({ cloudDictation: el.cloudDictToggle.checked }));
   el.mediaToggle.addEventListener('change', async () => { await save({ media: el.mediaToggle.checked }); renderNowPlaying(); });
   el.gameToggle.addEventListener('change', () => save({ gameMode: el.gameToggle.checked }));
   el.displaySelect.addEventListener('change', () => save({ displayId: el.displaySelect.value }));

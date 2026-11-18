@@ -81,8 +81,8 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
   }
   const changed = () => { try { onChange(publicState()); } catch { /* Oberfläche zu */ } };
 
-  /** @param {string} method @param {string} path @param {{ body?: any, auth?: boolean, retry?: boolean }} [opts] */
-  async function request(method, path, { body, auth = false, retry = true } = {}) {
+  /** @param {string} method @param {string} path @param {{ body?: any, auth?: boolean, retry?: boolean, timeoutMs?: number, signal?: AbortSignal }} [opts] */
+  async function request(method, path, { body, auth = false, retry = true, timeoutMs = TIMEOUT_MS, signal } = {}) {
     const base = apiUrl();
     if (!base) throw new CloudError('not_configured', t('Buddy Cloud ist in dieser Version noch nicht verfügbar.'));
     if (auth) await ensureFresh();
@@ -96,7 +96,7 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
           ...(auth && session ? { authorization: `Bearer ${session.accessToken}` } : {}),
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: signal && AbortSignal.any ? AbortSignal.any([AbortSignal.timeout(timeoutMs), signal]) : AbortSignal.timeout(timeoutMs),
       });
     } catch {
       throw new CloudError('offline', t('Buddy Cloud ist gerade nicht erreichbar. Lokale KI funktioniert weiter.'));
@@ -109,7 +109,7 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
     // Token abgelehnt: einmal erneuern und nochmals versuchen
     if (auth && r.status === 401 && retry && session) {
       await refresh(true).catch(() => {});
-      if (session) return request(method, path, { body, auth, retry: false });
+      if (session) return request(method, path, { body, auth, retry: false, timeoutMs, signal });
     }
     throw new CloudError(code, message, r.status);
   }
@@ -320,13 +320,20 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
   /** Für den Anbieter «Buddy Cloud»: aktuelles Access-Token (synchron) */
   const accessToken = () => session?.accessToken || null;
 
+  /** Diktat: WAV (Base64) → Text. Wirft CloudError (z. B. 404, solange das Backend kein Diktat hat). */
+  const transcribe = async (/** @type {{ audio: string, language: string|null }} */ body, /** @type {AbortSignal} */ signal) => {
+    const data = await request('POST', '/v1/cloud/audio/transcriptions', { auth: true, body, timeoutMs: 25000, signal });
+    refreshWallet();
+    return data;
+  };
+
   /** Nach einer Cloud-Antwort: Guthaben neu laden (Fehler egal) */
   const refreshWallet = () => request('GET', '/v1/wallet', { auth: true }).then((d) => { wallet = d.wallet; changed(); }).catch(() => {});
 
   return {
     publicState, restore, ensureFresh, accessToken, refresh, refreshWallet, loadMe,
     signup, login, verifyEmail, resendConfirmation, requestPasswordReset, confirmPasswordReset,
-    google, cancelGoogle, logout, updateProfile, history, packages, plans, billingConfig, buy, subscribe, portal, configured,
+    google, cancelGoogle, logout, updateProfile, history, transcribe, packages, plans, billingConfig, buy, subscribe, portal, configured,
   };
 }
 

@@ -4,7 +4,7 @@
 //
 // Quellen (geprüft am 10.11.2026):
 //   Laufzeit: PyPI vosk 0.3.45, Windows-Wheel (enthält libvosk.dll + MinGW-Laufzeit)
-//   Modelle:  https://alphacephei.com/vosk/models (alle drei Apache 2.0)
+//   Modelle:  https://alphacephei.com/vosk/models (alle Apache 2.0; es/it/pt/nl geprüft am 11.11.2026)
 
 const fs = require('fs');
 const path = require('path');
@@ -21,13 +21,24 @@ const MODELS = {
   de: { name: 'vosk-model-small-de-0.15', sha256: 'b7e53c90b1f0a38456f4cd62b366ecd58803cd97cd42b06438e2c131713d5e43', size: 46499967 },
   en: { name: 'vosk-model-small-en-us-0.15', sha256: '30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498', size: 41205931 },
   fr: { name: 'vosk-model-small-fr-0.22', sha256: 'cabf6180e177eb9b3a9a9d43a437bd5e549f3a7d09525e5d69a3fed787be12ad', size: 42233323 },
+  es: { name: 'vosk-model-small-es-0.42', sha256: '09b239888f633ef2f0b4e09736e3d9936acfd810bc65d53fad45261762c6511f', size: 39817833 },
+  it: { name: 'vosk-model-small-it-0.22', sha256: '9ec65e75861d1c6c2e457cccd932705340dcdf233f5b239f00733b4de0bf3267', size: 49665141 },
+  // Das portugiesische Modell hat ein älteres Format: final.mdl liegt direkt im Ordner (kein am/)
+  pt: { name: 'vosk-model-small-pt-0.3', sha256: '6e1ce909032e1afa7a88e68a3d628ecafff302bdf195befab308826c395e93b7', size: 32453112, check: 'final.mdl' },
+  nl: { name: 'vosk-model-small-nl-0.22', sha256: '039811c3b829de64e4f123a9f684a53784005b212a346ac0b899dc7efce2ed0a', size: 40441176 },
 };
+const LANG_NAMES = { de: 'Deutsch', en: 'English', fr: 'Français', es: 'Español', it: 'Italiano', pt: 'Português', nl: 'Nederlands' };
+const checkFile = (m) => m.check || path.join('am', 'final.mdl');
 const modelUrl = (m) => `https://alphacephei.com/vosk/models/${m.name}.zip`;
 
-// App-Sprache → Modell (Schweizerdeutsch und alles andere Deutsche → de)
-function langFor(appLang) {
-  const l = String(appLang || '').slice(0, 2).toLowerCase();
-  return MODELS[l] ? l : 'de';
+// Gesprochene Sprache (z. B. «de-CH», «es-ES», «gsw») → Modell.
+// Schweizerdeutsch und alles Deutsche → de; Sprachen ohne Modell → en («Hey Buddy» ist englisch).
+function langFor(spoken) {
+  const raw = String(spoken || '').toLowerCase();
+  if (!raw) return 'de';
+  if (raw === 'gsw' || raw.startsWith('gsw-')) return 'de';
+  const l = raw.slice(0, 2);
+  return MODELS[l] ? l : 'en';
 }
 
 function paths(root, lang) {
@@ -42,7 +53,7 @@ function paths(root, lang) {
 function installed(root, lang) {
   const p = paths(root, lang);
   const ok = fs.existsSync(path.join(p.dllDir, 'libvosk.dll'))
-    && fs.existsSync(path.join(p.modelDir, 'am', 'final.mdl'))
+    && fs.existsSync(path.join(p.modelDir, checkFile(MODELS[langFor(lang)])))
     && fs.existsSync(path.join(root, `model-${langFor(lang)}`, '.ok'))
     && fs.existsSync(path.join(root, RUNTIME.id, '.ok'));
   return ok ? p : null;
@@ -117,7 +128,7 @@ async function ensure({ root, lang, fetchImpl, unzip, onProgress = () => {}, sig
       const dest = path.join(root, `model-${l}`);
       fs.rmSync(dest, { recursive: true, force: true });
       await unzip(zip, dest);
-      if (!fs.existsSync(path.join(dest, model.name, 'am', 'final.mdl'))) throw new Error('Das Sprachmodell ist unvollständig.');
+      if (!fs.existsSync(path.join(dest, model.name, checkFile(model)))) throw new Error('Das Sprachmodell ist unvollständig.');
       fs.writeFileSync(path.join(dest, '.ok'), model.sha256);
     }
   } finally {
@@ -147,4 +158,4 @@ function missingWords(stderrText) {
   return [...new Set(out)];
 }
 
-module.exports = { RUNTIME, MODELS, modelUrl, langFor, paths, installed, ensure, missingWords, grammarWords };
+module.exports = { RUNTIME, MODELS, LANG_NAMES, modelUrl, langFor, paths, installed, ensure, missingWords, grammarWords };

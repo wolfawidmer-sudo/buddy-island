@@ -38,6 +38,19 @@ function usageOf(resp) {
   return { inputTokens, cachedTokens, outputTokens };
 }
 
+/** Bilder in der Eingabe zählen (Bildschirmfotos der PC-Steuerung) */
+function countImages(input) {
+  let n = 0;
+  const walk = (v, depth) => {
+    if (depth > 20 || !v || typeof v !== 'object') return;
+    if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
+    if (v.type === 'input_image') { n += 1; return; }
+    if (Array.isArray(v.content)) walk(v.content, depth + 1);
+  };
+  walk(input, 0);
+  return n;
+}
+
 /** Fehler von OpenAI → Fehler für die App. 401/403 von OpenAI liegen an UNSEREM Key: nie als 401 weitergeben. */
 function upstreamError(status, body) {
   const e = body?.error || {};
@@ -77,6 +90,11 @@ function createOpenAiGateway({ config, billing, logger, fetchImpl = globalThis.f
     const body = check(RESPONSE_SCHEMA, rawBody);
     if (body.store === true) throw badRequest('store ist in Buddy Cloud nicht erlaubt');
     if (body.include && !body.include.every((x) => ALLOWED_INCLUDE.has(x))) throw badRequest('include enthält nicht erlaubte Werte');
+    // Nur eigene Funktions-Werkzeuge: eingebaute OpenAI-Werkzeuge (web_search, computer, code_interpreter …)
+    // kosten extra ausserhalb der Token-Nutzung und würden an der Abrechnung vorbeilaufen (Sicherheitsregel 10).
+    if (body.tools && !body.tools.every((x) => x && typeof x === 'object' && x.type === 'function')) throw badRequest('Nur Funktions-Werkzeuge sind erlaubt.');
+    const images = countImages(body.input);
+    if (images > (oc.maxInputImages || 12)) throw new AppError(413, 'too_many_images', 'Zu viele Bilder in dieser Anfrage.');
     if (!(await billing.isAllowed(body.model))) throw new AppError(400, 'model_not_available', 'Dieses Modell ist in Buddy Cloud nicht verfügbar.');
     const maxOut = Math.min(body.max_output_tokens || oc.defaultOutputTokens, oc.maxOutputTokens);
     const estIn = billing.estimateInputTokens({ input: body.input, instructions: body.instructions, tools: body.tools });

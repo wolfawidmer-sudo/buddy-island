@@ -48,7 +48,15 @@ function load() {
       defaultOutputTokens: int('CLOUD_DEFAULT_OUTPUT_TOKENS', 4096),
       // Über 272k Eingabe-Tokens rechnet OpenAI teurer ab; Buddy nimmt solche Anfragen nicht an
       maxInputTokensEstimate: int('CLOUD_MAX_INPUT_TOKENS', 250000),
+      // PC-Steuerung schickt Bildschirmfotos; die App behält höchstens 8 im Verlauf (src/agent.js)
+      maxInputImages: int('CLOUD_MAX_INPUT_IMAGES', 12),
       timeoutMs: int('OPENAI_TIMEOUT_MS', 600000),
+    },
+
+    // Diktat (OpenAI-Transkription). Modell muss in model_pricing mit audio_pricing stehen.
+    transcribe: {
+      model: str('TRANSCRIBE_MODEL', 'gpt-4o-mini-transcribe'),
+      timeoutMs: int('TRANSCRIBE_TIMEOUT_MS', 30000),
     },
 
     stripe: {

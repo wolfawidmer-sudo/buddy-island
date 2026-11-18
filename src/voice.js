@@ -1,7 +1,10 @@
 // Sprachsteuerung über die eingebaute Windows-Spracherkennung (kein extra Konto).
 //  - Wakeword («Hey Buddy» oder ein eigenes, siehe src/wakeword.js): feste Wortliste,
 //    läuft nur wenn eingeschaltet
-//  - Diktat: zuerst die bessere Online-Erkennung von Windows (wie Win+H),
+//  - Diktat über Buddy Cloud (Modus «cloud»): Aufnahme mit dem eigenen Mikrofon (waveIn, 16 kHz mono)
+//    bis zur Sprechpause, Vosk-Zwischenstände als Vorschau, Ton als WAV an den Hauptprozess
+//    (der schickt ihn an OpenAI, siehe src/dictation.js). Rückfall: Windows-Erkennung.
+//  - Diktat ohne Cloud: zuerst die bessere Online-Erkennung von Windows (wie Win+H),
 //    sonst die Offline-Erkennung (System.Speech)
 // Der Helfer startet nur bei Bedarf und beendet sich ohne Wake-Word nach 2 Minuten.
 
@@ -11,13 +14,14 @@ const path = require('path');
 
 const { DEFAULT_WAKE_WORD, wakePhrases, minConfidence, encodePhrases } = require('./wakeword');
 const { missingWords, grammarWords } = require('./vosk');
+const { buildWav } = require('./dictation');
 
 const b64 = (x) => Buffer.from(String(x), 'utf8').toString('base64');
 
 const IDLE_MS = 2 * 60 * 1000;
 
 const SCRIPT = String.raw`
-param([int]$wake = 0, [string]$words = '', [double]$minconf = 0.6, [string]$engine = 'windows', [string]$voskdll = '', [string]$voskmodel = '', [string]$grammar = '')
+param([int]$cloud = 0, [int]$wake = 0, [string]$words = '', [double]$minconf = 0.6, [string]$engine = 'windows', [string]$voskdll = '', [string]$voskmodel = '', [string]$grammar = '')
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 function Emit($obj) {
@@ -88,13 +92,6 @@ try {
 } catch { $online = $null }
 
 
-# Vosk für das Wakeword (falls installiert); sonst die Windows-Erkennung oben
-$vosk = $false
-if ($wake -eq 1 -and $engine -eq 'vosk' -and $voskdll -and $voskmodel) {
-  try {
-    $dllDir = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($voskdll))
-    $modelDir = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($voskmodel))
-
 $voskCode = @"
 using System;
 using System.IO;
@@ -117,6 +114,8 @@ public static class BuddyVosk {
   [DllImport("libvosk", CallingConvention = C)] static extern IntPtr vosk_recognizer_partial_result(IntPtr r);
   [DllImport("libvosk", CallingConvention = C)] static extern void vosk_recognizer_reset(IntPtr r);
   [DllImport("libvosk", CallingConvention = C)] static extern void vosk_recognizer_free(IntPtr r);
+  [DllImport("libvosk", CallingConvention = C)] static extern IntPtr vosk_recognizer_new(IntPtr m, float rate);
+  [DllImport("libvosk", CallingConvention = C)] static extern IntPtr vosk_recognizer_final_result(IntPtr r);
 
   [StructLayout(LayoutKind.Sequential, Pack = 1)]
   struct WaveFormat { public ushort tag, channels; public uint rate, bytesPerSec; public ushort align, bits, size; }
@@ -194,43 +193,176 @@ public static class BuddyVosk {
     lastPartial = "";
   }
 
+  // Nächsten vollen Puffer abholen. Nur den nächsten in der Reihe: sonst kommt bei Verzögerung ein
+  // neuerer Puffer vor einem älteren an und die Sprache wird zerstückelt (Fehler bis 0.14.2).
+  // Gibt die Anzahl Bytes zurück, -1 = noch keiner voll.
+  static int Take(byte[] buf) {
+    if (wave == IntPtr.Zero) return -1;
+    IntPtr h = hdrs[next];
+    if ((Marshal.ReadInt32(h, 24) & 1) == 0) return -1; // WHDR_DONE fehlt: noch nicht voll
+    int n = Marshal.ReadInt32(h, 12);
+    if (n > 0) Marshal.Copy(Marshal.ReadIntPtr(h, 0), buf, 0, n);
+    Marshal.WriteInt32(h, 12, 0);
+    waveInAddBuffer(wave, h, HDR);
+    next = (next + 1) % N;
+    return n;
+  }
+
   // Wartet bis zu ms auf ein fertiges Stück Sprache; gibt das Vosk-Ergebnis (JSON) zurück oder null
   public static string Poll(int ms) {
     DateTime end = DateTime.UtcNow.AddMilliseconds(ms);
     byte[] buf = new byte[BUF];
     while (DateTime.UtcNow < end) {
-      bool any = false;
-      // Nur den nächsten Puffer in der Reihe abholen. Sonst kommt bei Verzögerung ein neuerer Puffer
-      // vor einem älteren zu Vosk und die Sprache wird zerstückelt (Fehler bis 0.14.2).
-      while (wave != IntPtr.Zero) {
-        IntPtr h = hdrs[next];
-        if ((Marshal.ReadInt32(h, 24) & 1) == 0) break; // WHDR_DONE fehlt: noch nicht voll
-        any = true;
-        int n = Marshal.ReadInt32(h, 12);
-        if (n > 0) Marshal.Copy(Marshal.ReadIntPtr(h, 0), buf, 0, n);
-        Marshal.WriteInt32(h, 12, 0);
-        waveInAddBuffer(wave, h, HDR);
-        next = (next + 1) % N;
-        if (n <= 0) continue;
-        if (vosk_recognizer_accept_waveform(rec, buf, n) == 1) { lastPartial = ""; return Str(vosk_recognizer_result(rec)); }
-        // Zwischenstand: Wakeword sofort erkennen, ohne auf eine Sprechpause zu warten
-        string part = Str(vosk_recognizer_partial_result(rec));
-        if (part != lastPartial) { lastPartial = part; if (part.IndexOf("\"partial\" : \"\"") < 0) return "P" + part; }
-      }
-      if (!any) Thread.Sleep(25);
+      int n = Take(buf);
+      if (n < 0) { Thread.Sleep(25); continue; }
+      if (n == 0 || rec == IntPtr.Zero) continue;
+      if (vosk_recognizer_accept_waveform(rec, buf, n) == 1) { lastPartial = ""; return Str(vosk_recognizer_result(rec)); }
+      // Zwischenstand: Wakeword sofort erkennen, ohne auf eine Sprechpause zu warten
+      string part = Str(vosk_recognizer_partial_result(rec));
+      if (part != lastPartial) { lastPartial = part; if (part.IndexOf("\"partial\" : \"\"") < 0) return "P" + part; }
     }
     return null;
+  }
+
+  // ---- Diktat: Aufnahme bis zur Sprechpause (Pegel + Vosk-Endpunkt), Vosk-Zwischenstände als Vorschau ----
+  static IntPtr dict = IntPtr.Zero;
+  static MemoryStream pcm = null;
+  static StringBuilder said = new StringBuilder();
+  static int recMs, silentMs, loudMs, maxMs, endMs, initMs;
+  static long startByte;
+  static bool spoke;
+  static double floor;
+  static string lastDict = "";
+
+  // Text aus einer Vosk-Antwort ({"text" : "…"} oder {"partial" : "…"}); Vosk schreibt keine Anführungszeichen in Wörter
+  static string Field(string json, string key) {
+    string k = "\"" + key + "\" : \"";
+    int i = json.IndexOf(k);
+    if (i < 0) return "";
+    i += k.Length;
+    int j = json.IndexOf('"', i);
+    return j > i ? json.Substring(i, j - i) : "";
+  }
+
+  public static double Rms(byte[] b, int n) {
+    if (n < 2) return 0;
+    double sum = 0;
+    for (int i = 0; i + 1 < n; i += 2) { short v = (short)(b[i] | (b[i + 1] << 8)); sum += (double)v * v; }
+    return Math.Sqrt(sum / (n / 2));
+  }
+
+  // Ohne Wakeword-Modell (Vosk nicht installiert) geht die Aufnahme trotzdem: dann nur Pegel-Erkennung
+  public static string RecStart(int maxMilli, int endSilence, int initialSilence) {
+    StopMic();
+    RecReset(maxMilli, endSilence, initialSilence);
+    if (model != IntPtr.Zero && dict == IntPtr.Zero) dict = vosk_recognizer_new(model, 16000f);
+    if (dict != IntPtr.Zero) vosk_recognizer_reset(dict);
+    return StartMic();
+  }
+
+  // Ein Schritt (bis ms): "" = weiter, "P…" = Vorschau-Text, "E" = Sprechpause, "M" = 30 s erreicht, "T" = nichts gesagt
+  public static string RecPoll(int ms) {
+    DateTime end = DateTime.UtcNow.AddMilliseconds(ms);
+    byte[] buf = new byte[BUF];
+    while (DateTime.UtcNow < end) {
+      int n = Take(buf);
+      if (n < 0) { Thread.Sleep(20); continue; }
+      if (n == 0) continue;
+      string r = Step(buf, n);
+      if (r.Length > 0) return r;
+    }
+    return "";
+  }
+
+  // Ein Puffer der Aufnahme: speichern, Pegel und Vosk auswerten (öffentlich, damit es ohne Mikrofon testbar ist)
+  public static string Step(byte[] buf, int n) {
+    {
+      if (pcm == null) { pcm = new MemoryStream(); said = new StringBuilder(); floor = 150; }
+      pcm.Write(buf, 0, n);
+      int step = n / 32; // 32 Bytes = 1 ms bei 16 kHz, 16 Bit
+      recMs += step;
+      double rms = Rms(buf, n);
+      bool loud = rms > Math.Max(300.0, floor * 3.0);
+      // Grundrauschen (z. B. Lüfter) nachführen: vor dem Sprechen immer, danach nur in leisen Stücken
+      if (!spoke || !loud) floor = floor * 0.92 + rms * 0.08;
+      if (loud) {
+        loudMs += step; silentMs = 0;
+        if (!spoke && loudMs >= 150) { spoke = true; startByte = Math.Max(0, pcm.Length - (loudMs + 300) * 32); }
+      } else {
+        silentMs += step;
+        if (!spoke) loudMs = 0;
+      }
+      bool vEnd = false;
+      if (dict != IntPtr.Zero) {
+        if (vosk_recognizer_accept_waveform(dict, buf, n) == 1) {
+          string t = Field(Str(vosk_recognizer_result(dict)), "text");
+          if (t.Length > 0) { if (said.Length > 0) said.Append(' '); said.Append(t); spoke = spoke || t.Length > 0; vEnd = true; }
+        } else {
+          string p = Field(Str(vosk_recognizer_partial_result(dict)), "partial");
+          if (p.Length > 0 && p != lastDict) { lastDict = p; return "P" + (said.Length > 0 ? said.ToString() + " " : "") + p; }
+        }
+      }
+      if (recMs >= maxMs) return "M";
+      if (!spoke && recMs >= initMs) return "T";
+      if (spoke && silentMs >= endMs) return "E";
+      if (spoke && vEnd && silentMs >= endMs / 2) return "E";
+    }
+    return "";
+  }
+
+  // Für Tests: Aufnahme ohne Mikrofon zurücksetzen
+  public static void RecReset(int maxMilli, int endSilence, int initialSilence) {
+    pcm = new MemoryStream(); said = new StringBuilder();
+    recMs = 0; silentMs = 0; loudMs = 0; startByte = 0; spoke = false; floor = 150; lastDict = "";
+    maxMs = maxMilli; endMs = endSilence; initMs = initialSilence;
+  }
+
+  // Erkannter Vosk-Text der ganzen Aufnahme (Rückfall, falls die Cloud nicht antwortet)
+  public static string RecText() {
+    if (dict != IntPtr.Zero) {
+      string t = Field(Str(vosk_recognizer_final_result(dict)), "text");
+      if (t.Length > 0) { if (said.Length > 0) said.Append(' '); said.Append(t); }
+    }
+    return said.ToString();
+  }
+
+  // Aufnahme als PCM (16 kHz, 16 Bit, mono), ohne lange Stille am Anfang und am Ende (spart Kosten)
+  public static byte[] RecPcm() {
+    if (pcm == null) return new byte[0];
+    byte[] all = pcm.ToArray();
+    long from = Math.Min(startByte, all.Length);
+    long tail = Math.Max(0, silentMs - 300) * 32L;
+    long to = Math.Max(from, all.Length - tail);
+    from -= from % 2; to -= to % 2;
+    byte[] cut = new byte[to - from];
+    Array.Copy(all, from, cut, 0, cut.Length);
+    pcm = null;
+    return cut;
   }
 
   public static void Free() {
     StopMic();
     if (rec != IntPtr.Zero) { vosk_recognizer_free(rec); rec = IntPtr.Zero; }
+    if (dict != IntPtr.Zero) { vosk_recognizer_free(dict); dict = IntPtr.Zero; }
     if (model != IntPtr.Zero) { vosk_model_free(model); model = IntPtr.Zero; }
   }
 }
 "@
-    
-    Add-Type -TypeDefinition $voskCode -Language CSharp
+# C#-Teil (Mikrofon + Vosk) nur einmal übersetzen; libvosk wird erst bei Init geladen,
+# darum klappt die Aufnahme fürs Cloud-Diktat auch ohne installiertes Vosk.
+$script:haveType = $false
+function EnsureType {
+  if (-not $script:haveType) { Add-Type -TypeDefinition $voskCode -Language CSharp; $script:haveType = $true }
+}
+
+# Vosk für das Wakeword (falls installiert); sonst die Windows-Erkennung oben
+$vosk = $false
+if ($wake -eq 1 -and $engine -eq 'vosk' -and $voskdll -and $voskmodel) {
+  try {
+    $dllDir = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($voskdll))
+    $modelDir = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($voskmodel))
+
+    EnsureType
     $gwords = @($list)
     if ($grammar) { try { $gwords = @([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($grammar)) -split [char]10 | ForEach-Object { $_.Trim() } | Where-Object { $_ }) } catch { } }
     if ($gwords.Count -eq 0) { $gwords = @($list) }
@@ -269,8 +401,8 @@ function VoskHit($json) {
 
 $lang = ''
 if ($info) { $lang = $info.Culture.Name }
-Emit @{ kind = 'ready'; offline = ($rec -ne $null); online = ($online -ne $null); language = $lang; wake = ($wake -eq 1 -and ($vosk -or $rec -ne $null)); engine = $(if ($vosk) { 'vosk' } else { 'windows' }) }
-if ($rec -eq $null -and $online -eq $null -and -not $vosk) { exit 0 }
+Emit @{ kind = 'ready'; offline = ($rec -ne $null); online = ($online -ne $null); cloud = ($cloud -eq 1); language = $lang; wake = ($wake -eq 1 -and ($vosk -or $rec -ne $null)); engine = $(if ($vosk) { 'vosk' } else { 'windows' }) }
+if ($rec -eq $null -and $online -eq $null -and -not $vosk -and $cloud -ne 1) { exit 0 }
 
 function Listen {
   Emit @{ kind = 'listening' }
@@ -295,6 +427,71 @@ function Listen {
   if ($text) { Emit @{ kind = 'text'; text = $text } } else { Emit @{ kind = 'nothing' } }
 }
 
+# Diktat über Buddy Cloud: aufnehmen bis zur Sprechpause (max. 30 s), Vorschau senden, Ton in Zeilen (Base64) an den Hauptprozess.
+# Der Hauptprozess schickt das WAV an Buddy Cloud. Klappt das nicht, kommt «fallback» (Windows-Erkennung auf derselben Aufnahme).
+$script:cloudMode = ($cloud -eq 1)
+$script:lastPcm = $null
+function ListenCloud {
+  $err = ''
+  try { EnsureType; $err = [BuddyVosk]::RecStart(30000, 1000, 6000) } catch { $err = $_.Exception.Message }
+  if ($err) {
+    Emit @{ kind = 'error'; error = 'Aufnahme: ' + $err }
+    try { [BuddyVosk]::StopMic() } catch { }
+    Listen
+    return
+  }
+  Emit @{ kind = 'listening'; cloud = $true }
+  $state = ''
+  while (-not $state) {
+    $r = [BuddyVosk]::RecPoll(150)
+    if ($r -and $r.StartsWith('P')) { Emit @{ kind = 'partial'; text = $r.Substring(1) } }
+    elseif ($r) { $state = $r }
+  }
+  $said = [BuddyVosk]::RecText()
+  $pcm = [BuddyVosk]::RecPcm()
+  [BuddyVosk]::StopMic()
+  if ($state -eq 'T' -or $pcm.Length -lt 9600) { Emit @{ kind = 'nothing' }; return }
+  $script:lastPcm = $pcm
+  $b64 = [Convert]::ToBase64String($pcm)
+  $size = 16000
+  $n = [int][Math]::Ceiling($b64.Length / $size)
+  for ($i = 0; $i -lt $n; $i++) {
+    Emit @{ kind = 'audio'; i = $i; data = $b64.Substring($i * $size, [Math]::Min($size, $b64.Length - $i * $size)) }
+  }
+  Emit @{ kind = 'recorded'; chunks = $n; bytes = $pcm.Length; text = $said; end = $state }
+}
+
+# Rückfall: die letzte Aufnahme mit der Windows-Offline-Erkennung lesen
+function FallbackPcm {
+  $text = ''
+  if ($script:lastPcm -ne $null -and $rec -ne $null) {
+    try {
+      $fmt = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(16000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)
+      $stream = New-Object System.IO.MemoryStream(,$script:lastPcm)
+      $rec.SetInputToAudioStream($stream, $fmt)
+      $wakeGrammar.Enabled = $false
+      $dictGrammar.Enabled = $true
+      $rec.InitialSilenceTimeout = [TimeSpan]::FromSeconds(6)
+      $rec.EndSilenceTimeout = [TimeSpan]::FromSeconds(1.2)
+      $rec.BabbleTimeout = [TimeSpan]::FromSeconds(0)
+      $parts = @()
+      for ($k = 0; $k -lt 12; $k++) {
+        $r = $rec.Recognize()
+        if ($r -eq $null) { break }
+        $parts += $r.Text
+      }
+      $text = ($parts -join ' ').Trim()
+    } catch { $text = '' }
+    try { $rec.SetInputToDefaultAudioDevice() } catch { }
+  }
+  $script:lastPcm = $null
+  if ($text) { Emit @{ kind = 'text'; text = $text; via = 'windows' } } else { Emit @{ kind = 'nothing' } }
+}
+
+function Dictate {
+  if ($script:cloudMode) { ListenCloud } else { Listen }
+}
+
 $stdin = New-Object System.IO.StreamReader([Console]::OpenStandardInput())
 $cmdTask = $stdin.ReadLineAsync()
 $wakeOn = ($wake -eq 1 -and ($vosk -or $rec -ne $null))
@@ -306,8 +503,14 @@ while ($true) {
     $cmdTask = $stdin.ReadLineAsync()
     if ($cmd -eq 'listen') {
       if ($vosk) { [BuddyVosk]::StopMic() }
-      Listen
+      Dictate
       if ($vosk) { [BuddyVosk]::StartMic() | Out-Null }
+    } elseif ($cmd -eq 'mode cloud') {
+      $script:cloudMode = $true
+    } elseif ($cmd -eq 'mode local') {
+      $script:cloudMode = $false
+    } elseif ($cmd -eq 'fallback') {
+      FallbackPcm
     }
     continue
   }
@@ -316,7 +519,7 @@ while ($true) {
     if ($res -and (VoskHit $res)) {
       Emit @{ kind = 'wake' }
       [BuddyVosk]::StopMic()
-      Listen
+      Dictate
       [BuddyVosk]::StartMic() | Out-Null
     }
   } elseif ($wakeOn) {
@@ -327,7 +530,7 @@ while ($true) {
       $r = $rec.Recognize([TimeSpan]::FromSeconds(1))
       if ($r -ne $null -and $r.Grammar.Name -eq 'wake' -and $r.Confidence -ge $minconf) {
         Emit @{ kind = 'wake' }
-        Listen
+        Dictate
       }
     } catch { Start-Sleep -Milliseconds 500 }
   } else {
@@ -337,7 +540,8 @@ while ($true) {
 if ($vosk) { [BuddyVosk]::Free() }
 `;
 
-function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD }) {
+function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD, language = 'de' }) {
+  let spoken = language; // gesprochene Sprache (Begrüssungen vor dem Wakeword)
   let engine = null; // { dllDir, modelDir } für Vosk, sonst Windows-Erkennung
   let proc = null;
   let buffer = '';
@@ -345,6 +549,8 @@ function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD }) 
   let word = wakeWord;
   let idleTimer = null;
   let pendingListen = false;
+  let cloud = false; // Diktat über Buddy Cloud
+  let audio = []; // Ton-Stücke der laufenden Aufnahme (Base64)
   let info = { offline: false, online: false, language: '', wake: false, ready: false };
 
   function start() {
@@ -353,10 +559,10 @@ function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD }) 
     fs.mkdirSync(scriptDir, { recursive: true });
     fs.writeFileSync(file, '﻿' + SCRIPT, 'utf8');
     const p = spawn('powershell.exe', [
-      '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file, '-wake', wake ? '1' : '0',
-      '-words', encodePhrases(wakePhrases(word)), '-minconf', String(minConfidence(word)),
+      '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file, '-cloud', cloud ? '1' : '0', '-wake', wake ? '1' : '0',
+      '-words', encodePhrases(wakePhrases(word, spoken)), '-minconf', String(minConfidence(word)),
       ...(engine ? ['-engine', 'vosk', '-voskdll', b64(engine.dllDir), '-voskmodel', b64(engine.modelDir),
-        '-grammar', b64(grammarWords(engine.lang, wakePhrases(word)).join('\n'))] : []),
+        '-grammar', b64(grammarWords(engine.lang, wakePhrases(word, spoken)).join('\n'))] : []),
     ], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     proc = p;
     info = { ...info, ready: false };
@@ -370,8 +576,21 @@ function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD }) 
         if (!line) continue;
         let msg;
         try { msg = JSON.parse(line); } catch { continue; }
+        // Ton nicht an die Oberfläche: sammeln und als WAV weitergeben
+        if (msg.kind === 'audio') { if (typeof msg.data === 'string' && audio.length < 200) audio.push(msg.data); touch(); continue; }
+        if (msg.kind === 'listening') audio = [];
+        if (msg.kind === 'recorded') {
+          const parts = audio;
+          audio = [];
+          const pcm = Buffer.concat(parts.map((x) => Buffer.from(x, 'base64')));
+          const ok = parts.length === msg.chunks && pcm.length === msg.bytes;
+          onEvent?.(ok ? { kind: 'recorded', wav: buildWav(pcm), ms: Math.round(pcm.length / 32), text: String(msg.text || '') } : { kind: 'recorded', wav: null, ms: 0, text: String(msg.text || '') });
+          touch();
+          continue;
+        }
         if (msg.kind === 'ready') {
           info = { offline: msg.offline, online: msg.online, language: msg.language || '', wake: msg.wake, engine: msg.engine || 'windows', ready: true };
+          write(cloud ? 'mode cloud' : 'mode local');
           if (pendingListen) { pendingListen = false; write('listen'); }
         }
         if (msg.kind === 'error') log?.(`Sprache: ${msg.error}`);
@@ -443,6 +662,28 @@ function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD }) 
     if (wake) { stop(); start(); }
   }
 
+  // Diktat über Buddy Cloud an/aus (gilt für Mikrofon-Knopf und Wakeword)
+  function setCloud(on) {
+    const next = Boolean(on);
+    if (next === cloud) return;
+    cloud = next;
+    if (proc && info.ready) write(cloud ? 'mode cloud' : 'mode local');
+  }
+
+  // Cloud hat nicht geklappt: letzte Aufnahme mit der Windows-Erkennung lesen (antwortet mit text/nothing)
+  function fallback() {
+    if (!proc || !info.ready) { onEvent?.({ kind: 'nothing' }); return; }
+    write('fallback');
+    touch();
+  }
+
+  // Gesprochene Sprache geändert: Begrüssungen passen sich an (Helfer neu starten, wenn er aufs Wort hört)
+  function setLanguage(next) {
+    if (!next || next === spoken) return;
+    spoken = next;
+    if (wake) { stop(); start(); }
+  }
+
   // Laufendes Zuhören abbrechen und das Mikrofon sofort freigeben
   function cancel() {
     pendingListen = false;
@@ -464,7 +705,7 @@ function createVoice({ scriptDir, onEvent, log, wakeWord = DEFAULT_WAKE_WORD }) 
     setTimeout(() => { try { p.kill(); } catch { /* weg */ } }, 1500);
   }
 
-  return { listen, cancel, setWake, setWakeWord, setEngine, stop, wakeWord: () => word, engine: () => (engine ? 'vosk' : 'windows'), info: () => ({ ...info, running: Boolean(proc) }) };
+  return { listen, cancel, setWake, setWakeWord, setEngine, setLanguage, setCloud, fallback, cloud: () => cloud, stop, wakeWord: () => word, engine: () => (engine ? 'vosk' : 'windows'), info: () => ({ ...info, running: Boolean(proc) }) };
 }
 
 module.exports = { createVoice, SCRIPT };
