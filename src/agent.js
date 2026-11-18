@@ -282,6 +282,7 @@ function createAgent(deps) {
     }
 
     const st = {
+      credits: 0, // Buddy Credits dieser Aufgabe (laut Backend)
       tainted: false, // fremder Inhalt (Web, Dateien, Mitteilungen, Bildschirm) ist in dieser Aufgabe vorgekommen
       round: 0,
       model: null,
@@ -936,7 +937,8 @@ function createAgent(deps) {
         st.tokens.input += (result.usage.input_tokens || 0) + (result.usage.cache_creation_input_tokens || 0) + (result.usage.cache_read_input_tokens || 0);
         st.tokens.output += result.usage.output_tokens || 0;
         task.addCost(cost, result.usage);
-        send('agent:cost', { id, cost: st.cost });
+        if (Number(result.usage.buddy_credits) > 0) st.credits += Number(result.usage.buddy_credits);
+        send('agent:cost', { id, cost: st.cost, credits: st.credits });
 
         const calls = result.content.filter((b) => b.type === 'tool_use');
         const wantsTools = result.stopReason === 'tool_use' && calls.length;
@@ -1059,6 +1061,7 @@ function createAgent(deps) {
     function summaryUsage() {
       return {
         cost: st.cost,
+        credits: st.credits,
         input_tokens: st.tokens.input,
         output_tokens: st.tokens.output,
         models: task?.task.models.map((m) => models.info(m).short) || [],

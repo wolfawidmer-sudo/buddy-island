@@ -649,7 +649,8 @@
       parts.push(sep, span);
     };
     add(EFFORT_LABEL[route.effort] || t('Standard'));
-    const cost = extra.final ? usd(extra.cost) : extra.cost ? usd(extra.cost) : route.estimate ? `≈ ${usd(route.estimate)}` : '';
+    // Buddy Cloud rechnet in Credits ab: die echten Credits dieser Aufgabe zeigen statt $0
+    const cost = Number(extra.credits) > 0 ? fmtBc(extra.credits) : extra.final ? usd(extra.cost) : extra.cost ? usd(extra.cost) : route.estimate ? `≈ ${usd(route.estimate)}` : '';
     if (cost) add(cost, 'cost');
     if (extra.final && extra.tokens) add(t('{n} Tokens', { n: tokens(extra.tokens) }));
     if (route.reason) {
@@ -686,7 +687,7 @@
     const node = document.createElement('div');
     node.className = 'bubble assistant';
     if (extra.route && showRouting()) {
-      placePart(node, routeLine(extra.route, { final: Boolean(extra.usage), cost: extra.usage?.cost, tokens: (extra.usage?.input_tokens || 0) + (extra.usage?.output_tokens || 0), models: extra.usage?.models }));
+      placePart(node, routeLine(extra.route, { final: Boolean(extra.usage), cost: extra.usage?.cost, credits: extra.usage?.credits, tokens: (extra.usage?.input_tokens || 0) + (extra.usage?.output_tokens || 0), models: extra.usage?.models }));
     }
     if (extra.plan && extra.plan.length) placePart(node, planCard(extra.plan));
     if (toolList && toolList.length) placePart(node, toolRow(toolList));
@@ -925,7 +926,7 @@
     const entry = { role: 'assistant', content: text || '', tools: s.tools };
     if (s.route) entry.route = { model: s.route.model, modelName: s.route.modelName, tier: s.route.tier, effort: s.route.effort, reason: s.route.reason, estimate: s.route.estimate };
     if (s.plan) entry.plan = s.plan;
-    if (usage) entry.usage = { cost: usage.cost || 0, input_tokens: usage.input_tokens || 0, output_tokens: usage.output_tokens || 0, models: usage.models || [] };
+    if (usage) entry.usage = { cost: usage.cost || 0, credits: usage.credits || 0, input_tokens: usage.input_tokens || 0, output_tokens: usage.output_tokens || 0, models: usage.models || [] };
     if (text || s.tools.length || (s.plan && s.plan.length)) {
       s.node.replaceWith(assistantBubble(text, s.tools, entry));
       state.history.push(entry);
@@ -984,7 +985,7 @@
     if (!s || !s.route) return;
     s.node.querySelector('.route')?.remove();
     if (!showRouting()) return;
-    placePart(s.node, routeLine(s.route, { cost: s.cost, switchNote: s.switchNote }));
+    placePart(s.node, routeLine(s.route, { cost: s.cost, credits: s.credits, switchNote: s.switchNote }));
   }
 
   api.onRoute((route) => {
@@ -1006,10 +1007,11 @@
     paintRoute();
   });
 
-  api.onCost(({ id, cost }) => {
+  api.onCost(({ id, cost, credits }) => {
     const s = state.stream;
     if (!s || s.id !== id) return;
     s.cost = cost;
+    s.credits = credits;
     paintRoute();
   });
 
@@ -1920,7 +1922,7 @@
       title.textContent = task.title || t('Aufgabe');
       const meta = document.createElement('span');
       meta.className = 'hist-meta';
-      meta.textContent = `${clock(task.started)} · ${usd(task.cost)}`;
+      meta.textContent = `${clock(task.started)} · ${Number(task.credits) > 0 ? fmtBc(task.credits) : usd(task.cost)}`;
       sum.append(dot, title, meta);
       const body = document.createElement('div');
       body.className = 'hist-body';

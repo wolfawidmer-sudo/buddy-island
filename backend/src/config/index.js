@@ -48,6 +48,8 @@ function load() {
       defaultOutputTokens: int('CLOUD_DEFAULT_OUTPUT_TOKENS', 4096),
       // Über 272k Eingabe-Tokens rechnet OpenAI teurer ab; Buddy nimmt solche Anfragen nicht an
       maxInputTokensEstimate: int('CLOUD_MAX_INPUT_TOKENS', 250000),
+      // PC-Steuerung schickt Bildschirmfotos; die App behält höchstens 8 im Verlauf (src/agent.js)
+      maxInputImages: int('CLOUD_MAX_INPUT_IMAGES', 12),
       timeoutMs: int('OPENAI_TIMEOUT_MS', 600000),
     },
 

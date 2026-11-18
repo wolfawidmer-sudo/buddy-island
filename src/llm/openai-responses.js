@@ -324,6 +324,9 @@ function createOpenAiResponsesClient({ provider, fetchImpl = globalThis.fetch, c
             items.push(data.item);
           } else if (type === 'response.completed' || type === 'response.incomplete') {
             finish(data.response);
+          } else if (type === 'buddy.billing' && Number.isFinite(Number(data.credits_charged))) {
+            // Buddy Cloud: echte Abrechnung dieser Anfrage in Buddy Credits (backend/src/services/openai.js)
+            /** @type {any} */ (usage).buddy_credits = Math.max(0, Number(data.credits_charged));
           } else if (type === 'response.failed') {
             throw failed(data.response?.error, 'stream');
           } else if (type === 'error') {

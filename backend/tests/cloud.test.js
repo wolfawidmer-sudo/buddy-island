@@ -105,6 +105,15 @@ test.describe('OpenAI-Gateway', () => {
       assert.match(extra.data.error.message, /Unbekannte Felder: user/);
       assert.equal((await app.call('POST', '/v1/cloud/responses', { token: t, body: { model: 'gpt-test', input: 'x', include: ['file_search_call.results'] } })).status, 400);
       assert.equal((await app.call('POST', '/v1/cloud/responses', { body: { model: 'gpt-test', input: 'x' } })).status, 401);
+      // Nur Funktions-Werkzeuge (eingebaute kosten ausserhalb der Abrechnung)
+      for (const type of ['web_search', 'computer', 'code_interpreter', 'image_generation']) {
+        assert.equal((await app.call('POST', '/v1/cloud/responses', { token: t, body: { model: 'gpt-test', input: 'x', tools: [{ type }] } })).status, 400, type);
+      }
+      // Höchstens 12 Bilder (Bildschirmfotos) pro Anfrage
+      const img = { type: 'input_image', image_url: 'data:image/png;base64,AAAA' };
+      const many = await app.call('POST', '/v1/cloud/responses', { token: t, body: { model: 'gpt-test', input: [{ role: 'user', content: Array(13).fill(img) }] } });
+      assert.equal(many.status, 413);
+      assert.equal(many.data.error.code, 'too_many_images');
       assert.equal(ledger.state.reservations.size, 0);
     } finally { await app.close(); }
   });

@@ -45,7 +45,7 @@ const { createHistory } = require('../src/history');
       },
     };
   }
-  function agentFor(client, { allowControl = true, game = false, available = [{ id: 'cloud:gpt-5.4-mini' }, { id: 'cloud:gpt-5.4' }] } = {}) {
+  function agentFor(client, { allowControl = true, game = false, available = [{ id: 'cloud:gpt-6-luna' }, { id: 'cloud:gpt-6.1-terra' }] } = {}) {
     const events = [];
     const runs = [];
     let asked = 0;
@@ -124,6 +124,25 @@ const { createHistory } = require('../src/history');
   const d2 = a.events.find((e) => e.c === 'chat:done');
   assert.ok(a.runs.some((r) => r.name === 'type'));
   assert.ok(d2.p.verified === false || a.runs.at(-1).name === 'screenshot', 'nicht als geprüft gemeldet ohne Bildschirmfoto');
+
+  // ---------- Credits pro Aufgabe aus dem Backend-Ereignis buddy.billing ----------
+  const models = require('../src/models');
+  const { createOpenAiResponsesClient } = require('../src/llm/openai-responses');
+  process.env.BUDDY_CLOUD_URL = 'http://127.0.0.1:9';
+  const sse = [
+    { type: 'response.output_text.delta', delta: 'Hi' },
+    { type: 'response.completed', response: { id: 'r', status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: 'Hi' }] }], usage: { input_tokens: 3000, output_tokens: 20 } } },
+    { type: 'buddy.billing', request_id: 'q', credits_charged: 1.25, status: 'settled' },
+  ].map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+  const rc = createOpenAiResponsesClient({ provider: models.PROVIDERS.buddy, fetchImpl: async () => new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } }) });
+  const streamed = await rc.streamMessage({ apiKey: 'tok', model: 'cloud:gpt-6-luna', messages: [{ role: 'user', content: 'x' }], maxTokens: 50, onText() {} });
+  assert.strictEqual(streamed.usage.buddy_credits, 1.25, 'Credits der Anfrage gelesen');
+  const { createHistory: ch } = require('../src/history');
+  const h = ch({});
+  const tk = h.start({ id: 'x', title: 'x', route: {} });
+  tk.addCost(0, { buddy_credits: 1.25 });
+  tk.addCost(0, { buddy_credits: 0.5 });
+  assert.strictEqual(tk.task.credits, 1.75, 'Credits pro Aufgabe im Verlauf');
 
   console.log('PC-Steuerung über Buddy Cloud ok (simuliert: Umwandlung, Freigabe, Spielmodus, Prüfen statt Behaupten)');
 })().catch((err) => { console.error(err); process.exit(1); });
