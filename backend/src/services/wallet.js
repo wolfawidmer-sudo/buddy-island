@@ -52,8 +52,8 @@ function createWalletService({ supabase }) {
 
   async function usage(userId, limit = 50) {
     const rows = await supabase.select('usage_events',
-      `user_id=eq.${uid(userId)}&select=id,model,input_tokens,output_tokens,cached_tokens,credits_charged,status,created_at&order=created_at.desc&limit=${limit}`);
-    return rows.map((r) => ({ id: r.id, model: r.model, inputTokens: r.input_tokens, outputTokens: r.output_tokens, cachedTokens: r.cached_tokens, credits: r.credits_charged, status: r.status, createdAt: r.created_at }));
+      `user_id=eq.${uid(userId)}&select=id,model,input_tokens,output_tokens,cached_tokens,audio_usage,credits_charged,status,created_at&order=created_at.desc&limit=${limit}`);
+    return rows.map((r) => ({ id: r.id, kind: r.audio_usage ? 'dictation' : 'chat', model: r.model, inputTokens: r.input_tokens, outputTokens: r.output_tokens, cachedTokens: r.cached_tokens, credits: r.credits_charged, status: r.status, createdAt: r.created_at }));
   }
 
   async function purchases(userId, limit = 50) {

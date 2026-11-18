@@ -68,7 +68,7 @@ function createFakeFetch(handlers = {}) {
       return handlers.google ? handlers.google(new URLSearchParams(String(body))) : json(400, { error: 'invalid_grant' });
     }
     if (url.startsWith(OPENAI_BASE)) {
-      return handlers.openai ? handlers.openai(JSON.parse(body || '{}'), init, url) : json(500, {});
+      return handlers.openai ? handlers.openai(typeof body === 'string' || !body ? JSON.parse(body || '{}') : body, init, url) : json(500, {});
     }
     if (url.startsWith(STRIPE_BASE)) {
       return handlers.stripe ? handlers.stripe(init.method || 'GET', url.slice(STRIPE_BASE.length), new URLSearchParams(String(body || '')), headers) : json(500, {});

@@ -30,9 +30,16 @@ const { createCloudAccount } = require('./cloud/account');
 const cloudConfig = require('./cloud/config');
 const { t } = i18n;
 const { createComputer, supportsCaptureExclusion } = require('./computer');
+const { createTerminal } = require('./terminal');
+const terminalPolicy = require('./terminal-policy');
 const { createSystemWatcher } = require('./notifications');
 const { createCalendar } = require('./calendar');
 const { createVoice } = require('./voice');
+const { createControl } = require('./control');
+const { createControlTools } = require('./control-tools');
+const wakeword = require('./wakeword');
+const vosk = require('./vosk');
+const dictation = require('./dictation');
 const { createPerception } = require('./perception');
 const prompt = require('./prompt');
 const authSpecs = require('./llm/auth');
@@ -52,7 +59,7 @@ const TOP_GAP = 6; // wie die Dynamic Island: knapp unter dem oberen Rand (im Fe
 const OPEN_H = 660 + TOP_GAP;
 const CLOSED_H = 36 + TOP_GAP;
 const NOTCH_H = 12 + TOP_GAP;
-const SETTINGS_VERSION = 6;
+const SETTINGS_VERSION = 7;
 const MODELS_CACHE_MS = 6 * 3600 * 1000;
 // Ab 0.13: Buddy läuft nur noch über Buddy Cloud. Eigene API-Keys, lokale KI (Ollama, Colibrì,
 // Hugging Face) und die Admin-Keys der Nutzungsansicht sind abgeschaltet. Der Code dafür ist noch
@@ -82,8 +89,10 @@ const DEFAULTS = {
   autostart: false,
   accent: '#F2F2F7', // Weiss: Standardfarbe der Augen («Lagune» und andere wählbar)
   theme: 'dark', // dark | light | system: Erscheinungsbild des offenen Islands (geschlossen immer schwarz)
-  computerUse: true,
+  computerUse: false, // PC-Steuerung: ab 0.15 wieder da (Buddy Cloud), bewusst einschalten
   confirmControl: true,
+  terminal: false, // «Befehl ausführen» (PowerShell): standardmässig aus
+  terminalAllow: [], // «Immer erlauben» nur für rein lesende Befehle aus terminal-policy.js
   glow: true,
   notifications: true,
   media: true,
@@ -92,6 +101,9 @@ const DEFAULTS = {
   calendarEncrypted: null,
   calendarPlain: null,
   voiceWake: false,
+  cloudDictation: true, // Diktat über Buddy Cloud (wirkt nur, wenn angemeldet)
+  wakeWord: 'Hey Buddy',
+  eyesAlive: true,
   speak: true,
   displayId: null,
   // Präferenzen für Antworten (Länge, Tonfall, eigene Hinweise). Wer Buddy ist, steht fest in src/prompt.js.
@@ -157,6 +169,7 @@ const AUDIO_GRACE_MS = 2 * 60 * 1000; // nach einer Pause noch so lange zuhören
 let tray = null;
 let tools = null;
 let computer = null;
+let terminal = null; // «Befehl ausführen» (PowerShell), nur wenn eingeschaltet
 let watcher = null;
 let calendar = null;
 let voice = null;
@@ -224,6 +237,7 @@ let cloud = null;
 let discovery = null;
 let local = null; // Lokale KI (src/local/manager.js)
 let audioMeter = null;
+let control = null; // Ton- und Fenster-Helfer (src/control.js)
 const modelCache = new Map(); // Anbieter -> { at, list }
 let updateHealth = null; // Infos für Rollback und Anzeige
 let layout = { open: false, width: 112, height: 42, notch: false };
@@ -278,6 +292,12 @@ function loadSettings() {
     if (savedVersion < 6 && settings.autoModel !== false && models.OLD_DEFAULTS.has(settings.model)) {
       settings.model = models.resolveTiers([], 'openai').sonnet || settings.model;
     }
+    // 0.15: PC-Steuerung war seit 0.13 ausgeblendet. Nicht stillschweigend mit alten Werten wieder
+    // einschalten: aus, und «Vor jeder Aufgabe fragen» wieder an.
+    if (savedVersion < 7) {
+      settings.computerUse = false;
+      settings.confirmControl = true;
+    }
     settings.settingsVersion = SETTINGS_VERSION;
     migrateKey();
     saveSettings();
@@ -315,6 +335,7 @@ function redact(message) {
     .replace(/\bAIza[0-9A-Za-z_-]{20,}|\bAQ\.[A-Za-z0-9_.-]{20,}|\bxai-[A-Za-z0-9_-]{16,}|\bhf_[A-Za-z0-9]{16,}/g, '[Key]')
     .replace(/(x-goog-api-key)[\s:=]+[^\s,;]+/gi, '$1 …')
     .replace(/(bearer|x-api-key|authorization)[\s:=]+[^\s,;]+/gi, '$1 …')
+    .replace(/(-(?:password|passwort|token|secret|apikey|key|credential)\s+)("[^"]*"|'[^']*'|\S+)/gi, '$1…')
     .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[privater Schlüssel entfernt]');
 }
 
@@ -425,12 +446,15 @@ function publicSettings() {
     hasCalendar: Boolean(settings.calendarEncrypted || settings.calendarPlain),
     calendarStatus: calendar?.status() || null,
     canControl: process.platform === 'win32',
+    canTerminal: Boolean(terminal?.available()),
+    terminalAllow: terminalPolicy.cleanAllowList(settings.terminalAllow),
     meterAvailable: audioMeter ? audioMeter.available() : process.platform === 'win32',
     musicActive,
     notifyStatus,
     mediaOk,
     game,
     voiceInfo: voice?.info() || null,
+    wakeEngine,
     displays: displayList(),
     version: app.getVersion(),
     updateState,
@@ -762,6 +786,7 @@ function applyLanguage() {
   // übersetzte Oberfläche gibt (dann ist die Oberfläche englisch)
   answerLanguage = wanted ? lang : (preferred[0] || lang);
   liveWin()?.webContents.send('i18n', i18n.dictionary());
+  applyWakeEngine(); // Wakeword-Modell passend zur Sprache
   return lang;
 }
 
@@ -1332,7 +1357,8 @@ function askToControl(id, send) {
 
 // Freigabe für Aktionen mit mittlerem oder hohem Risiko
 function askPermission(id, request, send) {
-  const reqId = Math.random().toString(36).slice(2, 10);
+  // Freigabe-ID mit CSPRNG: nicht erratbar, auch wenn später das Terminal-Werkzeug dazukommt
+  const reqId = require('node:crypto').randomUUID();
   return new Promise((resolve) => {
     permissionAsks.set(`${id}:${reqId}`, resolve);
     send('agent:permission', { id, reqId, ...request });
@@ -1491,6 +1517,12 @@ function createAgentRuntime() {
     askControl: askToControl,
     askPermission,
     onControl: setControlling,
+    getTerminal: () => (settings.terminal && terminal?.available() ? terminal : null),
+    onTerminalAllow: (name) => {
+      settings.terminalAllow = terminalPolicy.cleanAllowList([...(settings.terminalAllow || []), name]);
+      saveSettings();
+      log(`Terminal: «${name}» immer erlaubt`);
+    },
     // Buddy Cloud: abgelehntes Token → Sitzung erneuern statt «Key ungültig»
     onAuthError: (pid) => ((pid || currentProvider()) === 'buddy' ? cloud?.refresh(true).catch(() => {}) : markKeyInvalid(pid || currentProvider())),
   });
@@ -1535,6 +1567,63 @@ function setGame(focus) {
   }
 }
 
+// ---------- Wakeword-Erkennung: Vosk (offline) mit Windows-Erkennung als Rückfall ----------
+let wakeEngine = { state: 'windows', percent: null, error: null }; // windows | downloading | vosk | fallback
+let wakeEngineJob = null;
+let voskBlocked = ''; // Wakeword, das Vosk nicht kennt: dafür Windows-Erkennung
+
+function sendWakeEngine(patch) {
+  wakeEngine = { ...wakeEngine, ...patch };
+  // Sprache des Modells in der Sprache der Oberfläche («Deutsch», «Spanisch» …)
+  if (wakeEngine.lang) {
+    try {
+      const n = new Intl.DisplayNames([i18n.language()], { type: 'language' }).of(wakeEngine.lang) || wakeEngine.lang;
+      wakeEngine.langName = n.charAt(0).toLocaleUpperCase(i18n.language()) + n.slice(1);
+    } catch { wakeEngine.langName = vosk.LANG_NAMES[wakeEngine.lang] || wakeEngine.lang; }
+  }
+  liveWin()?.webContents.send('voice', { kind: 'engine', ...wakeEngine });
+}
+
+function unzipWindows(zip, dest) {
+  const { execFile } = require('child_process');
+  const q = (x) => `'${String(x).replace(/'/g, "''")}'`;
+  return new Promise((resolve, reject) => execFile('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command',
+    `Expand-Archive -LiteralPath ${q(zip)} -DestinationPath ${q(dest)} -Force`], { windowsHide: true, timeout: 10 * 60 * 1000 },
+  (err, _o, e) => (err ? reject(new Error(t('Entpacken fehlgeschlagen: {msg}', { msg: String(e || err.message).slice(-200) }))) : resolve())));
+}
+
+// Vosk für die aktuelle Sprache bereitstellen (lädt beim ersten Mal ~60 MB) und einschalten
+function applyWakeEngine() {
+  if (!voice || process.platform !== 'win32' || !settings.voiceWake) return;
+  const word = wakeword.wakeWordOf(settings);
+  if (voskBlocked === word) { voice.setEngine(null); return; }
+  // Modell nach der gesprochenen Sprache (in der Buddy antwortet), nicht nach der Oberfläche
+  const lang = vosk.langFor(answerLanguage || i18n.language());
+  voice.setLanguage(answerLanguage || i18n.language());
+  const root = path.join(app.getPath('userData'), 'vosk');
+  const have = vosk.installed(root, lang);
+  if (have) {
+    voice.setEngine({ ...have, lang });
+    sendWakeEngine({ state: 'vosk', percent: null, error: null, lang });
+    return;
+  }
+  if (wakeEngineJob) return;
+  voice.setEngine(null); // bis Vosk bereit ist, hört die Windows-Erkennung
+  sendWakeEngine({ state: 'downloading', percent: 0, error: null, lang });
+  wakeEngineJob = vosk.ensure({
+    root, lang, fetchImpl: (url, init) => net.fetch(url, init), unzip: unzipWindows,
+    onProgress: (pr) => { if (pr.phase === 'download') sendWakeEngine({ state: 'downloading', percent: pr.percent }); },
+  }).then((p) => {
+    log(`Wakeword: Vosk (${lang}) installiert`);
+    if (settings.voiceWake && vosk.langFor(answerLanguage || i18n.language()) === lang) voice.setEngine({ ...p, lang });
+    sendWakeEngine({ state: 'vosk', percent: null, lang });
+    if (vosk.langFor(answerLanguage || i18n.language()) !== lang) applyWakeEngine(); // Sprache inzwischen gewechselt
+  }).catch((err) => {
+    log(`Wakeword: Vosk nicht verfügbar: ${err.message}`);
+    sendWakeEngine({ state: 'fallback', percent: null, error: err.message });
+  }).finally(() => { wakeEngineJob = null; });
+}
+
 function startListening() {
   if (!voice) return;
   if (process.platform !== 'win32') {
@@ -1542,6 +1631,7 @@ function startListening() {
     return;
   }
   liveWin()?.webContents.send('voice', { kind: 'starting' });
+  applyDictationMode();
   voice.listen();
 }
 
@@ -1915,7 +2005,7 @@ async function runDiagnostics() {
   const v = voice.info();
   if (process.platform !== 'win32') add(t('Sprache'), null, t('Nur unter Windows'));
   else if (!v.ready) add(t('Sprache'), null, t('Startet beim ersten Sprechen'));
-  else add(t('Sprache'), v.offline || v.online, [v.online ? t('Online-Diktat') : null, v.offline ? `Offline (${v.language})` : null, v.wake ? t('«Hey Buddy» aktiv') : null].filter(Boolean).join(', ') || t('Keine Spracherkennung installiert'));
+  else add(t('Sprache'), v.offline || v.online, [v.online ? t('Online-Diktat') : null, v.offline ? `Offline (${v.language})` : null, v.wake ? t('«{word}» aktiv', { word: wakeword.wakeWordOf(settings) }) : null].filter(Boolean).join(', ') || t('Keine Spracherkennung installiert'));
 
   add(t('Updates'), updater ? updateState.state !== 'error' : null, updater
     ? ({ idle: t('Noch nicht geprüft'), checking: t('Prüfe …'), latest: t('Aktuell'), verifying: t('Prüfe Signatur …'), downloading: t('Lädt Update …'), ready: `Version ${updateState.version} bereit und verifiziert`, skipped: updateState.error, rollback: t('Stellt ältere Version wieder her …'), error: updateState.error }[updateState.state] || '')
@@ -1947,12 +2037,56 @@ function setupCloud() {
     t,
     log,
     onChange: (state) => {
+      applyDictationMode();
       modelCache.delete('buddy');
       liveWin()?.webContents.send('cloud:state', state);
       liveWin()?.webContents.send('settings:changed', publicSettings());
     },
   });
   if (cloud.configured()) cloud.restore();
+}
+
+// ---------- Diktat über Buddy Cloud (src/dictation.js) ----------
+// Ton geht nur beim Diktat an Buddy Cloud → OpenAI; das Wakeword bleibt auf dem PC.
+const dictationEngine = dictation.createDictation({ post: (body, signal) => cloud.transcribe(body, signal), log });
+let dictationRetryTimer = null;
+
+function dictationDecision() {
+  const st = cloud?.publicState?.() || {};
+  let online = true;
+  try { online = net.isOnline(); } catch { /* unbekannt: versuchen */ }
+  return dictation.decide({
+    enabled: settings.cloudDictation !== false,
+    configured: Boolean(cloud?.configured?.()),
+    signedIn: Boolean(st.signedIn),
+    available: st.wallet ? st.wallet.available : null,
+    online,
+    blockedUntil: dictationEngine.blockedUntil(),
+  });
+}
+
+function applyDictationMode() {
+  voice?.setCloud(dictationDecision().use);
+}
+
+// Aufnahme vom Sprach-Helfer → Buddy Cloud → Text. Jeder Fehler: Text vom PC (Vosk oder Windows-Erkennung).
+async function handleRecorded(msg) {
+  const send = (m) => liveWin()?.webContents.send('voice', m);
+  const local = (reason) => {
+    log(`Diktat: ${msg.text ? 'Vosk' : 'Windows-Erkennung'} statt Buddy Cloud (${reason})`);
+    if (msg.text) send({ kind: 'text', text: msg.text, via: 'vosk' });
+    else voice?.fallback();
+  };
+  if (!msg.wav) { local('Aufnahme unvollständig'); return; }
+  send({ kind: 'transcribing' });
+  const r = await dictationEngine.transcribe(msg.wav, answerLanguage);
+  if (r.ok) { send(r.text ? { kind: 'text', text: r.text, via: 'cloud' } : { kind: 'nothing' }); return; }
+  if (r.reason === 'unavailable') {
+    clearTimeout(dictationRetryTimer);
+    dictationRetryTimer = setTimeout(applyDictationMode, dictation.RETRY_AFTER_404_MS + 1000);
+  }
+  applyDictationMode();
+  local(r.reason);
 }
 
 function setupCloudIpc() {
@@ -2058,6 +2192,11 @@ function setupIpc() {
       settings.fallbackModels = patch.fallbackModels.filter((x) => typeof x === 'string' && /^[\w.:/-]{1,120}$/.test(x)).slice(0, 5);
     }
     if ('showRouting' in patch) settings.showRouting = Boolean(patch.showRouting);
+    if ('terminal' in patch) {
+      settings.terminal = Boolean(patch.terminal);
+      log(`Terminal: ${settings.terminal ? 'eingeschaltet' : 'ausgeschaltet'}`);
+    }
+    if ('terminalAllow' in patch) settings.terminalAllow = terminalPolicy.cleanAllowList(patch.terminalAllow);
     if ('onboarded' in patch) settings.onboarded = Boolean(patch.onboarded);
     if ('cloudNotice' in patch && patch.cloudNotice === null) settings.cloudNotice = null; // nur quittieren
     if ('usageLocal' in patch && !CLOUD_ONLY) settings.usageLocal = Boolean(patch.usageLocal);
@@ -2066,6 +2205,8 @@ function setupIpc() {
     if ('historyEnabled' in patch) settings.historyEnabled = Boolean(patch.historyEnabled);
     if ('memoryEnabled' in patch) settings.memoryEnabled = Boolean(patch.memoryEnabled);
     if ('visualizer' in patch) settings.visualizer = Boolean(patch.visualizer);
+    if ('eyesAlive' in patch) settings.eyesAlive = Boolean(patch.eyesAlive);
+    if ('cloudDictation' in patch) { settings.cloudDictation = Boolean(patch.cloudDictation); applyDictationMode(); }
     if ('glowMusic' in patch) settings.glowMusic = Boolean(patch.glowMusic);
     if ('provider' in patch && models.PROVIDERS[patch.provider] && patch.provider !== settings.provider && (!CLOUD_ONLY || patch.provider === 'buddy')) {
       settings.provider = patch.provider;
@@ -2122,13 +2263,23 @@ function setupIpc() {
     if ('visualizer' in patch || 'glowMusic' in patch || 'glow' in patch || 'media' in patch) syncAudio();
     if ('notifications' in patch || 'media' in patch || 'gameMode' in patch) startWatcher();
     if ('calendarLead' in patch) calendar?.setLead(settings.calendarLead);
-    if ('voiceWake' in patch) voice?.setWake(settings.voiceWake && !game.active);
+    let wakeWordError = null;
+    if ('wakeWord' in patch) {
+      const res = wakeword.cleanWakeWord(patch.wakeWord);
+      if (res.ok) {
+        settings.wakeWord = res.value;
+        voice?.setWakeWord(res.value);
+        if (voskBlocked && voskBlocked !== res.value) { voskBlocked = ''; }
+        applyWakeEngine();
+      } else wakeWordError = t(res.error);
+    }
+    if ('voiceWake' in patch) { voice?.setWake(settings.voiceWake && !game.active); applyWakeEngine(); }
     if ('displayId' in patch) {
       placeWindow();
       fitGlow();
     }
     saveSettings();
-    return { ok: !shortcutError, settings: publicSettings(), error: shortcutError };
+    return { ok: !shortcutError && !wakeWordError, settings: publicSettings(), error: shortcutError || wakeWordError };
   });
 
   ipcMain.handle('key:set', async (_e, { key, workspaceId, provider: pid } = {}) => {
@@ -2511,7 +2662,7 @@ function setupIpc() {
     const key = `${id}:${reqId}`;
     const resolve = permissionAsks.get(key);
     permissionAsks.delete(key);
-    resolve?.(allow === true);
+    resolve?.(allow === true ? true : allow === 'always' ? 'always' : false);
   });
 
   ipcMain.on('agent:confirm-reply', (_e, { id, allow }) => {
@@ -2683,6 +2834,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       if (Date.now() - (settings.lastLocalUse || 0) < 7 * 24 * 3600 * 1000 && currentProvider() !== 'local') warmLocal();
     }), 1500);
 
+    terminal = createTerminal({ log });
     computer = createComputer({
       scriptDir: app.getPath('userData'),
       getDisplay: targetDisplay,
@@ -2726,6 +2878,11 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       getNowPlaying: () => nowPlaying,
       mediaCommand: (cmd) => watcher?.media(cmd) || false,
       getCalendar: (from, to) => (getSecret('calendar') ? calendar.list(from, to) : []),
+      control: process.platform === 'win32' ? createControlTools({
+        control: (control = createControl({ scriptDir: app.getPath('userData'), log })),
+        // Buddy selbst: alle eigenen Prozesse und der Name der eigenen exe
+        getOwn: () => ({ pids: [process.pid, ...app.getAppMetrics().map((m) => m.pid)], name: path.parse(process.execPath).name }),
+      }) : null,
     });
     createAgentRuntime();
     setupCloud();
@@ -2733,6 +2890,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     watcher = createSystemWatcher({
       scriptDir: app.getPath('userData'),
       log,
+      wakeWord: wakeword.wakeWordOf(settings),
       onNotification: (item) => liveWin()?.webContents.send('notify', item),
       onStatus: (status, error) => {
         notifyStatus = status;
@@ -2773,11 +2931,25 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     voice = createVoice({
       scriptDir: app.getPath('userData'),
       log,
+      wakeWord: wakeword.wakeWordOf(settings),
+      language: answerLanguage,
       onEvent: (msg) => {
+        if (msg.kind === 'recorded') { handleRecorded(msg).catch((err) => log(`Diktat: ${err.message}`)); return; }
+        if (msg.kind === 'wake-oov') {
+          // Das Sprachmodell kennt ein Wort nicht: für dieses Wakeword die Windows-Erkennung
+          log(`Wakeword: Vosk kennt ${msg.words.join(', ')} nicht, Windows-Erkennung übernimmt`);
+          const word = wakeword.wakeWordOf(settings).toLowerCase();
+          if (msg.words.some((w) => word.split(' ').includes(w))) {
+            voskBlocked = wakeword.wakeWordOf(settings);
+            voice.setEngine(null);
+            sendWakeEngine({ state: 'fallback', error: t('Das Sprachmodell kennt «{words}» nicht.', { words: msg.words.join(', ') }) });
+          }
+        }
         liveWin()?.webContents.send('voice', msg);
       },
     });
-    if (settings.voiceWake) voice.setWake(true);
+    applyDictationMode();
+    if (settings.voiceWake) { voice.setWake(true); applyWakeEngine(); }
 
     checkUpdateHealth();
     updater = setupUpdater();
@@ -2807,6 +2979,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     computer?.stop();
     watcher?.stop();
     voice?.stop();
+    control?.stop();
     calendar?.stop();
   });
   app.on('window-all-closed', (e) => e.preventDefault());

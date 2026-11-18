@@ -23,6 +23,10 @@ const CATEGORY_LABEL = {
   system: 'Systemeinstellungen ändern',
   security: 'Sicherheitseinstellungen ändern',
   send: 'Etwas in deinem Namen senden',
+  audio: 'Ton ändern',
+  window: 'Fenster anordnen',
+  close: 'App schliessen',
+  force: 'App hart beenden oder ohne Speichern schliessen',
 };
 
 // Muster in getipptem Text, die auf riskante Befehle hinweisen.
@@ -82,6 +86,15 @@ const TOOL_RISK = {
   open_app: ['low', 'open'],
   open_settings: ['low', 'open'],
   media_control: ['low', 'open'],
+  // Ton und Apps (src/control-tools.js): niedrig, aber jede Änderung steht im Verlauf
+  audio_status: ['low', 'read'],
+  list_apps: ['low', 'read'],
+  set_volume: ['low', 'audio'],
+  set_audio_device: ['low', 'audio'],
+  set_microphone: ['low', 'audio'],
+  launch_app: ['low', 'open'],
+  window_control: ['low', 'window'],
+  close_app: ['low', 'close'],
   // Dateien
   create_folder: ['medium', 'files'],
   move_files: ['medium', 'files'],
@@ -121,6 +134,14 @@ function classify(call) {
     const level = input.risk === 'high' ? 'high' : 'medium';
     const category = CATEGORY_LABEL[input.category] ? input.category : level === 'high' ? 'system' : 'settings';
     return result(level, category, String(input.action || '').slice(0, 200), String(input.details || '').slice(0, 400));
+  }
+
+  // Hart beenden oder trotz ungespeicherter Änderungen schliessen: immer fragen (hohes Risiko)
+  if (name === 'close_app' && (input.force === true || input.allow_unsaved === true)) {
+    const target = String(input.app || input.window_id || '').slice(0, 80);
+    return result('high', 'force', input.force === true
+      ? t('{app} hart beenden (Ungespeichertes geht verloren)', { app: target })
+      : t('{app} trotz ungespeicherter Änderungen schliessen', { app: target }));
   }
 
   const known = TOOL_RISK[name];
