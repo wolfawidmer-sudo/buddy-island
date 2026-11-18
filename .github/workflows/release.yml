@@ -33,8 +33,27 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Schlüsselnachweis einsetzen
+        id: stamp
+        shell: bash
+        env:
+          BUDDY_UPDATE_SIGNING_KEY: ${{ secrets.BUDDY_UPDATE_SIGNING_KEY }}
+        run: |
+          set +e
+          node scripts/provenance.js stamp
+          code=$?
+          set -e
+          if [ "$code" = "2" ]; then echo "stamped=false" >> "$GITHUB_OUTPUT"; elif [ "$code" = "0" ]; then echo "stamped=true" >> "$GITHUB_OUTPUT"; else exit "$code"; fi
       - name: Installer bauen
         run: npx electron-builder --win nsis --x64 --publish never
+      - name: Build-Nachweis
+        if: steps.stamp.outputs.stamped == 'true'
+        shell: bash
+        env:
+          BUDDY_UPDATE_SIGNING_KEY: ${{ secrets.BUDDY_UPDATE_SIGNING_KEY }}
+        run: |
+          node scripts/provenance.js attest --asar dist/win-unpacked/resources/app.asar --latest dist/latest.yml --out dist/provenance.json
+          node scripts/provenance.js verify dist/win-unpacked --provenance dist/provenance.json
       - name: Update signieren
         id: sign
         shell: bash
@@ -68,4 +87,5 @@ jobs:
           # Signatur vor latest.yml hochladen, damit Buddys sie schon finden, wenn sie das Update sehen
           gh release upload "$TAG" dist/BuddyIsland-Setup-*.exe dist/*.blockmap --clobber
           if [ -f dist/update-signature.json ]; then gh release upload "$TAG" dist/update-signature.json --clobber; fi
+          if [ -f dist/provenance.json ]; then gh release upload "$TAG" dist/provenance.json --clobber; fi
           gh release upload "$TAG" dist/latest.yml --clobber

@@ -25,7 +25,7 @@ jobs:
           npm audit || true
       - run: npm test
       - name: Syntax prüfen
-        run: for f in src/*.js src/renderer/*.js src/glow/*.js scripts/*.js; do node --check "$f"; done
+        run: for f in src/*.js src/renderer/*.js src/glow/*.js scripts/*.js scripts/lib/*.js; do node --check "$f"; done
       - name: Syntax prüfen (Cloud)
         run: for f in src/cloud/*.js; do node --check "$f"; done
       # Oberfläche im Browser mit nachgebauter Brücke: Einführung, Reiter, Google-Knopf
