@@ -15,8 +15,11 @@ const MAX_OUTPUT = 20000;
 const PRELUDE = [
   '$ProgressPreference = "SilentlyContinue"',
   '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
-  '$p = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())',
-  'if ($p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { [Console]::Error.WriteLine("BUDDY_ELEVATED"); exit 87 }',
+  // $IsLinux/$IsMacOS gibt es erst ab PowerShell 7; in Windows PowerShell 5.1 sind sie $null → Prüfung läuft
+  'if (-not ($IsLinux -or $IsMacOS)) {',
+  '  $p = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())',
+  '  if ($p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { [Console]::Error.WriteLine("BUDDY_ELEVATED"); exit 87 }',
+  '}',
 ].join('\n');
 
 /** PowerShell -EncodedCommand: UTF-16LE + Base64 (der Befehlstext geht so unverändert und ohne Quoting-Probleme durch) */

@@ -19,7 +19,7 @@
   const settings = Object.assign({
     name: 'Buddy', provider: 'buddy', model: 'cloud:gpt-6.1-terra', autoModel: true, effort: 'auto', theme: M.theme || 'dark',
     accent: '#F2F2F7', hotkey: 'Control+Shift+Space', shortcuts: { newChat: '', settings: '', stop: '', voice: '' }, customShortcuts: [],
-    sound: true, autostart: false, computerUse: true, confirmControl: true, notifications: true, media: true, gameMode: true,
+    sound: true, autostart: false, computerUse: true, confirmControl: true, terminal: Boolean(M.terminal), canTerminal: true, terminalAllow: M.terminal ? ['get-date', 'ipconfig'] : [], notifications: true, media: true, gameMode: true,
     calendarLead: 10, voiceWake: false, speak: true, permissions: { medium: 'ask', high: 'ask' }, historyEnabled: true, memoryEnabled: true,
     promptPrefs: { length: 'normal', style: 'friendly', notes: '' }, language: 'auto', lang: (window.__I18N || {}).lang || 'de',
     languages: [{ id: 'de', name: 'Deutsch' }, { id: 'en', name: 'English' }, { id: 'fr', name: 'Français' }],
