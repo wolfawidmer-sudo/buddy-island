@@ -64,6 +64,12 @@
     modelSelect: $('modelSelect'),
     effortSeg: $('effortSeg'),
     themeSeg: $('themeSeg'),
+    computerToggle: $('computerToggle'),
+    confirmToggle: $('confirmToggle'),
+    terminalToggle: $('terminalToggle'),
+    terminalAllowRow: $('terminalAllowRow'),
+    terminalAllowList: $('terminalAllowList'),
+    terminalAllowReset: $('terminalAllowReset'),
     notifyToggle: $('notifyToggle'),
     notifyStatus: $('notifyStatus'),
     dndBtn: $('dndBtn'),
@@ -1083,7 +1089,7 @@
   });
 
   // Freigabe für Aktionen mit mittlerem oder hohem Risiko
-  api.onPermission(({ id, reqId, level, label, summary, details }) => {
+  api.onPermission(({ id, reqId, level, label, summary, details, kind, command, derived, allowAlways }) => {
     if (state.stream?.id !== id) {
       api.replyPermission(id, reqId, false);
       return;
@@ -1106,13 +1112,36 @@
       pre.textContent = details;
       card.insertBefore(pre, card.querySelector('.confirm-actions'));
     }
-    card.querySelector('.primary').textContent = high ? t('Ja, ausführen') : t('Für diese Aufgabe erlauben');
+    if (kind === 'command') {
+      // Exakter Befehl, genau so, wie er läuft (textContent: nie als HTML)
+      card.classList.add('command');
+      card.querySelector('.confirm-title').textContent = t('{name} möchte diesen Befehl ausführen', { name: state.settings?.name || t('Buddy') });
+      const code = document.createElement('pre');
+      code.className = 'confirm-command';
+      code.textContent = String(command || '');
+      card.insertBefore(code, card.querySelector('.confirm-actions'));
+      if (derived) {
+        const note = document.createElement('p');
+        note.className = 'confirm-derived';
+        note.textContent = t('Abgeleitet aus Inhalten (Web, Dateien, Mitteilungen oder Bildschirm). Prüf den Befehl genau.');
+        card.insertBefore(note, code);
+      }
+      if (allowAlways) {
+        const always = document.createElement('button');
+        always.type = 'button';
+        always.className = 'button';
+        always.dataset.allow = 'always';
+        always.textContent = t('Immer erlauben');
+        card.querySelector('.confirm-actions').insertBefore(always, card.querySelector('.primary'));
+      }
+    }
+    card.querySelector('.primary').textContent = kind === 'command' ? t('Ausführen') : high ? t('Ja, ausführen') : t('Für diese Aufgabe erlauben');
     card.addEventListener('click', (event) => {
       const btn = event.target.closest('button[data-allow]');
       if (!btn) return;
       event.stopPropagation();
       card.remove();
-      api.replyPermission(id, reqId, btn.dataset.allow === '1');
+      api.replyPermission(id, reqId, btn.dataset.allow === 'always' ? 'always' : btn.dataset.allow === '1');
     });
     el.messages.appendChild(card);
     scrollToBottom(true);
@@ -1658,6 +1687,8 @@
 
   // ---------- Einstellungen ----------
 
+  // Anzeigenamen der Befehle mit «Immer erlauben»
+  const COMMAND_NAMES = { 'get-date': 'Get-Date', 'get-childitem': 'Get-ChildItem', 'get-process': 'Get-Process', 'test-netconnection': 'Test-NetConnection', ipconfig: 'ipconfig' };
   const NOTIFY_STATUS = {
     Allowed: t('Aktiv'),
     Starting: t('Startet …'),
@@ -1767,6 +1798,15 @@
     el.prefStyle.value = s.promptPrefs?.style || 'friendly';
     el.soundToggle.checked = Boolean(s.sound);
     el.autostartToggle.checked = Boolean(s.autostart);
+    el.computerToggle.checked = Boolean(s.computerUse);
+    el.computerToggle.disabled = !s.canControl;
+    el.confirmToggle.checked = Boolean(s.confirmControl);
+    el.confirmToggle.disabled = !s.computerUse;
+    el.terminalToggle.checked = Boolean(s.terminal);
+    el.terminalToggle.disabled = !s.canTerminal;
+    const allowed = Array.isArray(s.terminalAllow) ? s.terminalAllow : [];
+    el.terminalAllowRow.hidden = !allowed.length;
+    el.terminalAllowList.textContent = allowed.map((n) => COMMAND_NAMES[n] || n).join(', ');
     el.notifyToggle.checked = Boolean(s.notifications);
     const status = s.notifications ? s.notifyStatus : 'Off';
     el.notifyStatus.textContent = NOTIFY_STATUS[status] || status || '–';
@@ -2357,6 +2397,10 @@
     if (el.soundToggle.checked) chime();
   });
   el.autostartToggle.addEventListener('change', () => save({ autostart: el.autostartToggle.checked }));
+  el.computerToggle.addEventListener('change', async () => { await save({ computerUse: el.computerToggle.checked }); fillSettings(); });
+  el.confirmToggle.addEventListener('change', () => save({ confirmControl: el.confirmToggle.checked }));
+  el.terminalToggle.addEventListener('change', async () => { await save({ terminal: el.terminalToggle.checked }); fillSettings(); });
+  el.terminalAllowReset.addEventListener('click', async () => { await save({ terminalAllow: [] }); fillSettings(); });
   el.notifyToggle.addEventListener('change', async () => { await save({ notifications: el.notifyToggle.checked }); fillSettings(); });
   // Direkt zu den Windows-Einstellungen, um die Banner unten rechts auszuschalten
   el.bannerOpen.addEventListener('click', (event) => {

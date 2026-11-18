@@ -11,16 +11,18 @@ Die App läuft auf deinem Windows-PC. Die Antworten kommen über **Buddy Cloud**
 - **Konto:** E-Mail-Adresse, Passwort (nur verschlüsselt gespeichert), optional Name. Bei «Mit Google anmelden» zusätzlich Name, E-Mail und Profilbild-Adresse von Google.
 - **Guthaben und Käufe:** Buddy Credits, Käufe, Abo-Status. Kartendaten verarbeitet nur Stripe.
 - **Nutzung:** pro Anfrage Zeitpunkt, Modell, Tokens und Credits. Keine Inhalte.
-- **Inhalte:** Was du Buddy schreibst oder sagst, und Ergebnisse der Werkzeuge (z. B. Termine oder Mitteilungen, nur wenn du danach fragst), gehen über den Buddy-Cloud-Server an OpenAI und die Antwort zurück. Der Server speichert die Inhalte nicht; OpenAI wird gebeten, sie nicht zu speichern (`store: false`).
+- **Inhalte:** Was du Buddy schreibst oder sagst, und Ergebnisse der Werkzeuge (z. B. Termine oder Mitteilungen, nur wenn du danach fragst; bei eingeschalteter PC-Steuerung Bildschirmfotos während einer freigegebenen Aufgabe; bei «Befehle ausführen» die Ausgabe der Befehle, die du freigegeben hast), gehen über den Buddy-Cloud-Server an OpenAI und die Antwort zurück. Der Server speichert die Inhalte nicht; OpenAI wird gebeten, sie nicht zu speichern (`store: false`).
 - **Dienstleister:** Supabase (Zürich), Railway (Niederlande), OpenAI (USA), Stripe (Bezahlung, als Wiederverkäufer), Resend (E-Mails), Google (nur bei Google-Anmeldung).
 - Deine Anmeldung speichert Buddy auf dem PC mit der Windows-Verschlüsselung (DPAPI). Die Oberfläche sieht nie Tokens.
 
 ## Was nur auf deinem PC bleibt
 
-- **Kalender-Link** (verschlüsselt mit DPAPI), **Chatverlauf**, **Gedächtnis**, **Einstellungen** und ein kurzes **Protokoll** ohne Chat-Inhalte im Ordner `%APPDATA%\Buddy Island`.
+- **Kalender-Link** (verschlüsselt mit DPAPI), **Chatverlauf**, **Gedächtnis**, **Einstellungen** und ein kurzes **Protokoll** ohne Chat-Inhalte (aber mit den Befehlen, die du freigegeben hast) im Ordner `%APPDATA%\Buddy Island`.
 - **Ausführungsverlauf** (`history.json`): Titel, Schritte, Modelle, keine Antworten. Abschaltbar und löschbar.
 - **Windows-Mitteilungen**, **«Läuft gerade»** und **Termine** werden nur angezeigt, nicht dauerhaft gespeichert.
 - **Ton und Fenster steuern**: Bittest du Buddy darum, liest er die Namen deiner offenen Fenster, der Apps mit Ton und deiner Audiogeräte und schickt sie als Teil der Antwort an die KI (über Buddy Cloud an OpenAI), damit sie das richtige Fenster oder Gerät wählt. Gespeichert wird davon nichts ausser dem Eintrag im Verlauf auf deinem PC.
+- **PC-Steuerung** (standardmässig aus): Bildschirmfotos macht Buddy nur während einer Aufgabe, die du freigegeben hast. Dann leuchtet der Rand. Die Bilder gehen über Buddy Cloud an OpenAI, werden vom Server nicht gespeichert und auf deinem PC nur im laufenden Chat gehalten.
+- **Befehle ausführen** (standardmässig aus): Befehle laufen nur auf deinem PC. Jeder Befehl (Text, Ergebnis, Dauer) steht im Protokoll auf deinem PC (System › Logs); Passwörter in Befehlen werden geschwärzt.
 - **Spielmodus** und **Musik-Visualizer** werten nur lokal aus (Vordergrund-Programm, Lautstärke des Systemtons). Nichts wird aufgenommen oder verschickt.
 - Mit früheren Versionen gespeicherte API-Keys, Admin-Keys und der Hugging-Face-Token werden ab 0.13 beim Start gelöscht.
 

@@ -240,7 +240,8 @@ const GET_NUMBER = [{ name: 'get_number', description: 'Zahl holen', input_schem
   assert.ok(!models.capabilities('gpt-6-luna').computerUse);
 
   // ---------- 8. Migration: Keys bleiben, nur alte Standardmodelle werden ersetzt ----------
-  assert.ok(/SETTINGS_VERSION = 6/.test(main));
+  assert.ok(/SETTINGS_VERSION = 7/.test(main));
+  assert.ok(/savedVersion < 7\) \{\n\s+settings\.computerUse = false;\n\s+settings\.confirmControl = true;/.test(main), "0.15: PC-Steuerung nicht still mit alten Werten an");
   assert.ok(/savedVersion < 6 && settings\.autoModel !== false && models\.OLD_DEFAULTS\.has\(settings\.model\)/.test(main), 'nur nicht selbst gewählte Modelle');
   assert.ok(/modelNotice: settings\.autoModel === false && models\.DEPRECATED\[settings\.model\]/.test(main), 'manuelles Modell: nur Hinweis');
   assert.ok(models.OLD_DEFAULTS.has('gpt-4o-mini') && !models.OLD_DEFAULTS.has('gpt-6-luna'));

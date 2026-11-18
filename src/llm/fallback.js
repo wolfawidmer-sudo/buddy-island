@@ -76,7 +76,8 @@ function candidates({ providerId, failed, available, tier, needTools = false, ne
     const caps = models.capabilities(id);
     if (needTools && !caps.tools) return false;
     if (needVision && !caps.vision) return false;
-    if (needComputer && !caps.computerUse) return false;
+    // Buddy Cloud steuert über das Funktions-Werkzeug «computer» (src/computer-functions.js): Bild + Werkzeuge reichen
+    if (needComputer && !caps.computerUse && !(providerId === 'buddy' && caps.vision && caps.tools)) return false;
     if (maxTier && models.tierRank(models.info(id).tier) > models.tierRank(maxTier)) return false;
     return true;
   };

@@ -4,7 +4,7 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 
 **Website:** https://buddy-island.top ([Quellcode der Website](https://github.com/wolfawidmer-sudo/buddy-island-website))
 
-> **Ab 0.13:** Buddy läuft nur noch über Buddy Cloud. Eigene API-Keys und die lokale KI (Ollama, Colibrì, Hugging Face) gibt es nicht mehr; gespeicherte Keys werden beim Update gelöscht. Die PC-Steuerung mit Maus und Tastatur ist vorerst nicht verfügbar.
+> **Ab 0.13:** Buddy läuft nur noch über Buddy Cloud. Eigene API-Keys und die lokale KI (Ollama, Colibrì, Hugging Face) gibt es nicht mehr; gespeicherte Keys werden beim Update gelöscht. Die PC-Steuerung mit Maus und Tastatur ist ab 0.15 mit Buddy Cloud wieder da (standardmässig aus).
 
 <p align="center"><img src="docs/island-states.png" alt="Buddy Island geschlossen: Ruhe, Timer, Musik und Notch" width="600"></p>
 
@@ -22,6 +22,8 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 - **Berechtigungen**: Niedriges Risiko läuft direkt, mittleres fragt einmal pro Aufgabe, hohes (Löschen, Admin, System) jedes Mal.
 - **Timer, Apps, Websites, Musik**: «Stell einen Timer auf 10 Minuten», Rechner oder Spotify öffnen, Musik pausieren oder leiser machen.
 - **Ton und Fenster**: Lautstärke gesamt oder pro App («Mach Discord leiser»), Ausgabegerät wechseln («Ton auf die Kopfhörer»), Mikrofon stumm. Apps auflisten, starten, sanft schliessen, Fenster nach vorne holen, minimieren, maximieren, links/rechts teilen. Hart beenden oder Schliessen mit ungespeicherten Änderungen nur nach deinem Klick auf «Erlauben»; Buddy selbst und Windows-Prozesse nie. Jede Änderung steht im Verlauf.
+- **PC-Steuerung** (standardmässig aus): Buddy sieht deinen Bildschirm per Bildschirmfoto und bedient Maus und Tastatur, über Buddy Cloud (OpenAI) mit Buddys eigenen Werkzeugen. Vor jeder Aufgabe fragt er, ein Leuchtrand zeigt jede echte Aufnahme, Stopp-Knopf und Tastenkürzel brechen sofort ab, im Spielmodus gibt es keine simulierten Eingaben. Erledigt meldet er erst, wenn er es auf einem Bildschirmfoto geprüft hat. Kosten pro Aufgabe stehen im Verlauf.
+- **Befehle ausführen** (PowerShell, standardmässig aus): Jeder Befehl erscheint mit exaktem Text im Island und läuft erst nach Klick auf «Ausführen». «Immer erlauben» nur für rein lesende Befehle (Get-Date, Get-ChildItem, Get-Process, Test-NetConnection, ipconfig). Ohne Adminrechte, 60 s Zeitlimit, Ausgabe max. 20 000 Zeichen. Gesperrt, auch mit Freigabe: Formatieren, Systemordner/Laufwerke löschen, bcdedit, Registry unter HKLM löschen, Virenschutz/Firewall aus, Herunterladen-und-Ausführen, Kontenänderungen. Befehle aus fremden Inhalten (Web, Dateien, Mitteilungen, Bildschirm) werden markiert und brauchen immer eine Freigabe. Protokoll unter System › Logs.
 - **Mitteilungen und «Läuft gerade»**: Windows-Mitteilungen erscheinen kurz im Island, Musik mit Cover und Zurück / Pause / Weiter.
 - **Kalender**: über einen privaten iCal-Link (Google, Outlook, iCloud), mit Erinnerung vor Terminen.
 - **Sprache**: Mikrofon-Knopf, eigenes Tastenkürzel oder «Hey Buddy» (standardmässig aus). Antworten auf Wunsch vorgelesen.
@@ -65,7 +67,7 @@ Zum Testen ohne Release: ein Commit mit `[testversion]` in der Nachricht auf `bu
 Ausführlich in [PRIVACY.md](PRIVACY.md). Kurz:
 
 - **Anmeldung**: Die Sitzung mit Buddy Cloud wird mit der Windows-Verschlüsselung (DPAPI) gespeichert. Die Oberfläche sieht nie Tokens.
-- **Was an Buddy Cloud geht**: was du schreibst oder sagst. Buddy Cloud leitet es an OpenAI weiter. Bezahlt wird über Stripe.
+- **Was an Buddy Cloud geht**: was du schreibst oder sagst, bei der PC-Steuerung Bildschirmfotos, bei Befehlen deren Ausgabe. Buddy Cloud leitet es an OpenAI weiter. Bezahlt wird über Stripe.
 - **Keine Telemetrie**, keine Werbung.
 - **Chatverlauf, Gedächtnis, Mitteilungen, Kalender** bleiben auf deinem PC.
 
@@ -92,7 +94,7 @@ Der Code für lokale KI und eigene Keys (`src/local/`, Adapter in `src/llm/`) li
 ## Bekannte Grenzen
 
 - Nur Windows 10/11, Installer nicht code-signiert (SmartScreen-Warnung).
-- PC-Steuerung mit Maus und Tastatur ist mit Buddy Cloud noch nicht verfügbar.
+- PC-Steuerung und «Befehle ausführen» sind bisher nur simuliert getestet, noch nicht auf echtem Windows.
 - Spracherkennung läuft über Windows, nicht über Buddy Cloud.
 - «Hey Buddy» braucht eine installierte Windows-Spracherkennung.
 

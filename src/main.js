@@ -30,6 +30,8 @@ const { createCloudAccount } = require('./cloud/account');
 const cloudConfig = require('./cloud/config');
 const { t } = i18n;
 const { createComputer, supportsCaptureExclusion } = require('./computer');
+const { createTerminal } = require('./terminal');
+const terminalPolicy = require('./terminal-policy');
 const { createSystemWatcher } = require('./notifications');
 const { createCalendar } = require('./calendar');
 const { createVoice } = require('./voice');
@@ -57,7 +59,7 @@ const TOP_GAP = 6; // wie die Dynamic Island: knapp unter dem oberen Rand (im Fe
 const OPEN_H = 660 + TOP_GAP;
 const CLOSED_H = 36 + TOP_GAP;
 const NOTCH_H = 12 + TOP_GAP;
-const SETTINGS_VERSION = 6;
+const SETTINGS_VERSION = 7;
 const MODELS_CACHE_MS = 6 * 3600 * 1000;
 // Ab 0.13: Buddy läuft nur noch über Buddy Cloud. Eigene API-Keys, lokale KI (Ollama, Colibrì,
 // Hugging Face) und die Admin-Keys der Nutzungsansicht sind abgeschaltet. Der Code dafür ist noch
@@ -87,8 +89,10 @@ const DEFAULTS = {
   autostart: false,
   accent: '#F2F2F7', // Weiss: Standardfarbe der Augen («Lagune» und andere wählbar)
   theme: 'dark', // dark | light | system: Erscheinungsbild des offenen Islands (geschlossen immer schwarz)
-  computerUse: true,
+  computerUse: false, // PC-Steuerung: ab 0.15 wieder da (Buddy Cloud), bewusst einschalten
   confirmControl: true,
+  terminal: false, // «Befehl ausführen» (PowerShell): standardmässig aus
+  terminalAllow: [], // «Immer erlauben» nur für rein lesende Befehle aus terminal-policy.js
   glow: true,
   notifications: true,
   media: true,
@@ -165,6 +169,7 @@ const AUDIO_GRACE_MS = 2 * 60 * 1000; // nach einer Pause noch so lange zuhören
 let tray = null;
 let tools = null;
 let computer = null;
+let terminal = null; // «Befehl ausführen» (PowerShell), nur wenn eingeschaltet
 let watcher = null;
 let calendar = null;
 let voice = null;
@@ -287,6 +292,12 @@ function loadSettings() {
     if (savedVersion < 6 && settings.autoModel !== false && models.OLD_DEFAULTS.has(settings.model)) {
       settings.model = models.resolveTiers([], 'openai').sonnet || settings.model;
     }
+    // 0.15: PC-Steuerung war seit 0.13 ausgeblendet. Nicht stillschweigend mit alten Werten wieder
+    // einschalten: aus, und «Vor jeder Aufgabe fragen» wieder an.
+    if (savedVersion < 7) {
+      settings.computerUse = false;
+      settings.confirmControl = true;
+    }
     settings.settingsVersion = SETTINGS_VERSION;
     migrateKey();
     saveSettings();
@@ -324,6 +335,7 @@ function redact(message) {
     .replace(/\bAIza[0-9A-Za-z_-]{20,}|\bAQ\.[A-Za-z0-9_.-]{20,}|\bxai-[A-Za-z0-9_-]{16,}|\bhf_[A-Za-z0-9]{16,}/g, '[Key]')
     .replace(/(x-goog-api-key)[\s:=]+[^\s,;]+/gi, '$1 …')
     .replace(/(bearer|x-api-key|authorization)[\s:=]+[^\s,;]+/gi, '$1 …')
+    .replace(/(-(?:password|passwort|token|secret|apikey|key|credential)\s+)("[^"]*"|'[^']*'|\S+)/gi, '$1…')
     .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[privater Schlüssel entfernt]');
 }
 
@@ -434,6 +446,8 @@ function publicSettings() {
     hasCalendar: Boolean(settings.calendarEncrypted || settings.calendarPlain),
     calendarStatus: calendar?.status() || null,
     canControl: process.platform === 'win32',
+    canTerminal: Boolean(terminal?.available()),
+    terminalAllow: terminalPolicy.cleanAllowList(settings.terminalAllow),
     meterAvailable: audioMeter ? audioMeter.available() : process.platform === 'win32',
     musicActive,
     notifyStatus,
@@ -1503,6 +1517,12 @@ function createAgentRuntime() {
     askControl: askToControl,
     askPermission,
     onControl: setControlling,
+    getTerminal: () => (settings.terminal && terminal?.available() ? terminal : null),
+    onTerminalAllow: (name) => {
+      settings.terminalAllow = terminalPolicy.cleanAllowList([...(settings.terminalAllow || []), name]);
+      saveSettings();
+      log(`Terminal: «${name}» immer erlaubt`);
+    },
     // Buddy Cloud: abgelehntes Token → Sitzung erneuern statt «Key ungültig»
     onAuthError: (pid) => ((pid || currentProvider()) === 'buddy' ? cloud?.refresh(true).catch(() => {}) : markKeyInvalid(pid || currentProvider())),
   });
@@ -2172,6 +2192,11 @@ function setupIpc() {
       settings.fallbackModels = patch.fallbackModels.filter((x) => typeof x === 'string' && /^[\w.:/-]{1,120}$/.test(x)).slice(0, 5);
     }
     if ('showRouting' in patch) settings.showRouting = Boolean(patch.showRouting);
+    if ('terminal' in patch) {
+      settings.terminal = Boolean(patch.terminal);
+      log(`Terminal: ${settings.terminal ? 'eingeschaltet' : 'ausgeschaltet'}`);
+    }
+    if ('terminalAllow' in patch) settings.terminalAllow = terminalPolicy.cleanAllowList(patch.terminalAllow);
     if ('onboarded' in patch) settings.onboarded = Boolean(patch.onboarded);
     if ('cloudNotice' in patch && patch.cloudNotice === null) settings.cloudNotice = null; // nur quittieren
     if ('usageLocal' in patch && !CLOUD_ONLY) settings.usageLocal = Boolean(patch.usageLocal);
@@ -2637,7 +2662,7 @@ function setupIpc() {
     const key = `${id}:${reqId}`;
     const resolve = permissionAsks.get(key);
     permissionAsks.delete(key);
-    resolve?.(allow === true);
+    resolve?.(allow === true ? true : allow === 'always' ? 'always' : false);
   });
 
   ipcMain.on('agent:confirm-reply', (_e, { id, allow }) => {
@@ -2809,6 +2834,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       if (Date.now() - (settings.lastLocalUse || 0) < 7 * 24 * 3600 * 1000 && currentProvider() !== 'local') warmLocal();
     }), 1500);
 
+    terminal = createTerminal({ log });
     computer = createComputer({
       scriptDir: app.getPath('userData'),
       getDisplay: targetDisplay,
