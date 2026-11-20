@@ -327,13 +327,16 @@ function createCloudAccount({ apiUrl, fetchImpl = globalThis.fetch, storage, ope
     return data;
   };
 
+  /** Buddy Live: kurzlebiges Ticket für den WebSocket (reserviert schon den ersten Abschnitt Credits) */
+  const liveTicket = async () => request('POST', '/v1/cloud/realtime/sessions', { auth: true, body: {}, timeoutMs: 10000 });
+
   /** Nach einer Cloud-Antwort: Guthaben neu laden (Fehler egal) */
   const refreshWallet = () => request('GET', '/v1/wallet', { auth: true }).then((d) => { wallet = d.wallet; changed(); }).catch(() => {});
 
   return {
     publicState, restore, ensureFresh, accessToken, refresh, refreshWallet, loadMe,
     signup, login, verifyEmail, resendConfirmation, requestPasswordReset, confirmPasswordReset,
-    google, cancelGoogle, logout, updateProfile, history, transcribe, packages, plans, billingConfig, buy, subscribe, portal, configured,
+    google, cancelGoogle, logout, updateProfile, history, transcribe, liveTicket, packages, plans, billingConfig, buy, subscribe, portal, configured,
   };
 }
 
