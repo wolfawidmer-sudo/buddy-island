@@ -198,7 +198,9 @@ function nthWeekday(y, m, wd, n) {
 }
 
 // Erzeugt Wanduhr-Starts eines Termins (sortiert), bis max. `limitMs`
-function* occurrences(ev, limitMs) {
+// fromMs: Beginn des gesuchten Zeitraums (zum Vorspringen); früher fest Date.now(), dann fehlten Termine,
+// wenn der Zeitraum vor heute beginnt.
+function* occurrences(ev, limitMs, fromMs = Date.now()) {
   const base = ev.start.f;
   const tz = ev.start.tz;
   const rule = ev.rrule;
@@ -222,7 +224,7 @@ function* occurrences(ev, limitMs) {
     let f = base;
     // ohne COUNT direkt nahe an heute springen
     if (!rule.count) {
-      const skip = Math.floor((Date.now() - 2 * DAY - startMs) / (rule.interval * DAY));
+      const skip = Math.floor((fromMs - 2 * DAY - startMs) / (rule.interval * DAY));
       if (skip > 0) f = addDays(base, skip * rule.interval);
     }
     while (iter++ < MAX_ITER) {
@@ -236,7 +238,7 @@ function* occurrences(ev, limitMs) {
     const baseWd = asDate(base).getUTCDay();
     let weekStart = addDays(base, -((baseWd + 6) % 7));
     if (!rule.count) {
-      const skip = Math.floor((Date.now() - 8 * DAY - startMs) / (rule.interval * 7 * DAY));
+      const skip = Math.floor((fromMs - 8 * DAY - startMs) / (rule.interval * 7 * DAY));
       if (skip > 0) weekStart = addDays(weekStart, skip * rule.interval * 7);
     }
     while (iter++ < MAX_ITER) {
@@ -291,7 +293,7 @@ function expand(events, fromT, toT) {
     const length = ev.end ? toMs(ev.end) - toMs(ev.start) : ev.duration ?? (ev.start.allDay ? DAY : 0);
     const ex = new Set(ev.exdates.map(toMs));
     const replaced = !ev.recurrenceId && ev.uid ? overrides.get(ev.uid) : null;
-    for (const f of occurrences(ev, toT)) {
+    for (const f of occurrences(ev, toT, fromT)) {
       const start = wallToMs(f, ev.start.tz);
       if (ex.has(start) || replaced?.has(start)) continue;
       const end = start + Math.max(0, length);
