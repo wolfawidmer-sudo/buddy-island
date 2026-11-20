@@ -7,9 +7,10 @@ const { AppError } = require('../lib/errors');
 const { rateLimit, byUser } = require('../middleware/rate-limit');
 
 /** @param {{ router: any, gateway: any, billing: any, requireAuth: any }} deps */
-function cloudRoutes({ router, gateway, billing, transcriber, requireAuth }) {
+function cloudRoutes({ router, gateway, billing, transcriber, realtime, requireAuth }) {
   const ai = rateLimit({ name: 'cloud', capacity: 20, refillPerSec: 0.5, key: byUser });
   const dictation = rateLimit({ name: 'dictation', capacity: 10, refillPerSec: 0.2, key: byUser });
+  const live = rateLimit({ name: 'live', capacity: 6, refillPerSec: 0.05, key: byUser });
 
   router.get('/v1/cloud/models', requireAuth, async (_req, res) => {
     const ids = await billing.models();
@@ -25,11 +26,13 @@ function cloudRoutes({ router, gateway, billing, transcriber, requireAuth }) {
     sendJson(res, 200, await transcriber.transcribe(req.user, req.body));
   });
 
-  // Vorbereitet, aber noch nicht umgesetzt
-  const notYet = (what) => async () => { throw new AppError(501, 'not_implemented', `${what} ist in Buddy Cloud noch nicht verfügbar.`); };
-  router.post('/v1/cloud/realtime/sessions', requireAuth, notYet('Echtzeit-Sprache'));
+  // Buddy Live: kurzlebiges Ticket für den WebSocket (/v1/cloud/realtime) + erste Reservierung
+  router.post('/v1/cloud/realtime/sessions', requireAuth, live, async (req, res) => {
+    if (!realtime) throw new AppError(501, 'not_implemented', 'Buddy Live ist in Buddy Cloud noch nicht verfügbar.');
+    sendJson(res, 200, await realtime.createSession(req.user));
+  });
 
-  return { limits: [ai, dictation] };
+  return { limits: [ai, dictation, live] };
 }
 
 module.exports = { cloudRoutes };

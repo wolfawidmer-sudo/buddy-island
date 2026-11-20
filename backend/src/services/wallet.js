@@ -1,4 +1,11 @@
 'use strict';
+
+/** Art der Nutzung; Buddy Live: request_id «bl_<Gespräch>_<Abschnitt>» → session fasst ein Gespräch zusammen */
+function usageKind(r) {
+  const m = /^bl_([0-9a-f-]{36})_\d+$/.exec(String(r.request_id || ''));
+  if (m) return { kind: 'live', session: m[1] };
+  return { kind: r.audio_usage ? 'dictation' : 'chat' };
+}
 // Lesen von Profil, Guthaben, Buchungen, Nutzung und Käufen. Immer gefiltert mit der
 // geprüften Nutzer-ID aus dem Token. Beträge bleiben Strings (exakte Dezimalzahlen aus Postgres).
 // Rohe Anbieterkosten (USD, Tokenpreise) gehen nicht an die App.
@@ -52,8 +59,8 @@ function createWalletService({ supabase }) {
 
   async function usage(userId, limit = 50) {
     const rows = await supabase.select('usage_events',
-      `user_id=eq.${uid(userId)}&select=id,model,input_tokens,output_tokens,cached_tokens,audio_usage,credits_charged,status,created_at&order=created_at.desc&limit=${limit}`);
-    return rows.map((r) => ({ id: r.id, kind: r.audio_usage ? 'dictation' : 'chat', model: r.model, inputTokens: r.input_tokens, outputTokens: r.output_tokens, cachedTokens: r.cached_tokens, credits: r.credits_charged, status: r.status, createdAt: r.created_at }));
+      `user_id=eq.${uid(userId)}&select=id,request_id,model,input_tokens,output_tokens,cached_tokens,audio_usage,credits_charged,status,created_at&order=created_at.desc&limit=${limit}`);
+    return rows.map((r) => ({ id: r.id, ...usageKind(r), model: r.model, inputTokens: r.input_tokens, outputTokens: r.output_tokens, cachedTokens: r.cached_tokens, credits: r.credits_charged, status: r.status, createdAt: r.created_at }));
   }
 
   async function purchases(userId, limit = 50) {

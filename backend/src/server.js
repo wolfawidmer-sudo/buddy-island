@@ -9,9 +9,10 @@ const { createApp } = require('./app');
 
 const cfg = config.load();
 const logger = createLogger({ level: cfg.logLevel });
-const { handler } = createApp({ config: cfg, logger });
+const { handler, upgrade } = createApp({ config: cfg, logger });
 
 const server = http.createServer(handler);
+server.on('upgrade', upgrade); // Buddy Live (WebSocket)
 server.requestTimeout = 0; // lange Streams erlaubt; OpenAI-Timeout regelt das Ende
 server.headersTimeout = 30000;
 server.keepAliveTimeout = 65000;

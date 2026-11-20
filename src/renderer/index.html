@@ -354,6 +354,17 @@
                   <span class="row-label">Diktat über Buddy Cloud</span>
                   <span class="switch"><input type="checkbox" id="cloudDictToggle"><span></span></span>
                 </label>
+                <label class="row">
+                  <span class="row-label two">Buddy Live nach dem Wakeword<small>Gespräch in Echtzeit statt Diktat</small></span>
+                  <span class="switch"><input type="checkbox" id="liveToggle"><span></span></span>
+                </label>
+                <label class="row" id="liveVoiceRow">
+                  <span class="row-label">Stimme von Buddy Live</span>
+                  <select id="liveVoiceSelect" class="row-select">
+                    <option value="marin">Marin</option><option value="cedar">Cedar</option><option value="alloy">Alloy</option><option value="ash">Ash</option><option value="ballad">Ballad</option>
+                    <option value="coral">Coral</option><option value="echo">Echo</option><option value="sage">Sage</option><option value="shimmer">Shimmer</option><option value="verse">Verse</option>
+                  </select>
+                </label>
                 <div class="row">
                   <span class="row-label">Spracherkennung</span>
                   <span class="row-value" id="voiceStatus">–</span>
@@ -366,6 +377,7 @@
 
               <p class="footer" id="wakeWordMsg">Eigenes Wakeword, z. B. «Hey Kiwi» oder «Jarvis». Zwei Wörter klappen zuverlässiger als eins. Beim ersten Einschalten lädt Buddy einmalig ein Sprachmodell (rund 60 MB); danach läuft alles offline auf deinem PC.</p>
               <p class="footer">Diktat über Buddy Cloud versteht dich deutlich besser. Dafür geht dein Ton nach dem Wakeword oder dem Mikrofon-Knopf über buddy-island.top an OpenAI und wird nicht gespeichert. Das Wakeword selbst bleibt auf deinem PC. Wirkt nur, wenn du angemeldet bist; abgerechnet in Buddy Credits.</p>
+              <p class="footer">Buddy Live: Nach dem Wakeword sprichst du mit Buddy wie am Telefon und kannst ihn jederzeit unterbrechen. Nur während des Gesprächs geht dein Ton über buddy-island.top an OpenAI, sonst nie; er wird nicht gespeichert. Das Gespräch endet nach 8 Sekunden Stille, wenn du dich verabschiedest («Tschüss», «Danke Buddy») oder mit dem Stopp-Knopf. Kostet Buddy Credits pro Minute; die Kosten pro Gespräch siehst du im Konto.</p>
 
               <h3 class="section">Gedächtnis</h3>
               <div class="group">
@@ -632,6 +644,7 @@
 
   <script src="markdown.js"></script>
   <script src="eyes.js"></script>
+  <script src="live-audio.js"></script>
   <script src="app.js"></script>
 <!-- WOLOF_SIGNATURE_START -->
 <pre hidden aria-hidden="true" id="wolof-signature" style="display:none; font-size: 13px; background-color: #000000; font-weight: bold; padding: 4px 5px;"><b style="color:#000000">1100</b><b style="color:#000001">101</b><b style="color:#000000">11</b><b style="color:#000001">11</b><b style="color:#000000">0</b><b style="color:#000001">11</b><b style="color:#000000">0011</b><b style="color:#000001">01</b><b style="color:#000000">0010</b><b style="color:#000001">00</b><b style="color:#000000">11</b><b style="color:#000001">011</b><b style="color:#000000">11010</b><b style="color:#000001">110</b><b style="color:#000000">11</b><b style="color:#000001">00</b><b style="color:#000000">1</b><b style="color:#000001">01</b><b style="color:#000000">1010</b><b style="color:#000001">10</b><b style="color:#000000">0110</b><b style="color:#000001">10</b><b style="color:#000000">11</b><b style="color:#000001">110</b><b style="color:#000000">01010</b><b style="color:#000001">100</b><b style="color:#000000">10</b><b style="color:#000001">01</b><b style="color:#000000">1</b><b style="color:#000001">00</b><b style="color:#000000">10</b>

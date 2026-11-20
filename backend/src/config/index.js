@@ -59,6 +59,16 @@ function load() {
       timeoutMs: int('TRANSCRIBE_TIMEOUT_MS', 30000),
     },
 
+    // Buddy Live (OpenAI Realtime über WebSocket-Relay). Modell muss in model_pricing mit audio_pricing stehen.
+    realtime: {
+      model: str('REALTIME_MODEL', 'gpt-realtime-2.1'),
+      url: (str('OPENAI_REALTIME_URL', 'wss://api.openai.com/v1/realtime') || '').replace(/\/$/, ''),
+      maxSeconds: int('REALTIME_MAX_SECONDS', 900),
+      idleSeconds: int('REALTIME_IDLE_SECONDS', 90),
+      maxSessions: int('REALTIME_MAX_SESSIONS', 40),
+      maxOutputTokens: int('REALTIME_MAX_OUTPUT_TOKENS', 1024),
+    },
+
     stripe: {
       secretKey: str('STRIPE_SECRET_KEY', ''),
       webhookSecret: str('STRIPE_WEBHOOK_SECRET', ''),

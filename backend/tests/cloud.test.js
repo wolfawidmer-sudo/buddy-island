@@ -218,11 +218,13 @@ test.describe('OpenAI-Gateway', () => {
     } finally { await app.close(); }
   });
 
-  test('Echtzeit: ehrlich «noch nicht verfügbar» (501); Diktat ist da (tests/transcribe.test.js)', async () => {
+  test('Buddy Live ohne Preis: ehrlich «nicht eingerichtet» (503); Diktat ist da (tests/transcribe.test.js)', async () => {
     const app = await startApp({});
     try {
       assert.equal((await app.call('POST', '/v1/cloud/audio/transcriptions', { token: signToken(), body: {} })).status, 400);
-      assert.equal((await app.call('POST', '/v1/cloud/realtime/sessions', { token: signToken(), body: {} })).status, 501);
+      const live = await app.call('POST', '/v1/cloud/realtime/sessions', { token: signToken(), body: {} });
+      assert.equal(live.status, 503);
+      assert.equal(live.data.error.code, 'not_configured');
     } finally { await app.close(); }
   });
 });

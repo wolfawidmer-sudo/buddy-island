@@ -115,6 +115,12 @@ contextBridge.exposeInMainWorld('buddy', {
   clearMemory: () => ipcRenderer.invoke('memory:clear'),
   onHealth: (cb) => on('llm:health', cb),
   voiceCancel: () => ipcRenderer.send('voice:cancel'),
+  // Buddy Live: nur Ton und Zustände, nie Tokens
+  liveAudio: (b64) => ipcRenderer.send('live:audio', String(b64)),
+  livePlayed: (itemId, ms) => ipcRenderer.send('live:played', { itemId: String(itemId || ''), ms: Number(ms) || 0 }),
+  liveIdle: () => ipcRenderer.send('live:idle'),
+  liveStop: () => ipcRenderer.send('live:stop'),
+  liveMicError: (name) => ipcRenderer.send('live:mic-error', String(name || '')),
   voiceState: (on) => ipcRenderer.send('voice:state', Boolean(on)),
   checkUpdates: () => ipcRenderer.send('update:check'),
   installUpdate: () => ipcRenderer.send('update:install'),
@@ -157,6 +163,7 @@ contextBridge.exposeInMainWorld('buddy', {
   onMedia: (cb) => on('media', cb),
   onCalendarStatus: (cb) => on('calendar:status', cb),
   onVoice: (cb) => on('voice', cb),
+  onLive: (cb) => on('live', cb),
   onUpdate: (cb) => on('update', cb),
   onGame: (cb) => on('game', cb),
 });

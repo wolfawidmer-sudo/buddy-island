@@ -105,6 +105,9 @@
     wakeEngineRow: $('wakeEngineRow'),
     speakToggle: $('speakToggle'),
     cloudDictToggle: $('cloudDictToggle'),
+    liveToggle: $('liveToggle'),
+    liveVoiceSelect: $('liveVoiceSelect'),
+    liveVoiceRow: $('liveVoiceRow'),
     voiceStatus: $('voiceStatus'),
     mediaToggle: $('mediaToggle'),
     calStatus: $('calStatus'),
@@ -159,11 +162,12 @@
   const OPEN_MS = 460;
   const CLOSE_MS = 340;
   // Feste Breiten im geschlossenen Zustand: kein Text, darum kein Messen und kein Springen
-  const CLOSED_W = { idle: 112, busy: 112, done: 112, error: 112, timer: 112, alarm: 112, listen: 136, control: 152, music: 168, notch: 96 };
+  const CLOSED_W = { idle: 112, busy: 112, done: 112, error: 112, timer: 112, alarm: 112, listen: 136, control: 152, music: 168, live: 168, notch: 96 };
   const NOTCH_KEY = 'buddy.notch.v1';
   const PEEK_MS = 6000;
 
   const state = {
+    live: null, // Buddy Live: { id, phase, credits, tool }
     open: false,
     view: 'chat',
     settings: null,
@@ -284,6 +288,7 @@
   function visibleState() {
     if (state.alarm) return 'alarm';
     if (state.control) return 'control';
+    if (state.live) return 'live';
     // Diktat mit Live-Vorschau: zeigt das Gehörte wie eine Mitteilung («Hört zu …» + Text)
     if (state.listening && state.voicePreview && !state.open && !state.voiceNote) return 'peek';
     if (state.listening || state.voiceNote) return 'listen';
@@ -313,6 +318,7 @@
         || (state.listening === 'transcribing' ? t('Schreibt auf …')
           : state.listening === 'listening' ? t('Hört zu …') : t('Mikrofon startet …'));
       case 'music': return [state.media?.title, state.media?.artist].filter(Boolean).join(' · ');
+      case 'live': return state.live?.tool || ({ connecting: t('Verbindet …'), thinking: t('Denkt …'), speaking: t('Spricht …') }[state.live?.phase] || t('Hört zu …'));
       default: return name;
     }
   }
@@ -327,6 +333,8 @@
     eyes?.sync();
     el.island.classList.toggle('paused', Boolean(state.media && !state.media.playing));
     el.island.classList.toggle('listening', Boolean(state.listening));
+    if (state.live) el.island.dataset.live = state.live.phase || 'connecting';
+    else if (el.island.dataset.live) delete el.island.dataset.live;
     // Sichtbarer Text nur im offenen Island; geschlossen nur für Screenreader
     const title = state.open
       ? (shown === 'alarm' || shown === 'control' ? labelFor(shown) : VIEW_TITLE[state.view] || state.settings?.name || t('Buddy'))
@@ -349,10 +357,11 @@
   const viz = { on: false, live: false, levels: [0, 0, 0, 0], target: null, raf: 0, lastAt: 0, last: 0 };
 
   function syncVisualizer() {
-    const on = Boolean(state.settings?.visualizer !== false && visibleState() === 'music' && !state.game.active);
+    const shown = visibleState();
+    const on = Boolean((shown === 'live') || (state.settings?.visualizer !== false && shown === 'music' && !state.game.active));
     if (on === viz.on) return;
     viz.on = on;
-    if (on && viz.live && !viz.raf) viz.raf = requestAnimationFrame(paintViz);
+    if (on && (viz.live || state.live) && !viz.raf) viz.raf = requestAnimationFrame(paintViz);
     if (!on) stopViz();
   }
 
@@ -384,8 +393,10 @@
     viz.raf = 0;
     const dt = viz.last ? Math.min(0.05, (now - viz.last) / 1000) : 1 / 60;
     viz.last = now;
-    const fresh = viz.live && now - viz.lastAt < 200 && viz.target;
-    const f = fresh ? viz.target : { bass: 0, mid: 0, treble: 0 };
+    // Buddy Live: Pegel von Mikrofon bzw. Antwort statt Musik
+    const lv = state.live && liveAudio ? liveAudio.level() : null;
+    const fresh = lv ? true : viz.live && now - viz.lastAt < 200 && viz.target;
+    const f = lv ? { bass: lv.level, mid: lv.level * 0.85, treble: lv.level * 0.6 } : fresh ? viz.target : { bass: 0, mid: 0, treble: 0 };
     const want = [f.bass, 0.55 * f.bass + 0.45 * f.mid, f.mid, f.treble];
     let moving = false;
     for (let i = 0; i < bars.length; i += 1) {
@@ -1092,7 +1103,7 @@
 
   // Freigabe für Aktionen mit mittlerem oder hohem Risiko
   api.onPermission(({ id, reqId, level, label, summary, details, kind, command, derived, allowAlways }) => {
-    if (state.stream?.id !== id) {
+    if (state.stream?.id !== id && state.live?.id !== id) {
       api.replyPermission(id, reqId, false);
       return;
     }
@@ -1167,6 +1178,7 @@
 
   el.stopBtn.addEventListener('click', (event) => {
     event.stopPropagation();
+    if (state.live) { api.liveStop(); return; }
     if (state.listening) { stopVoice(); return; }
     if (state.stream) api.abortChat(state.stream.id);
   });
@@ -1550,6 +1562,75 @@
     render();
   });
 
+  // ---------- Buddy Live: Gespräch in Echtzeit (Mikrofon und Wiedergabe hier, Verbindung im Hauptprozess) ----------
+  const liveAudio = window.BuddyLiveAudio ? window.BuddyLiveAudio.createLiveAudio({
+    onChunk: (b64) => api.liveAudio(b64),
+    onIdle: () => api.liveIdle(),
+    onError: (name) => api.liveMicError(name),
+  }) : null;
+  let liveToolTimer = 0;
+  const LIVE_END_NOTE = {
+    credits: 'Zu wenig Buddy Credits. Lade dein Guthaben im Konto auf.',
+    signed_out: 'Für Buddy Live bitte anmelden.',
+    error: 'Buddy Live: Verbindung unterbrochen.',
+    mic: 'Mikrofon nicht verfügbar.',
+    busy: 'Buddy Live läuft schon.',
+    max_duration: 'Buddy Live: Zeitlimit erreicht.',
+  };
+
+  api.onLive?.((msg) => {
+    switch (msg.kind) {
+      case 'phase':
+        if (!state.live) {
+          if (msg.phase !== 'connecting') return;
+          state.live = { id: msg.id, phase: 'connecting', credits: null, tool: '' };
+          stopSpeaking();
+          if (state.listening) setListening('');
+          eyes?.wake();
+          pop();
+        }
+        state.live.id = msg.id || state.live.id;
+        state.live.phase = msg.phase;
+        break;
+      case 'mic':
+        if (!liveAudio) { if (msg.on) api.liveMicError('unsupported'); return; }
+        if (msg.on) liveAudio.startMic();
+        else liveAudio.stopMic();
+        return;
+      case 'audio':
+        liveAudio?.play(msg.delta, msg.itemId);
+        return;
+      case 'interrupt': {
+        const played = liveAudio?.interrupt();
+        if (played && played.itemId) api.livePlayed(played.itemId, played.ms);
+        return;
+      }
+      case 'tool':
+        if (!state.live) return;
+        state.live.tool = msg.label;
+        clearTimeout(liveToolTimer);
+        liveToolTimer = setTimeout(() => { if (state.live) { state.live.tool = ''; render(); } }, 2500);
+        break;
+      case 'credits':
+        if (state.live) state.live.credits = msg.credits;
+        return;
+      case 'ended':
+        liveAudio?.close();
+        clearTimeout(liveToolTimer);
+        state.live = null;
+        if (LIVE_END_NOTE[msg.reason]) voiceNote(t(LIVE_END_NOTE[msg.reason]));
+        if (msg.reason === 'credits' && state.open) showView('account');
+        break;
+      case 'handoff':
+        // PC-Steuerung, Befehle usw.: im Chat mit den dortigen Freigaben
+        if (msg.task) send(String(msg.task), true);
+        return;
+      default:
+        return;
+    }
+    render();
+  });
+
   // Antworten vorlesen (Windows-Stimmen, offline)
   function plainText(md) {
     return md
@@ -1837,6 +1918,10 @@
     fillWakeEngine();
     el.speakToggle.checked = s.speak !== false;
     el.cloudDictToggle.checked = s.cloudDictation !== false;
+    el.liveToggle.checked = Boolean(s.liveAfterWake);
+    el.liveToggle.disabled = !s.canControl;
+    el.liveVoiceSelect.value = s.liveVoice || 'marin';
+    el.liveVoiceRow.hidden = !s.liveAfterWake;
     const v = s.voiceInfo;
     el.voiceStatus.textContent = !s.canControl ? t('Nur unter Windows')
       : !v || !v.ready ? t('Startet beim ersten Sprechen')
@@ -2215,8 +2300,15 @@
     };
     if (!h.ok) { cloudFooter(h.error, 'err'); return; }
     const usageStatus = { settled: '', partial: t('teilweise'), released: t('abgebrochen'), failed: t('fehlgeschlagen') };
-    list(cloudEl.usage, h.history.usage, t('Noch keine Cloud-Anfragen.'), (u) => [
-      u.kind === 'dictation' ? t('Diktat') : String(u.model || '').replace(/^gpt-/, 'GPT-').replace(/-/g, ' '),
+    // Buddy Live: Abschnitte eines Gesprächs zu einer Zeile zusammenfassen (Kosten pro Gespräch)
+    const usageRows = [];
+    for (const u of h.history.usage || []) {
+      const prev = u.kind === 'live' && u.session ? usageRows.find((x) => x.kind === 'live' && x.session === u.session) : null;
+      if (prev) prev.credits = String(Math.round((Number(prev.credits) + Number(u.credits || 0)) * 1e6) / 1e6);
+      else usageRows.push(u.kind === 'live' ? { ...u, status: 'settled' } : { ...u });
+    }
+    list(cloudEl.usage, usageRows, t('Noch keine Cloud-Anfragen.'), (u) => [
+      u.kind === 'live' ? t('Buddy Live') : u.kind === 'dictation' ? t('Diktat') : String(u.model || '').replace(/^gpt-/, 'GPT-').replace(/-/g, ' '),
       [fmtDay(u.createdAt), usageStatus[u.status] || ''].filter(Boolean).join(' · '),
       Number(u.credits) > 0 ? `−${fmtBc(u.credits)}` : '–',
     ]);
@@ -2454,6 +2546,8 @@
   el.eyesToggle.addEventListener('change', () => save({ eyesAlive: el.eyesToggle.checked }));
   el.speakToggle.addEventListener('change', () => save({ speak: el.speakToggle.checked }));
   el.cloudDictToggle.addEventListener('change', () => save({ cloudDictation: el.cloudDictToggle.checked }));
+  el.liveToggle.addEventListener('change', () => { el.liveVoiceRow.hidden = !el.liveToggle.checked; save({ liveAfterWake: el.liveToggle.checked }); });
+  el.liveVoiceSelect.addEventListener('change', () => save({ liveVoice: el.liveVoiceSelect.value }));
   el.mediaToggle.addEventListener('change', async () => { await save({ media: el.mediaToggle.checked }); renderNowPlaying(); });
   el.gameToggle.addEventListener('change', () => save({ gameMode: el.gameToggle.checked }));
   el.displaySelect.addEventListener('change', () => save({ displayId: el.displaySelect.value }));
@@ -2768,6 +2862,7 @@
     if (state.recordingHotkey) return;
     if (event.key === 'Escape') {
       event.preventDefault();
+      if (state.live) { api.liveStop(); return; } // Esc beendet zuerst Buddy Live
       if (state.listening) { stopVoice(); return; } // Esc beendet zuerst das Zuhören
       if (state.view === 'settings') showView('chat');
       else close();

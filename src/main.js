@@ -1,6 +1,6 @@
 const {
   app, BrowserWindow, globalShortcut, ipcMain, screen, Tray, Menu,
-  nativeImage, nativeTheme, safeStorage, shell, net, clipboard,
+  nativeImage, nativeTheme, safeStorage, shell, net, clipboard, session,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -40,6 +40,8 @@ const { createControlTools } = require('./control-tools');
 const wakeword = require('./wakeword');
 const vosk = require('./vosk');
 const dictation = require('./dictation');
+const { createLive, VOICES: LIVE_VOICES } = require('./live');
+const { createLiveTools } = require('./live-tools');
 const { createPerception } = require('./perception');
 const prompt = require('./prompt');
 const authSpecs = require('./llm/auth');
@@ -102,6 +104,8 @@ const DEFAULTS = {
   calendarPlain: null,
   voiceWake: false,
   cloudDictation: true, // Diktat über Buddy Cloud (wirkt nur, wenn angemeldet)
+  liveAfterWake: false, // Buddy Live: nach dem Wakeword Gespräch in Echtzeit statt Diktat (kostet Credits, darum aus)
+  liveVoice: 'marin',
   wakeWord: 'Hey Buddy',
   eyesAlive: true,
   speak: true,
@@ -1240,6 +1244,7 @@ function runShortcut(entry) {
       break;
     case 'stop':
       abortAll();
+      if (live?.active()) live.stop('stopped');
       break;
     case 'newChat':
       sendWhenReady('shortcut:action', 'newChat');
@@ -1249,7 +1254,8 @@ function runShortcut(entry) {
       break;
     case 'voice':
       // Tastenkürzel schaltet um: einmal drücken hört zu, nochmals drücken beendet
-      if (listeningNow) stopListening();
+      if (live?.active()) live.stop('stopped');
+      else if (listeningNow) stopListening();
       else startListening();
       break;
     default:
@@ -2046,6 +2052,59 @@ function setupCloud() {
   if (cloud.configured()) cloud.restore();
 }
 
+// ---------- Buddy Live (src/live.js): Gespräch in Echtzeit nach dem Wakeword ----------
+// Ton geht nur während eines Gesprächs an Buddy Cloud → OpenAI Realtime. Das Wakeword bleibt auf dem PC.
+// Während Live ist der Sprach-Helfer (Vosk-Mikrofon) aus; das Mikrofon läuft im Renderer (Echo-Unterdrückung).
+let live = null;
+let liveUnavailableUntil = 0; // Backend ohne Buddy Live (404/501/503): 30 Min. lang Diktat
+
+function liveWanted() {
+  if (!settings.liveAfterWake || game.active || live?.active() || Date.now() < liveUnavailableUntil) return false;
+  const st = cloud?.publicState?.() || {};
+  return Boolean(cloud?.configured?.() && st.signedIn);
+}
+
+function setupLive() {
+  const sendUi = (ch, m) => liveWin()?.webContents.send(ch, m);
+  const liveTools = createLiveTools({
+    tools,
+    getPolicy: () => permissions.cleanPolicy(settings.permissions),
+    askPermission,
+    send: sendUi,
+    log,
+    t,
+  });
+  // tools entsteht vor setupLive(); als Getter, falls es später neu gebaut wird
+  live = createLive({
+    ticket: () => cloud.liveTicket(),
+    wsBase: () => cloudConfig.apiUrl(),
+    tools: liveTools,
+    send: sendUi,
+    settings: () => ({ name: settings.name, language: answerLanguage || i18n.language(), voice: settings.liveVoice }),
+    log,
+    onEnd: (info) => {
+      if (info.id) resolvePermissions(info.id, false); // offene Freigabe-Karten verfallen
+      // Buddy schläft wieder: Wakeword neu starten
+      if (settings.voiceWake && !game.active) { voice?.setWake(true); applyWakeEngine(); }
+      cloud?.refreshWallet?.();
+      if (info.task) sendUi('live', { kind: 'handoff', task: info.task });
+    },
+  });
+}
+
+async function startLive() {
+  if (!live || live.active()) return;
+  log('Live: Wakeword → Gespräch');
+  voice?.setWake(false); // Vosk-Mikrofon freigeben
+  const r = await live.start();
+  if (!r.ok && r.reason === 'unavailable') {
+    // Backend ohne Buddy Live: wie bisher Diktat nach dem Wakeword
+    liveUnavailableUntil = Date.now() + 30 * 60 * 1000;
+    log('Live: nicht verfügbar, Diktat');
+    startListening();
+  }
+}
+
 // ---------- Diktat über Buddy Cloud (src/dictation.js) ----------
 // Ton geht nur beim Diktat an Buddy Cloud → OpenAI; das Wakeword bleibt auf dem PC.
 const dictationEngine = dictation.createDictation({ post: (body, signal) => cloud.transcribe(body, signal), log });
@@ -2207,6 +2266,8 @@ function setupIpc() {
     if ('visualizer' in patch) settings.visualizer = Boolean(patch.visualizer);
     if ('eyesAlive' in patch) settings.eyesAlive = Boolean(patch.eyesAlive);
     if ('cloudDictation' in patch) { settings.cloudDictation = Boolean(patch.cloudDictation); applyDictationMode(); }
+    if ('liveAfterWake' in patch) settings.liveAfterWake = Boolean(patch.liveAfterWake);
+    if ('liveVoice' in patch && LIVE_VOICES.includes(patch.liveVoice)) settings.liveVoice = patch.liveVoice;
     if ('glowMusic' in patch) settings.glowMusic = Boolean(patch.glowMusic);
     if ('provider' in patch && models.PROVIDERS[patch.provider] && patch.provider !== settings.provider && (!CLOUD_ONLY || patch.provider === 'buddy')) {
       settings.provider = patch.provider;
@@ -2711,6 +2772,12 @@ function setupIpc() {
 
   ipcMain.on('voice:listen', () => startListening());
   ipcMain.on('voice:cancel', () => stopListening());
+  // Buddy Live: Ton vom Mikrofon (PCM16 24 kHz, Base64, ~100 ms), Wiedergabe-Stand, Stopp
+  ipcMain.on('live:audio', (_e, b64) => { if (typeof b64 === 'string' && b64.length <= 64000) live?.audio(b64); });
+  ipcMain.on('live:played', (_e, { itemId, ms } = {}) => live?.played(typeof itemId === 'string' ? itemId.slice(0, 64) : '', ms));
+  ipcMain.on('live:idle', () => live?.playbackIdle());
+  ipcMain.on('live:stop', () => live?.stop('stopped'));
+  ipcMain.on('live:mic-error', (_e, name) => { log(`Live: Mikrofon nicht verfügbar (${String(name).slice(0, 60)})`); live?.stop('mic'); });
   ipcMain.on('voice:state', (_e, on) => { listeningNow = Boolean(on); });
 
   ipcMain.on('update:check', () => updater?.check());
@@ -2781,6 +2848,13 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     if (process.platform === 'win32') app.setAppUserModelId('ch.wolfwidmer.buddyisland');
     loadSettings();
+    // Mikrofon nur für Buddys eigene Seite und nur Ton (Buddy Live); Kamera/Bildschirm nie über getUserMedia
+    session.defaultSession.setPermissionRequestHandler((wc, permission, callback, details) => {
+      if (permission !== 'media') return callback(true); // wie bisher (Electron-Standard)
+      const types = /** @type {any} */ (details)?.mediaTypes || [];
+      const own = String(/** @type {any} */ (details)?.requestingUrl || wc?.getURL?.() || '').startsWith('file://');
+      callback(own && types.length > 0 && types.every((x) => x === 'audio'));
+    });
     applyTheme();
     applyLanguage();
     discovery = createDiscovery({ home: os.homedir(), log });
@@ -2886,6 +2960,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
     });
     createAgentRuntime();
     setupCloud();
+    setupLive();
 
     watcher = createSystemWatcher({
       scriptDir: app.getPath('userData'),
@@ -2935,6 +3010,7 @@ if (!isSelfTest && !app.requestSingleInstanceLock()) {
       language: answerLanguage,
       onEvent: (msg) => {
         if (msg.kind === 'recorded') { handleRecorded(msg).catch((err) => log(`Diktat: ${err.message}`)); return; }
+        if (msg.kind === 'wake' && liveWanted()) { startLive(); return; }
         if (msg.kind === 'wake-oov') {
           // Das Sprachmodell kennt ein Wort nicht: für dieses Wakeword die Windows-Erkennung
           log(`Wakeword: Vosk kennt ${msg.words.join(', ')} nicht, Windows-Erkennung übernimmt`);
