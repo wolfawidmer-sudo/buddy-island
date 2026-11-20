@@ -79,13 +79,14 @@ function createFakeFetch(handlers = {}) {
 }
 
 /** Server mit Attrappen starten */
-async function startApp({ handlers = {}, config = {}, logs = [] } = {}) {
+async function startApp({ handlers = {}, config = {}, logs = [], WebSocketImpl } = {}) {
   const fake = createFakeFetch(handlers);
   const logger = {
     debug: () => {}, info: (m, f) => logs.push({ level: 'info', m, f }), warn: (m, f) => logs.push({ level: 'warn', m, f }), error: (m, f) => logs.push({ level: 'error', m, f }),
   };
-  const app = createApp({ config: testConfig(config), logger, fetchImpl: fake.fetch });
+  const app = createApp({ config: testConfig(config), logger, fetchImpl: fake.fetch, ...(WebSocketImpl ? { WebSocketImpl } : {}) });
   const server = http.createServer(app.handler);
+  server.on('upgrade', app.upgrade);
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${/** @type {any} */ (server.address()).port}`;
   const call = async (method, path, { body, token, headers = {}, raw } = {}) => {
