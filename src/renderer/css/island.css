@@ -337,3 +337,17 @@
   max-height: calc(var(--win-h) - var(--island-gap) - 58px);
 }
 .settings-scroll { max-height: min(520px, max(180px, calc(var(--win-h) - 146px))); }
+
+/* Buddy Live: aufmerksame Augen, Pegel als Balken, ruhiger Aufnahmepunkt (Ton geht an Buddy Cloud), Stopp.
+   Nur transform/opacity animiert; Eintritt ab scale 0.97 + opacity 0 (Design Guardrails). */
+.island[data-state="live"] .eye { height: 13px; }
+.island[data-state="live"][data-live="speaking"] .eye { transform: scaleY(0.7); }
+.island[data-state="live"][data-live="thinking"] .face { transform: translateY(-1px); }
+.island:not(.open)[data-state="live"] .eq { display: flex; animation: live-in var(--dur-base) var(--ease-enter); }
+.island[data-state="live"][data-live="connecting"] .eq i { opacity: 0.4; }
+.island[data-state="live"] .mic-dot { display: block; animation: none; }
+.island[data-state="live"]:not(.open) .stop { display: grid; }
+@keyframes live-in { from { opacity: 0; transform: scale(0.97); } }
+@media (prefers-reduced-motion: reduce) {
+  .island:not(.open)[data-state="live"] .eq { animation: none; }
+}

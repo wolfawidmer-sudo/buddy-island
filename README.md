@@ -27,6 +27,7 @@ Ein kleiner Assistent, der wie die Dynamic Island oben in der Mitte deines Windo
 - **Mitteilungen und «Läuft gerade»**: Windows-Mitteilungen erscheinen kurz im Island, Musik mit Cover und Zurück / Pause / Weiter.
 - **Kalender**: über einen privaten iCal-Link (Google, Outlook, iCloud), mit Erinnerung vor Terminen.
 - **Sprache**: Mikrofon-Knopf, eigenes Tastenkürzel oder «Hey Buddy» (standardmässig aus). Antworten auf Wunsch vorgelesen.
+- **Buddy Live** (standardmässig aus): Nach dem Wakeword ein Gespräch in Echtzeit mit Unterbrechen (OpenAI Realtime über Buddy Cloud). Endet nach 8 s Stille, beim Verabschieden oder per Stopp. Werkzeuge mit denselben Freigaben wie im Chat; PC-Steuerung und Befehle gibt Buddy an den Chat weiter.
 - **Spielmodus**: Läuft ein Spiel oder eine Vollbild-App, hält sich Buddy ganz zurück.
 - **Eigene Tastenkürzel und Kurzbefehle**, mehrere Bildschirme, hell und dunkel, Deutsch, Englisch, Französisch.
 - **Eigenes Design-System «Nachtinsel»**: alle Werte aus Design-Tokens (`src/renderer/css/tokens.css`).
@@ -85,6 +86,7 @@ Ausführlich in [PRIVACY.md](PRIVACY.md). Kurz:
 | `src/tools.js`, `src/files.js` | Timer, Apps, Medien, Dateien |
 | `src/control.js`, `src/control-tools.js`, `src/control-policy.js` | Ton (Core Audio), Ausgabegerät, Fenster und Apps schliessen |
 | `src/notifications.js`, `src/calendar.js`, `src/voice.js` | Mitteilungen, Kalender, Sprache |
+| `src/live.js`, `src/live-tools.js`, `src/renderer/live-audio.js` | Buddy Live (Gespräch in Echtzeit) |
 | `src/update-security.js` | Signatur- und Kompatibilitätsprüfung für Updates |
 | `src/i18n/` | Deutsch (Quelle), Englisch, Französisch |
 | `src/renderer/` | Das Island (HTML, CSS, JS); Google-«G» in `img/google-g.svg` |
@@ -95,7 +97,7 @@ Der Code für lokale KI und eigene Keys (`src/local/`, Adapter in `src/llm/`) li
 
 - Nur Windows 10/11, Installer nicht code-signiert (SmartScreen-Warnung).
 - PC-Steuerung und «Befehle ausführen» sind bisher nur simuliert getestet, noch nicht auf echtem Windows.
-- Spracherkennung läuft über Windows, nicht über Buddy Cloud.
+- Wakeword-Erkennung läuft auf dem PC (Vosk/Windows); Diktat und Buddy Live gehen über Buddy Cloud.
 - «Hey Buddy» braucht eine installierte Windows-Spracherkennung.
 
 ## Lizenz
